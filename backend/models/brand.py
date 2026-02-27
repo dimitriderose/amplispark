@@ -23,6 +23,7 @@ class BrandProfileUpdate(BaseModel):
     caption_style_directive: Optional[str] = None
     content_themes: Optional[List[str]] = None
     competitors: Optional[List[str]] = None
+    logo_url: Optional[str] = None
     image_generation_risk: Optional[str] = None
     byop_recommendation: Optional[str] = None
     ui_preferences: Optional[dict] = None

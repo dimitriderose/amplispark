@@ -27,6 +27,13 @@ export const api = {
     request(`/api/brands/${brandId}`, { method: 'PUT', body: JSON.stringify(data) }),
   uploadBrandAsset: (brandId: string, formData: FormData) =>
     fetch(`/api/brands/${brandId}/upload`, { method: 'POST', body: formData }).then(r => r.json()),
+  deleteBrandAsset: (brandId: string, assetIndex: number) =>
+    request(`/api/brands/${brandId}/assets/${assetIndex}`, { method: 'DELETE' }),
+  setBrandLogo: (brandId: string, logoUrl: string | null) =>
+    request(`/api/brands/${brandId}/logo`, {
+      method: 'PATCH',
+      body: JSON.stringify({ logo_url: logoUrl }),
+    }),
 
   listPlans: (brandId: string) => request(`/api/brands/${brandId}/plans`),
   createPlan: (brandId: string, numDays = 7, businessEvents?: string) =>

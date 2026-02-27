@@ -79,6 +79,24 @@ async def update_brand(brand_id: str, data: dict) -> None:
         "updated_at": datetime.now(timezone.utc),
     })
 
+async def remove_brand_asset(brand_id: str, asset_index: int) -> dict | None:
+    """Remove an asset from uploaded_assets by index. Returns the removed asset or None."""
+    db = get_client()
+    doc_ref = db.collection("brands").document(brand_id)
+    doc = await doc_ref.get()
+    if not doc.exists:
+        return None
+    data = doc.to_dict()
+    assets = data.get("uploaded_assets", [])
+    if asset_index < 0 or asset_index >= len(assets):
+        return None
+    removed = assets.pop(asset_index)
+    await doc_ref.update({
+        "uploaded_assets": assets,
+        "updated_at": datetime.now(timezone.utc),
+    })
+    return removed
+
 # ── Content plan operations ───────────────────────────────────
 
 async def create_plan(brand_id: str, data: dict) -> str:

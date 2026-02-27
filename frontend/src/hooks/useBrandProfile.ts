@@ -14,6 +14,8 @@ interface BrandProfile {
   brand_id: string
   business_name: string
   business_type: string
+  description?: string
+  website_url?: string
   industry: string
   tone: string
   colors: string[]
@@ -23,6 +25,8 @@ interface BrandProfile {
   caption_style_directive: string
   content_themes: string[]
   competitors: string[]
+  logo_url?: string | null
+  uploaded_assets?: { filename: string; url: string; type: string }[]
   analysis_status: string
   ui_preferences?: { show_competitors?: boolean }
   // Social voice analysis fields (populated after connecting a social account)

@@ -5,6 +5,7 @@ import logging
 import os
 import uuid
 import zipfile
+from typing import Optional
 from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Form, Body, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -113,6 +114,7 @@ async def analyze_brand(brand_id: str, data: BrandProfileCreate):
             "target_audience", "visual_style", "content_themes", "competitors",
             "image_style_directive", "caption_style_directive",
             "image_generation_risk", "byop_recommendation", "style_reference_gcs_uri",
+            "logo_url",
         }
         update_data = {k: v for k, v in profile.items() if k in _ALLOWED_PROFILE_KEYS}
         update_data.update({
@@ -182,6 +184,25 @@ async def upload_brand_asset_endpoint(
     await firestore_client.update_brand(brand_id, {"uploaded_assets": existing + uploaded})
 
     return {"uploaded": uploaded}
+
+
+@app.delete("/api/brands/{brand_id}/assets/{asset_index}")
+async def delete_brand_asset(brand_id: str, asset_index: int):
+    """Remove a single asset from uploaded_assets by its index."""
+    removed = await firestore_client.remove_brand_asset(brand_id, asset_index)
+    if removed is None:
+        raise HTTPException(status_code=404, detail="Asset not found")
+    return {"status": "deleted", "removed": removed}
+
+
+@app.patch("/api/brands/{brand_id}/logo")
+async def set_brand_logo(brand_id: str, logo_url: Optional[str] = Body(None, embed=True)):
+    """Set or clear the brand logo_url field."""
+    brand = await firestore_client.get_brand(brand_id)
+    if not brand:
+        raise HTTPException(status_code=404, detail="Brand not found")
+    await firestore_client.update_brand(brand_id, {"logo_url": logo_url})
+    return {"status": "updated", "logo_url": logo_url}
 
 
 # ── Social Voice Analysis ──────────────────────────────────────

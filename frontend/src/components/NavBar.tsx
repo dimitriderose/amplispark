@@ -6,12 +6,14 @@ export default function NavBar() {
   const location = useLocation()
   const [searchParams] = useSearchParams()
 
-  // Extract brandId from dashboard/export path segments, or from ?brand_id= on generate routes
+  // Extract brandId from dashboard/edit/export path segments, or from ?brand_id= on generate routes
   const dashboardMatch = location.pathname.match(/^\/dashboard\/([^/]+)/)
+  const editMatch = location.pathname.match(/^\/edit\/([^/]+)/)
   const exportMatch = location.pathname.match(/^\/export\/([^/]+)/)
   const generateMatch = location.pathname.match(/^\/generate\//)
   const activeBrandId =
     (dashboardMatch && dashboardMatch[1]) ||
+    (editMatch && editMatch[1]) ||
     (exportMatch && exportMatch[1]) ||
     (generateMatch && searchParams.get('brand_id')) ||
     null

@@ -144,15 +144,27 @@ export default function DashboardPage() {
             Manage your brand profile and content calendar
           </p>
         </div>
-        <button
-          onClick={() => navigate('/onboard')}
-          style={{
-            padding: '8px 16px', borderRadius: 8, border: `1px solid ${A.border}`,
-            background: 'transparent', cursor: 'pointer', fontSize: 13, color: A.textSoft,
-          }}
-        >
-          + New Brand
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={() => navigate(`/edit/${brandId}`)}
+            style={{
+              padding: '8px 16px', borderRadius: 8, border: `1px solid ${A.indigo}40`,
+              background: A.indigoLight, cursor: 'pointer', fontSize: 13, color: A.indigo,
+              fontWeight: 500,
+            }}
+          >
+            Edit Brand
+          </button>
+          <button
+            onClick={() => navigate('/onboard')}
+            style={{
+              padding: '8px 16px', borderRadius: 8, border: `1px solid ${A.border}`,
+              background: 'transparent', cursor: 'pointer', fontSize: 13, color: A.textSoft,
+            }}
+          >
+            + New Brand
+          </button>
+        </div>
       </div>
 
       {/* 1:2 grid layout — left: brand card, right: tabbed content */}
