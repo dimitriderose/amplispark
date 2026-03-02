@@ -4,6 +4,7 @@ import type { GenerationState } from '../hooks/usePostGeneration'
 import { useVideoGeneration } from '../hooks/useVideoGeneration'
 import PlatformPreview from './PlatformPreview'
 import { api } from '../api/client'
+import { getPlatform, getVideoSupport } from '../platformRegistry'
 
 interface Props {
   state: GenerationState
@@ -11,24 +12,14 @@ interface Props {
     platform: string
     pillar: string
     content_theme: string
+    derivative_type?: string
   }
   brandId?: string
   // H-2: onApprove removed — approval is handled solely by ReviewPanel to avoid duplicate flows
   onRegenerate?: (instructions?: string) => void
+  onVideoGenerated?: () => void
   byopRecommendation?: string
 }
-
-const PLATFORM_ICONS: Record<string, string> = {
-  instagram: '📸',
-  linkedin: '💼',
-  twitter: '🐦',
-  x: '✖',
-  facebook: '👥',
-}
-
-const VIDEO_PLATFORMS = new Set(['instagram', 'tiktok', 'reels', 'story', 'stories'])
-// Text-first platforms where video section defaults to collapsed to reduce visual noise
-const TEXT_PLATFORMS = new Set(['linkedin', 'x', 'twitter', 'facebook'])
 
 // RegenerateButton with optional instructions input
 function RegenerateButton({ onRegenerate }: { onRegenerate: (instructions?: string) => void }) {
@@ -148,7 +139,7 @@ function CaptionOnlyBanner({ recommendation, onToggle }: { recommendation: strin
   )
 }
 
-export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, byopRecommendation }: Props) {
+export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, onVideoGenerated, byopRecommendation }: Props) {
   const [copied, setCopied] = useState(false)
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [editingCaption, setEditingCaption] = useState(false)
@@ -251,15 +242,40 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
     setTimeout(() => captionRef.current?.focus(), 0)
   }
 
-  const platformIcon = PLATFORM_ICONS[dayBrief?.platform || ''] || '📱'
   const platform = dayBrief?.platform?.toLowerCase() ?? ''
-  const isVideoPlatform = VIDEO_PLATFORMS.has(platform)
-  const isTextPlatform = TEXT_PLATFORMS.has(platform)
+  const platformSpec = getPlatform(platform)
+  const PlatformIcon = platformSpec.icon
+
+  const derivativeType = dayBrief?.derivative_type || 'original'
+  const videoSupport = getVideoSupport(platform, derivativeType)
+  const isVideoFirst = derivativeType === 'video_first'
+
+  const IMAGE_ASPECTS: Record<string, string> = {
+    story: '9 / 16',
+    pin: '2 / 3',
+    blog_snippet: '1.91 / 1',
+  }
+  const imageAspect = IMAGE_ASPECTS[derivativeType] || '1 / 1'
+  const videoAspect = platformSpec.isPortraitVideo ? '9 / 16' : '16 / 9'
+
+  const DERIVATIVE_LABELS: Record<string, string> = {
+    carousel: 'Carousel', thread_hook: 'Thread', blog_snippet: 'Blog',
+    story: 'Story', pin: 'Pin', video_first: 'Video',
+  }
 
   const showVideoSection = status === 'complete' && postId && brandId
 
   const { status: videoStatus, videoUrl, progress, error: videoError, startGeneration } =
     useVideoGeneration(postId ?? '', brandId ?? '', state.videoUrl)
+
+  // Notify parent when video generation completes so review can re-trigger
+  const prevVideoStatus = useRef(videoStatus)
+  useEffect(() => {
+    if (prevVideoStatus.current !== 'complete' && videoStatus === 'complete') {
+      onVideoGenerated?.()
+    }
+    prevVideoStatus.current = videoStatus
+  }, [videoStatus, onVideoGenerated])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -305,11 +321,21 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
           {/* Platform + theme header */}
           {dayBrief && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 20 }}>{platformIcon}</span>
+              <PlatformIcon size={20} color={platformSpec.color} />
               <div>
-                <p style={{ fontSize: 13, fontWeight: 600, color: A.text, margin: 0 }}>
-                  {dayBrief.platform.charAt(0).toUpperCase() + dayBrief.platform.slice(1)}
-                </p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: A.text, margin: 0 }}>
+                    {platformSpec.displayName}
+                  </p>
+                  {derivativeType !== 'original' && (
+                    <span style={{
+                      fontSize: 10, padding: '2px 6px', borderRadius: 4,
+                      background: A.indigoLight, color: A.indigo, fontWeight: 600,
+                    }}>
+                      {DERIVATIVE_LABELS[derivativeType]}
+                    </span>
+                  )}
+                </div>
                 <p style={{ fontSize: 11, color: A.textMuted, margin: 0 }}>{dayBrief.content_theme}</p>
               </div>
             </div>
@@ -433,12 +459,13 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
           {status === 'complete' && savedCaption && dayBrief?.platform && !editingCaption && (
             <div>
               <p style={{ fontSize: 11, fontWeight: 600, color: A.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
-                How this looks on {dayBrief.platform.charAt(0).toUpperCase() + dayBrief.platform.slice(1)}
+                How this looks on {platformSpec.displayName}
               </p>
               <PlatformPreview
                 platform={dayBrief.platform}
                 caption={savedCaption}
                 imageUrl={imageUrl ?? undefined}
+                videoUrl={isVideoFirst ? (videoUrl ?? undefined) : undefined}
                 hashtagCount={hashtags.length}
               />
             </div>
@@ -469,8 +496,8 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
             </div>
           )}
 
-          {/* H-6: Video section — collapsed for text-first platforms (LinkedIn/X), full for video platforms */}
-          {showVideoSection && isTextPlatform && !videoExpanded && (
+          {/* Video section — three-state gating: none / primary (right panel) / optional (collapsed here) */}
+          {showVideoSection && videoSupport === 'optional' && !videoExpanded && (
             <button
               type="button"
               onClick={() => setVideoExpanded(true)}
@@ -483,41 +510,34 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
               onMouseEnter={e => { e.currentTarget.style.background = A.bg }}
               onMouseLeave={e => { e.currentTarget.style.background = A.surfaceAlt }}
             >
-              <span style={{ fontSize: 12, color: A.textSoft }}>🎬 Video Clip (not typical for this platform)</span>
+              <span style={{ fontSize: 12, color: A.textSoft }}>🎬 Generate Video Clip</span>
               <span style={{ fontSize: 12, color: A.textSoft }}>›</span>
             </button>
           )}
 
-          {showVideoSection && (!isTextPlatform || videoExpanded) && (
+          {showVideoSection && videoSupport === 'optional' && videoExpanded && (
             <div style={{
               marginTop: 4, padding: '12px 14px', borderRadius: 10,
-              border: `1px solid ${isVideoPlatform ? A.border : A.borderLight}`,
-              background: isVideoPlatform ? A.surfaceAlt : A.bg,
-              opacity: isVideoPlatform ? 1 : 0.55,
+              border: `1px solid ${A.border}`,
+              background: A.surfaceAlt,
             }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                 <p style={{ fontSize: 12, fontWeight: 600, color: A.textSoft, margin: 0 }}>
                   🎬 Video Clip (Veo 3.1)
                 </p>
-                {isTextPlatform && videoExpanded && (
-                  <button
-                    type="button"
-                    onClick={() => setVideoExpanded(false)}
-                    style={{
-                      border: 'none', background: 'transparent', color: A.textMuted,
-                      fontSize: 11, cursor: 'pointer', padding: 0,
-                    }}
-                  >
-                    ‹ collapse
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => setVideoExpanded(false)}
+                  style={{
+                    border: 'none', background: 'transparent', color: A.textMuted,
+                    fontSize: 11, cursor: 'pointer', padding: 0,
+                  }}
+                >
+                  ‹ collapse
+                </button>
               </div>
 
-              {!isVideoPlatform ? (
-                <p style={{ fontSize: 11, color: A.textMuted, margin: 0 }}>
-                  Video generation is available for Instagram, TikTok, and Reels posts.
-                </p>
-              ) : videoStatus === 'idle' ? (
+              {videoStatus === 'idle' ? (
                 <button
                   onClick={() => startGeneration('fast')}
                   style={{
@@ -589,79 +609,29 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
           )}
         </div>
 
-        {/* Right: Image / Carousel — M-3: hidden when captionOnly is active */}
+        {/* Right: Image / Carousel / Video — M-3: hidden when captionOnly is active */}
         {!captionOnly && (
-          <div style={{
-            borderRadius: 12, overflow: 'hidden',
-            background: A.surfaceAlt, border: `1px solid ${A.border}`,
-            aspectRatio: '1 / 1', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            position: 'relative',
-          }}>
-            {imageUrl ? (
-              <>
-                <img
-                  src={isCarousel ? imageUrls[carouselIndex] : imageUrl}
-                  alt={isCarousel ? `Slide ${carouselIndex + 1}` : 'Generated post image'}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                />
-                {/* Carousel nav arrows */}
-                {isCarousel && (
-                  <>
-                    {carouselIndex > 0 && (
-                      <button
-                        onClick={() => setCarouselIndex(i => i - 1)}
-                        style={{
-                          position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)',
-                          width: 32, height: 32, borderRadius: '50%', border: 'none',
-                          background: 'rgba(0,0,0,0.5)', color: 'white', fontSize: 16,
-                          cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        }}
-                      >‹</button>
-                    )}
-                    {carouselIndex < imageUrls.length - 1 && (
-                      <button
-                        onClick={() => setCarouselIndex(i => i + 1)}
-                        style={{
-                          position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
-                          width: 32, height: 32, borderRadius: '50%', border: 'none',
-                          background: 'rgba(0,0,0,0.5)', color: 'white', fontSize: 16,
-                          cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        }}
-                      >›</button>
-                    )}
-                    {/* Dot indicators */}
-                    <div style={{
-                      position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)',
-                      display: 'flex', gap: 6,
-                    }}>
-                      {imageUrls.map((_, i) => (
-                        <button
-                          key={i}
-                          onClick={() => setCarouselIndex(i)}
-                          style={{
-                            width: 8, height: 8, borderRadius: '50%', border: 'none', padding: 0,
-                            background: i === carouselIndex ? 'white' : 'rgba(255,255,255,0.5)',
-                            cursor: 'pointer', transition: 'background 0.2s',
-                          }}
-                        />
-                      ))}
-                    </div>
-                    {/* Slide counter badge */}
-                    <span style={{
-                      position: 'absolute', top: 10, right: 10,
-                      padding: '2px 8px', borderRadius: 12, fontSize: 11, fontWeight: 600,
-                      background: 'rgba(0,0,0,0.5)', color: 'white',
-                    }}>
-                      {carouselIndex + 1}/{imageUrls.length}
-                    </span>
-                  </>
-                )}
-              </>
-            ) : (
-              <div style={{ textAlign: 'center', padding: 20 }}>
-                {status === 'generating' ? (
-                  <>
-                    {/* Image skeleton shimmer */}
+          <div>
+            <div style={{
+              borderRadius: 12, overflow: 'hidden',
+              background: A.surfaceAlt, border: `1px solid ${A.border}`,
+              aspectRatio: isVideoFirst ? videoAspect : imageAspect,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              position: 'relative',
+            }}>
+              {isVideoFirst ? (
+                /* video_first: video player in right panel */
+                videoUrl ? (
+                  <video
+                    src={videoUrl}
+                    controls
+                    autoPlay
+                    muted
+                    loop
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                ) : status === 'generating' || state.videoGenerating ? (
+                  <div style={{ textAlign: 'center', padding: 20 }}>
                     <div style={{
                       width: 48, height: 48, borderRadius: '50%',
                       border: `3px solid ${A.indigoLight}`,
@@ -669,14 +639,146 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
                       margin: '0 auto 12px',
                       animation: 'spin 1s linear infinite',
                     }} />
-                    <p style={{ fontSize: 12, color: A.textMuted }}>Generating image...</p>
-                  </>
+                    <p style={{ fontSize: 12, color: A.textMuted }}>{state.videoGenerating ? 'Generating video...' : state.statusMessage || 'Generating...'}</p>
+                  </div>
+                ) : videoStatus === 'generating' ? (
+                  <div style={{ textAlign: 'center', padding: 20 }}>
+                    <div style={{
+                      width: 48, height: 48, borderRadius: '50%',
+                      border: `3px solid ${A.indigoLight}`,
+                      borderTopColor: A.indigo,
+                      margin: '0 auto 12px',
+                      animation: 'spin 1s linear infinite',
+                    }} />
+                    <p style={{ fontSize: 12, color: A.textMuted }}>Generating video... {Math.round(progress)}%</p>
+                  </div>
+                ) : status === 'complete' && postId && brandId ? (
+                  <div style={{ textAlign: 'center', padding: 20 }}>
+                    <button
+                      onClick={() => startGeneration('fast')}
+                      style={{
+                        padding: '12px 24px', borderRadius: 10, border: 'none',
+                        background: `linear-gradient(135deg, ${A.violet}, ${A.indigo})`,
+                        color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                      }}
+                    >
+                      Generate 8-sec Clip
+                    </button>
+                  </div>
                 ) : (
-                  <>
-                    <span style={{ fontSize: 32 }}>🖼️</span>
-                    <p style={{ fontSize: 12, color: A.textMuted, marginTop: 8 }}>Image will appear here</p>
-                  </>
-                )}
+                  <div style={{ textAlign: 'center', padding: 20 }}>
+                    <span style={{ fontSize: 32 }}>🎬</span>
+                    <p style={{ fontSize: 12, color: A.textMuted, marginTop: 8 }}>Video will appear here</p>
+                  </div>
+                )
+              ) : imageUrl ? (
+                /* Image / Carousel */
+                <>
+                  <img
+                    src={isCarousel ? imageUrls[carouselIndex] : imageUrl}
+                    alt={isCarousel ? `Slide ${carouselIndex + 1}` : 'Generated post image'}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                  {/* Carousel nav arrows */}
+                  {isCarousel && (
+                    <>
+                      {carouselIndex > 0 && (
+                        <button
+                          onClick={() => setCarouselIndex(i => i - 1)}
+                          style={{
+                            position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)',
+                            width: 32, height: 32, borderRadius: '50%', border: 'none',
+                            background: 'rgba(0,0,0,0.5)', color: 'white', fontSize: 16,
+                            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          }}
+                        >‹</button>
+                      )}
+                      {carouselIndex < imageUrls.length - 1 && (
+                        <button
+                          onClick={() => setCarouselIndex(i => i + 1)}
+                          style={{
+                            position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+                            width: 32, height: 32, borderRadius: '50%', border: 'none',
+                            background: 'rgba(0,0,0,0.5)', color: 'white', fontSize: 16,
+                            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          }}
+                        >›</button>
+                      )}
+                      {/* Dot indicators */}
+                      <div style={{
+                        position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)',
+                        display: 'flex', gap: 6,
+                      }}>
+                        {imageUrls.map((_, i) => (
+                          <button
+                            key={i}
+                            onClick={() => setCarouselIndex(i)}
+                            style={{
+                              width: 8, height: 8, borderRadius: '50%', border: 'none', padding: 0,
+                              background: i === carouselIndex ? 'white' : 'rgba(255,255,255,0.5)',
+                              cursor: 'pointer', transition: 'background 0.2s',
+                            }}
+                          />
+                        ))}
+                      </div>
+                      {/* Slide counter badge */}
+                      <span style={{
+                        position: 'absolute', top: 10, right: 10,
+                        padding: '2px 8px', borderRadius: 12, fontSize: 11, fontWeight: 600,
+                        background: 'rgba(0,0,0,0.5)', color: 'white',
+                      }}>
+                        {carouselIndex + 1}/{imageUrls.length}
+                      </span>
+                    </>
+                  )}
+                </>
+              ) : (
+                <div style={{ textAlign: 'center', padding: 20 }}>
+                  {status === 'generating' ? (
+                    <>
+                      <div style={{
+                        width: 48, height: 48, borderRadius: '50%',
+                        border: `3px solid ${A.indigoLight}`,
+                        borderTopColor: A.indigo,
+                        margin: '0 auto 12px',
+                        animation: 'spin 1s linear infinite',
+                      }} />
+                      <p style={{ fontSize: 12, color: A.textMuted }}>Generating image...</p>
+                    </>
+                  ) : (
+                    <>
+                      <span style={{ fontSize: 32 }}>🖼️</span>
+                      <p style={{ fontSize: 12, color: A.textMuted, marginTop: 8 }}>Image will appear here</p>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+            {/* Video download + audio note — below the video player */}
+            {isVideoFirst && videoUrl && (
+              <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <a
+                  href={videoUrl}
+                  download={`amplifi-video-${postId}.mp4`}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                    padding: '5px 12px', borderRadius: 6,
+                    border: `1px solid ${A.border}`, background: A.surfaceAlt,
+                    color: A.textSoft, fontSize: 11, textDecoration: 'none',
+                    cursor: 'pointer', alignSelf: 'flex-start',
+                  }}
+                >
+                  ↓ Download Video
+                </a>
+              </div>
+            )}
+            {isVideoFirst && state.audioNote && (
+              <div style={{
+                padding: '8px 12px', borderRadius: 8, marginTop: 6,
+                background: '#FFF8E1', border: '1px solid #FFE08244',
+                fontSize: 12, color: A.text,
+              }}>
+                🔊 {state.audioNote}
               </div>
             )}
           </div>

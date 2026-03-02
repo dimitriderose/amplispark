@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { A } from '../theme'
 import { usePostGeneration } from '../hooks/usePostGeneration'
@@ -15,9 +15,11 @@ export default function GeneratePage() {
 
   const { state, generate, reset, loadExisting } = usePostGeneration()
 
-  const [dayBrief, setDayBrief] = useState<{ platform: string; pillar: string; content_theme: string; day_index?: number } | undefined>(undefined)
+  const [dayBrief, setDayBrief] = useState<{ platform: string; pillar: string; content_theme: string; day_index?: number; derivative_type?: string } | undefined>(undefined)
   const [planDayCount, setPlanDayCount] = useState<number>(0)
   const [byopRecommendation, setByopRecommendation] = useState<string | undefined>(undefined)
+  const [reviewKey, setReviewKey] = useState(0)
+  const hasRegenerated = useRef(false)
 
   // Load the day brief so PostGenerator knows the platform (needed for video button eligibility)
   useEffect(() => {
@@ -72,10 +74,19 @@ export default function GeneratePage() {
 
   const handleRegenerate = (instructions?: string) => {
     if (planId && dayIndex !== undefined && brandId) {
+      hasRegenerated.current = true
       reset()
       generate(planId, parseInt(dayIndex, 10), brandId, instructions)
     }
   }
+
+  // Re-trigger review after regeneration completes
+  useEffect(() => {
+    if (state.status === 'complete' && hasRegenerated.current) {
+      hasRegenerated.current = false
+      setReviewKey(k => k + 1)
+    }
+  }, [state.status])
 
   // L-8: Navigate to next day if one exists
   const currentDayIdx = dayIndex !== undefined ? parseInt(dayIndex, 10) : -1
@@ -135,6 +146,7 @@ export default function GeneratePage() {
           onRegenerate={handleRegenerate}
           brandId={brandId}
           byopRecommendation={byopRecommendation}
+          onVideoGenerated={() => setReviewKey(k => k + 1)}
         />
       </div>
 
@@ -150,7 +162,9 @@ export default function GeneratePage() {
           <ReviewPanel
             brandId={brandId}
             postId={state.postId}
+            reviewKey={reviewKey}
             onApproved={() => navigate(`/dashboard/${brandId}?approved=${state.postId}`)}
+            initialReview={state.review as any}
           />
 
           {/* L-8: Next Day CTA — shown after post is complete */}

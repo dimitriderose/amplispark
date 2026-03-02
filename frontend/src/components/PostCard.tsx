@@ -93,6 +93,16 @@ export default function PostCard({ post, brandId, onApproved, onDismiss, onView 
             alt="Post visual"
             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
           />
+        ) : post.video?.url ? (
+          <video
+            src={post.video.url}
+            muted
+            loop
+            playsInline
+            onMouseOver={e => (e.target as HTMLVideoElement).play()}
+            onMouseOut={e => { const v = e.target as HTMLVideoElement; v.pause(); v.currentTime = 0 }}
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
         ) : (
           <span style={{ fontSize: 32, opacity: 0.3 }}>🖼️</span>
         )}

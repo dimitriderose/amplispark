@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react'
 import { A } from '../theme'
+import { getPlatform } from '../platformRegistry'
 import { api } from '../api/client'
 import type { Post } from '../hooks/usePostLibrary'
 
@@ -11,18 +12,13 @@ const PILLAR_COLORS: Record<string, string> = {
   user_generated: A.amber,
 }
 
-const PLATFORM_ICONS: Record<string, string> = {
-  instagram: '📸',
-  linkedin: '💼',
-  twitter: '🐦',
-  facebook: '👥',
-}
-
 const DERIVATIVE_LABELS: Record<string, string> = {
   carousel: 'Carousel',
   thread_hook: 'Thread',
   blog_snippet: 'Blog',
   story: 'Story',
+  pin: 'Pin',
+  video_first: 'Video',
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -161,7 +157,8 @@ interface DayCardProps {
 
 function DayCard({ day, dayName, brandId, planId, seriesColor, post, onGenerate, onViewPost, onPhotoUploaded }: DayCardProps) {
   const pillarColor = PILLAR_COLORS[day.pillar] || A.indigo
-  const platformIcon = PLATFORM_ICONS[day.platform] || '📱'
+  const platformSpec = getPlatform(day.platform)
+  const PlatformIcon = platformSpec.icon
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [photoError, setPhotoError] = useState('')
@@ -236,13 +233,25 @@ function DayCard({ day, dayName, brandId, planId, seriesColor, post, onGenerate,
       <div style={{ height: 3, background: pillarColor }} />
 
       {/* Generated post thumbnail + status bar */}
-      {isGenerated && post?.image_url ? (
+      {isGenerated && (post?.image_url || post?.video?.url) ? (
         <div>
-          <img
-            src={post.image_url}
-            alt="Generated post"
-            style={{ width: '100%', aspectRatio: '4 / 3', objectFit: 'cover', display: 'block' }}
-          />
+          {post.video?.url && !post.image_url ? (
+            <video
+              src={post.video.url}
+              muted
+              loop
+              playsInline
+              onMouseOver={e => (e.target as HTMLVideoElement).play()}
+              onMouseOut={e => { const v = e.target as HTMLVideoElement; v.pause(); v.currentTime = 0 }}
+              style={{ width: '100%', aspectRatio: '4 / 3', objectFit: 'cover', display: 'block' }}
+            />
+          ) : (
+            <img
+              src={post.image_url}
+              alt="Generated post"
+              style={{ width: '100%', aspectRatio: '4 / 3', objectFit: 'cover', display: 'block' }}
+            />
+          )}
           {/* Status + score bar below image */}
           <div style={{
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -315,7 +324,7 @@ function DayCard({ day, dayName, brandId, planId, seriesColor, post, onGenerate,
         {/* Day + platform */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <span style={{ fontSize: 12, fontWeight: 600, color: A.textSoft }}>{dayName}</span>
-          <span style={{ fontSize: 14 }}>{platformIcon}</span>
+          <PlatformIcon size={14} color={platformSpec.color} />
         </div>
 
         {/* Pillar badge */}

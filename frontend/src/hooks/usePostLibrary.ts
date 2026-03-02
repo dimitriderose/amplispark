@@ -9,8 +9,10 @@ export interface Post {
   caption?: string
   hashtags?: string[]
   image_url?: string
+  video?: { url: string }
   platform?: string
   pillar?: string
+  derivative_type?: string
   created_at?: string
 }
 

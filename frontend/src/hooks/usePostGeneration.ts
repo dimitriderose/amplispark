@@ -11,8 +11,11 @@ export interface GenerationState {
   imageUrl: string | null
   imageUrls: string[]        // carousel: all slide URLs
   videoUrl: string | null
+  videoGenerating: boolean   // true while backend auto-generates Veo video
+  audioNote: string | null   // tip for video_first posts (add audio before publishing)
   postId: string | null
   error: string | null
+  review: Record<string, any> | null  // inline review from review gate
 }
 
 export function usePostGeneration() {
@@ -25,6 +28,8 @@ export function usePostGeneration() {
     imageUrl: null,
     imageUrls: [],
     videoUrl: null,
+    videoGenerating: false,
+    audioNote: null,
     postId: null,
     error: null,
   })
@@ -46,8 +51,11 @@ export function usePostGeneration() {
       imageUrl: null,
       imageUrls: [],
       videoUrl: null,
+      videoGenerating: false,
+      audioNote: null,
       postId: null,
       error: null,
+      review: null,
     })
 
     const instructionsParam = instructions ? `&instructions=${encodeURIComponent(instructions)}` : ''
@@ -96,6 +104,33 @@ export function usePostGeneration() {
         hashtags: data.hashtags || prev.hashtags,
         imageUrl: data.image_url || prev.imageUrl,
         imageUrls: data.image_urls?.length ? data.image_urls : prev.imageUrls,
+        review: data.review || null,
+        videoGenerating: data.awaiting_video || false,
+      }))
+      // Don't close here — video_first posts have more events coming.
+      // The ES closes on video_complete, video_error, or natural connection end.
+    })
+
+    es.addEventListener('video_complete', (e: MessageEvent) => {
+      const data = JSON.parse(e.data)
+      setState(prev => ({
+        ...prev,
+        videoUrl: data.video_url,
+        audioNote: data.audio_note || null,
+        statusMessage: '',
+        videoGenerating: false,
+      }))
+      es.close()
+    })
+
+    es.addEventListener('video_error', (e: MessageEvent) => {
+      const data = JSON.parse(e.data)
+      // Video failed but we still have the caption — keep status as 'complete'
+      setState(prev => ({
+        ...prev,
+        statusMessage: '',
+        audioNote: `Video generation failed: ${data.message}. Use the "Generate Video" button to retry.`,
+        videoGenerating: false,
       }))
       es.close()
     })
@@ -106,7 +141,15 @@ export function usePostGeneration() {
         const data = JSON.parse(e.data)
         setState(prev => ({ ...prev, status: 'error', error: data.message }))
       } else {
-        setState(prev => ({ ...prev, status: 'error', error: 'Connection lost' }))
+        // Natural connection close after stream ends — not an error if generation completed
+        setState(prev => {
+          if (prev.status === 'complete') {
+            // Connection dropped after completion — if video was generating, clear the
+            // flag so the manual button shows. Backend still runs; video saves to Firestore.
+            return prev.videoGenerating ? { ...prev, videoGenerating: false } : prev
+          }
+          return { ...prev, status: 'error', error: 'Connection lost' }
+        })
       }
       es.close()
     })
@@ -127,8 +170,11 @@ export function usePostGeneration() {
       imageUrl: null,
       imageUrls: [],
       videoUrl: null,
+      videoGenerating: false,
+      audioNote: null,
       postId: null,
       error: null,
+      review: null,
     })
   }, [])
 
@@ -150,8 +196,11 @@ export function usePostGeneration() {
       imageUrl: post.imageUrl,
       imageUrls: post.imageUrls || (post.imageUrl ? [post.imageUrl] : []),
       videoUrl: post.videoUrl ?? null,
+      videoGenerating: false,
+      audioNote: null,
       postId: post.postId,
       error: null,
+      review: null,
     })
   }, [])
 
