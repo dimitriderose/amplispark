@@ -71,6 +71,37 @@ def _parse_slide_descriptions(caption: str, max_slides: int = 3) -> list[str]:
     return slides[:max_slides]
 
 
+def _strip_markdown(text: str) -> str:
+    """Remove markdown formatting that social platforms can't render."""
+    text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
+    text = re.sub(r'\*(.+?)\*', r'\1', text)
+    text = re.sub(r'__(.+?)__', r'\1', text)
+    text = re.sub(r'_(.+?)_', r'\1', text)
+    text = re.sub(r'\[(.+?)\]\(.+?\)', r'\1', text)
+    text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
+    return text
+
+
+def _validate_format(caption: str, derivative_type: str) -> bool:
+    """Check if the caption follows the expected derivative format. Log warnings on mismatch."""
+    if derivative_type == "carousel":
+        ok = "Slide 1" in caption and "Slide 2" in caption
+        if not ok:
+            logger.warning("Carousel caption missing Slide 1/2 structure")
+        return ok
+    if derivative_type == "thread_hook":
+        ok = "1/" in caption or "1)" in caption
+        if not ok:
+            logger.warning("Thread caption missing numbered format (1/, 2/...)")
+        return ok
+    if derivative_type == "pin":
+        ok = "PIN TITLE" in caption.upper() or "PIN DESCRIPTION" in caption.upper()
+        if not ok:
+            logger.warning("Pin caption missing PIN TITLE / PIN DESCRIPTION labels")
+        return ok
+    return True
+
+
 async def _generate_carousel_images(
     slide_descriptions: list[str],
     business_name: str,
@@ -165,6 +196,8 @@ async def generate_post(
     derivative_type = day_brief.get("derivative_type", "original")
 
     business_name = brand_profile.get("business_name", "Brand")
+    industry = brand_profile.get("industry", "")
+    target_audience = brand_profile.get("target_audience", "general audience")
     tone = brand_profile.get("tone", "professional")
     visual_style = brand_profile.get("visual_style", "")
     image_style_directive = brand_profile.get("image_style_directive", "")
@@ -191,6 +224,19 @@ async def generate_post(
         social_voice_block = "\n".join(_sva_lines) + "\n"
     else:
         social_voice_block = ""
+
+    # Quality guardrails injected into every generation prompt
+    _QUALITY_BLOCK = (
+        "FORMATTING: Write plain text only. Do NOT use markdown formatting — no **bold**, "
+        "*italic*, __underline__, or [links](url). Social platforms cannot render markdown. "
+        "Use CAPS or emoji for emphasis instead if needed.\n\n"
+        "AVOID these common AI-generated content patterns:\n"
+        "- Starting with \"Are you ready to...\" or \"Did you know...\"\n"
+        "- Ending every post with \"Drop a comment below!\" or \"Follow for more!\"\n"
+        "- Using phrases like \"game-changer\", \"unlock your potential\", \"take it to the next level\"\n"
+        "- Writing generic content that could apply to any business in any industry\n"
+        "- Using emojis as bullet points (fire, pin, lightbulb) unless the brand style explicitly calls for it"
+    )
 
     # Format-specific instructions for derivative post types
     _DERIVATIVE_INSTRUCTIONS: dict[str, str] = {
@@ -271,16 +317,18 @@ async def generate_post(
     if custom_photo_bytes:
         yield {"event": "status", "data": {"message": "Analyzing your photo..."}}
 
-        byop_prompt = f"""You are a world-class social media content creator for {business_name}.
+        byop_prompt = f"""You are a {platform} content specialist for {industry} brands. You write for {business_name}, targeting {target_audience}.
 
 Brand tone: {tone}
 Visual style: {visual_style}
 {caption_style_directive}
 {social_voice_block}{f"CONTENT FORMAT:{chr(10)}{derivative_instruction}{chr(10)}" if derivative_instruction else ""}{f"{platform_format}{chr(10)}" if platform_format else ""}
+{_QUALITY_BLOCK}
+
 Analyze this photo and write a {platform} post caption that:
 - Complements and describes what's in the photo
 - Fits the "{content_theme}" theme for the "{pillar}" content pillar
-- Starts with this hook: "{caption_hook}"
+- Your caption MUST begin with this hook (use it verbatim or improve it, but keep the core idea): "{caption_hook}"
 - Carries this key message: {key_message}
 - Ends with a call to action
 {instruction_hint}
@@ -300,7 +348,7 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                 contents=[image_part, text_part],
                 config=types.GenerateContentConfig(
                     response_modalities=["TEXT"],
-                    temperature=0.9,
+                    temperature=0.7,
                 ),
             )
 
@@ -350,11 +398,13 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                     },
                 }
 
+            final_caption = _enforce_char_limit(_strip_markdown(full_caption), platform)
+            _validate_format(final_caption, derivative_type)
             yield {
                 "event": "complete",
                 "data": {
                     "post_id": post_id,
-                    "caption": _enforce_char_limit(full_caption, platform),
+                    "caption": final_caption,
                     "hashtags": parsed_hashtags,
                     "image_url": image_url,
                     "image_gcs_uri": image_gcs_uri,
@@ -366,6 +416,79 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
             yield {"event": "error", "data": {"message": str(e)}}
 
         return  # Do not fall through to normal generation
+
+    # ── Video-first mode (text-only caption, no image generation) ──────────────
+    if derivative_type == "video_first":
+        yield {"event": "status", "data": {"message": f"Writing {platform} video caption..."}}
+
+        video_prompt = f"""You are a {platform} content specialist for {industry} brands. You write for {business_name}, targeting {target_audience}.
+
+Brand tone: {tone}
+{caption_style_directive}
+{social_voice_block}{f"CONTENT FORMAT:{chr(10)}{derivative_instruction}{chr(10)}" if derivative_instruction else ""}{f"{platform_format}{chr(10)}" if platform_format else ""}{trend_block}
+{_QUALITY_BLOCK}
+
+Create a {platform} video-first post for the "{pillar}" content pillar on the theme: "{content_theme}".
+
+Your caption MUST begin with this hook (use it verbatim or improve it, but keep the core idea): "{caption_hook}"
+Key message: {key_message}
+
+Write a compelling caption to accompany a video clip. The video is the main content — the caption supports it.
+{instruction_hint}
+After the caption, add relevant hashtags on a new line starting with HASHTAGS:
+CRITICAL: Only output real hashtags. Never convert sentence fragments into hashtags.
+"""
+
+        try:
+            response = await asyncio.to_thread(
+                client.models.generate_content,
+                model=GEMINI_MODEL,
+                contents=video_prompt,
+                config=types.GenerateContentConfig(
+                    response_modalities=["TEXT"],
+                    temperature=0.7,
+                ),
+            )
+
+            full_text = "".join(
+                part.text for part in response.candidates[0].content.parts if part.text
+            )
+
+            if "HASHTAGS:" in full_text:
+                caption_part, hashtag_part = full_text.split("HASHTAGS:", 1)
+                full_caption = caption_part.strip()
+                raw_tags = hashtag_part.strip().replace("\n", " ")
+                parsed_hashtags = _sanitize_hashtags(
+                    [t.strip() for t in raw_tags.split() if t.strip()],
+                    platform,
+                )
+            else:
+                full_caption = full_text.strip()
+                parsed_hashtags = _sanitize_hashtags(hashtags_hint, platform)
+
+            final_caption = _enforce_char_limit(_strip_markdown(full_caption), platform)
+            _validate_format(final_caption, derivative_type)
+
+            yield {
+                "event": "caption",
+                "data": {"text": final_caption, "chunk": False, "hashtags": parsed_hashtags},
+            }
+            yield {
+                "event": "complete",
+                "data": {
+                    "post_id": post_id,
+                    "caption": final_caption,
+                    "hashtags": parsed_hashtags,
+                    "image_url": None,
+                    "image_gcs_uri": None,
+                },
+            }
+
+        except Exception as e:
+            logger.error("Video-first generation error for post %s: %s", post_id, e)
+            yield {"event": "error", "data": {"message": str(e)}}
+
+        return  # Skip image generation entirely
 
     # ── Normal mode (interleaved TEXT + IMAGE) ────────────────────────────────
 
@@ -382,16 +505,18 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
         "color palette, lighting style, and mood. Every image you generate must feel cohesive "
         "with this reference. Match the warmth, saturation, and composition style exactly.\n"
     ) if style_reference_gcs_uri else ""
-    prompt = f"""You are a world-class social media content creator for {business_name}.
+    prompt = f"""You are a {platform} content specialist for {industry} brands. You write for {business_name}, targeting {target_audience}.
 
 Brand tone: {tone}
 Visual style: {visual_style}
 {caption_style_directive}
 {social_voice_block}{image_style_directive}
 {style_ref_block}{f"CONTENT FORMAT:{chr(10)}{derivative_instruction}{chr(10)}" if derivative_instruction else ""}{f"{platform_format}{chr(10)}" if platform_format else ""}{trend_block}
+{_QUALITY_BLOCK}
+
 Create a {platform} post for the "{pillar}" content pillar on the theme: "{content_theme}".
 
-Start with this hook: "{caption_hook}"
+Your caption MUST begin with this hook (use it verbatim or improve it, but keep the core idea): "{caption_hook}"
 Key message: {key_message}
 
 Write the caption first (following the format above if specified), engaging and on-brand, ending with a call to action.
@@ -435,7 +560,7 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
             contents=contents,
             config=types.GenerateContentConfig(
                 response_modalities=["TEXT", "IMAGE"],
-                temperature=0.9,
+                temperature=0.7,
             ),
         )
 
@@ -582,8 +707,9 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                         logger.error("Carousel slide upload failed: %s", upload_err)
 
         final_hashtags = parsed_hashtags if parsed_hashtags else hashtags_hint
-        # Enforce hard character limits (X=280, Bluesky=300, Threads/Mastodon=500)
-        final_caption = _enforce_char_limit(full_caption.strip(), platform)
+        # Strip markdown + enforce hard character limits (X=280, Bluesky=300, Threads/Mastodon=500)
+        final_caption = _enforce_char_limit(_strip_markdown(full_caption.strip()), platform)
+        _validate_format(final_caption, derivative_type)
         yield {
             "event": "complete",
             "data": {

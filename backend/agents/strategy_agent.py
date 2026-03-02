@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+from datetime import datetime
 from google import genai
 from google.genai import types
 from backend.config import GOOGLE_API_KEY, GEMINI_MODEL
@@ -161,62 +162,82 @@ async def _research_platform_trends(platform: str, industry: str) -> dict | None
 
 _FORMAT_GUIDE = """PLATFORM FORMAT GUIDANCE (match content format to what works on each platform):
 
-INSTAGRAM — Carousel or Reels:
-  - Carousels get 10% engagement (highest of any format). Use for educational/tip content.
-  - Static images declining 17% YoY — avoid when possible.
-  - Use derivative_type "carousel" for most Instagram posts.
+INSTAGRAM — Reels FIRST, then Carousel:
+  - Reels get 2x the reach of static posts. Always consider video_first.
+  - Assign derivative_type "video_first" for at least 1 out of every 3 Instagram posts.
+  - Carousels remain #1 for educational content — use for how-to/tip content.
+  - Static image posts (derivative_type "original") only for announcements or quotes.
   - DM shares and saves are the #1 algorithm signals.
 
-LINKEDIN — Document Carousel or Thought Leadership:
-  - Document/carousel posts get 596% more engagement than text-only.
-  - Structure as frameworks, checklists, step-by-step guides.
-  - Use derivative_type "carousel" for LinkedIn educational content.
-  - Use derivative_type "blog_snippet" for opinion/thought leadership.
+LINKEDIN — Video for thought leadership, Carousel for education:
+  - Video gets 5x engagement vs text-only posts.
+  - Use "video_first" for personal stories, behind-the-scenes, talking head content.
+  - Use "carousel" for frameworks, checklists, how-to content.
+  - Use "blog_snippet" for opinion pieces.
+  - NEVER include external links in captions.
 
-X/TWITTER — Video + Short Text or Thread:
-  - 4 out of 5 sessions now include video — video is the dominant format.
-  - Use derivative_type "video_first" for X when possible.
-  - Use derivative_type "thread_hook" for multi-point educational content.
+X/TWITTER — Video is dominant:
+  - 4 out of 5 sessions now include video. Video tweets get 10x engagement.
+  - Use derivative_type "video_first" for attention-grabbing content.
+  - Use "thread_hook" for multi-point educational content.
+  - Use "original" (text+image) for quick takes and replies.
   - Single tweets: keep under 200 chars, designed to spark quick replies.
 
-TIKTOK — Photo Carousel or Short Video:
-  - Photo carousels are getting algorithm-boosted reach.
-  - Use derivative_type "carousel" for TikTok educational/list content.
+TIKTOK — Video FIRST, then Photo Carousel:
+  - Video is the dominant format. Use "video_first" for most TikTok content.
+  - Photo carousels getting algorithm-boosted reach for educational content.
+  - Use "carousel" for TikTok educational/list content.
   - Problem-solution and behind-the-scenes content outperforms polished.
 
-FACEBOOK — Mixed (Carousel, Photo, or Reel):
-  - Format-agnostic algorithm. Shares/saves worth 50x likes.
-  - Use derivative_type "carousel" for storytelling, "story" for stories.
-  - Community-oriented, question-based content drives comments.
+FACEBOOK — Reels growing fast, Carousel for engagement:
+  - Reels are prioritized in the algorithm. Use "video_first" for broad reach.
+  - Use "carousel" for storytelling and educational content.
+  - Use "original" for community-oriented question posts.
+  - Shares/saves worth 50x likes. NEVER include external links in captions.
 
 THREADS — Conversation Starter + Image:
   - Image posts get 60% more engagement than text-only.
   - Algorithm SUPPRESSES promotional content — be authentic.
-  - Use derivative_type "original" — always text+image.
+  - Video growing as Meta pushes Reels infrastructure. Use "video_first" for dynamic content.
   - End with a question or hot take.
 
 PINTEREST — SEO Pin + Visual:
   - Idea Pins (multi-image) get 4x engagement of standard pins.
+  - Idea Pin video growing fast — use "video_first" for how-to and behind-the-scenes.
   - Pinterest is a SEARCH ENGINE — keyword-rich titles and descriptions.
   - Use derivative_type "pin" — caption format is PIN TITLE + PIN DESCRIPTION.
 
-YOUTUBE SHORTS — Video Description:
+YOUTUBE SHORTS — Video Only:
   - Video-first platform. Our job is to generate the description/caption.
-  - Use derivative_type "video_first".
+  - ALWAYS use derivative_type "video_first".
   - First 125 chars appear in search — include primary keyword.
 
 MASTODON — Text + Essential Hashtags:
   - NO algorithm — hashtags ARE the only discovery mechanism.
   - Community-first, anti-spam. Earn boosts by being genuinely useful.
-  - Use derivative_type "original" — text + optional image.
+  - Video supported — use "video_first" sparingly for impactful content.
   - CamelCase hashtags are critical for accessibility and discovery.
 
 BLUESKY — Thread or Short Take + Image:
   - Threads get 3x engagement vs single posts.
-  - Custom feeds drive 5x impressions.
+  - Custom feeds drive 5x impressions. Video supported — early mover advantage.
   - Replies are the #1 metric, not likes.
-  - Use derivative_type "thread_hook" for multi-point content.
+  - Use "thread_hook" for multi-point content.
   - 300 char limit, so single posts must be ultra-concise.
+
+VIDEO vs IMAGE DECISION:
+Choose derivative_type "video_first" when the content is:
+- Behind-the-scenes / day-in-the-life (movement matters)
+- Before/after transformations
+- Quick tips or tutorials (show, don't tell)
+- Personal stories or testimonials
+- Trending topics that benefit from urgency/energy
+
+Choose IMAGE-based types ("original", "carousel") when the content is:
+- Data-heavy / infographic (static is easier to read)
+- Step-by-step guides (carousel with slides)
+- Quotes or announcements
+- SEO-focused content (Pinterest, long-form LinkedIn)
 """
 
 
@@ -298,14 +319,43 @@ async def run_strategy(
             f"{platform_reasoning}\n"
         )
 
+    # Temporal awareness
+    now = datetime.now()
+    _month = now.month
+    _season = (
+        "Winter" if _month in (12, 1, 2) else
+        "Spring" if _month in (3, 4, 5) else
+        "Summer" if _month in (6, 7, 8) else "Fall"
+    )
+    temporal_context = (
+        f"TODAY: {now.strftime('%A, %B %d, %Y')} (Week {now.isocalendar()[1]})\n"
+        f"SEASON: {_season}\n"
+        "Make content time-relevant. Reference the current season, upcoming holidays, "
+        "or industry events happening this week. Generic 'evergreen' content for every day is lazy.\n"
+    )
+
+    # Curated brand profile (not raw JSON dump)
+    curated_profile = (
+        f"Business: {brand_profile.get('business_name', 'Brand')}\n"
+        f"Industry: {brand_profile.get('industry', '')}\n"
+        f"Type: {brand_profile.get('business_type', '')}\n"
+        f"Tone: {brand_profile.get('tone', '')}\n"
+        f"Target audience: {brand_profile.get('target_audience', '')}\n"
+        f"Content themes: {', '.join(brand_profile.get('content_themes', []))}\n"
+        f"Visual style: {brand_profile.get('visual_style', '')}\n"
+        f"Colors: {', '.join(brand_profile.get('colors', []))}\n"
+    )
+
     prompt = f"""You are a social media strategy expert and creative director.
 
 Your job is to generate a {num_days}-day content calendar for the following brand.
 
+{temporal_context}
+
 BRAND PROFILE:
-{json.dumps(brand_profile, indent=2, default=str)}
+{curated_profile}
 {platform_rec_block}{trends_context}
-BUSINESS_EVENTS_THIS_WEEK: {business_events or "None provided — generate thematic pillars based on brand profile."}
+BUSINESS_EVENTS_THIS_WEEK: {business_events or "None provided — generate thematic pillars based on brand profile and current season/timing."}
 
 Generate exactly {num_days} day briefs. Each brief covers one day of social media content.
 
@@ -334,6 +384,26 @@ For each hero idea:
   - All days in the same repurposing group MUST share the same pillar_id string (e.g., "series_0").
   - Adapt content_theme, caption_hook, and image_prompt to suit the derivative platform/format.
 Remaining days each get their own unique pillar_id and derivative_type "original" (or format-appropriate type).
+
+CTA VARIETY (CRITICAL):
+Each day's caption_hook and key_message must drive a DIFFERENT call to action. Track what you've used:
+- Day 0: question CTA ("What's your biggest challenge with X?")
+- Day 1: save CTA ("Save this for tax season")
+- Day 2: share CTA ("Tag someone who needs this")
+- Day 3: action CTA ("DM us 'AUDIT' for a free checklist")
+- Day 4: story CTA ("Tell us your experience in the comments")
+- Day 5+: mix from above, never repeat back-to-back
+NEVER use "Follow for more" or "Like and share" — these are engagement bait from 2019.
+
+QUALITY STANDARDS FOR DAY BRIEFS:
+BAD content_theme: "Tips and insights for accounting enthusiasts" (vague, generic)
+GOOD content_theme: "3 tax deductions freelancers miss every April" (specific, timely, actionable)
+
+BAD caption_hook: "Something worth stopping for" (meaningless)
+GOOD caption_hook: "Your accountant won't tell you this about Q1 estimated taxes" (specific, creates curiosity)
+
+BAD image_prompt: "Professional brand photo with clean composition"
+GOOD image_prompt: "Overhead flatlay of tax documents, calculator, and coffee on a dark oak desk, warm lighting, brand navy accent color in a pen and notebook"
 
 Each day brief MUST have these exact fields:
 - day_index: integer (0-based, so first day is 0, last day is {num_days - 1})
@@ -366,6 +436,7 @@ Return ONLY a valid JSON array of {num_days} objects. No markdown, no extra text
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
+                temperature=0.4,
             ),
         )
 
@@ -395,6 +466,9 @@ Return ONLY a valid JSON array of {num_days} objects. No markdown, no extra text
 
         # Cap group sizes
         validated = _enforce_group_size(validated)
+
+        # Enforce platform concentration (max 4 unique platforms)
+        validated = _enforce_platform_concentration(validated, platforms)
 
         return validated
 
@@ -524,6 +598,33 @@ def _enforce_group_size(days: list[dict], max_group_size: int = 3) -> list[dict]
             standalone_idx += 1
         else:
             group_seen[pid] = count + 1
+        result.append(day)
+    return result
+
+
+def _enforce_platform_concentration(
+    days: list[dict],
+    platforms: list[str],
+    max_unique: int = 4,
+) -> list[dict]:
+    """Consolidate least-used platforms onto most-used if too many unique platforms appear."""
+    from collections import Counter
+
+    platform_counts = Counter(d["platform"] for d in days)
+    unique = list(platform_counts.keys())
+    if len(unique) <= max_unique:
+        return days
+
+    # Keep the top max_unique platforms by frequency
+    top_platforms = [p for p, _ in platform_counts.most_common(max_unique)]
+    result = []
+    for day in days:
+        if day["platform"] not in top_platforms:
+            # Reassign to the most frequent platform
+            old = day["platform"]
+            day = {**day, "platform": top_platforms[0]}
+            logger.info("Platform concentration: moved day %d from %s to %s",
+                        day["day_index"], old, top_platforms[0])
         result.append(day)
     return result
 

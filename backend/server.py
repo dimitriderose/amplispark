@@ -800,6 +800,55 @@ async def stream_generate(
                         logger.error("Firestore error-update failed for post %s: %s", post_id, fs_err)
 
                 await event_queue.put(event)
+
+            # ── Video-first: trigger Veo after text-only caption ──────────
+            if day_brief.get("derivative_type") == "video_first" and final_caption:
+                await event_queue.put({"event": "status", "data": {"message": "Generating video..."}})
+
+                # Heartbeat keeps SSE alive during long Veo generation (avg 2-5 min)
+                async def _heartbeat():
+                    while True:
+                        await asyncio.sleep(15)
+                        await event_queue.put({"event": "status", "data": {"message": "Generating video..."}})
+
+                heartbeat_task = asyncio.create_task(_heartbeat())
+                try:
+                    from backend.agents.video_creator import generate_video_clip
+                    video_result = await generate_video_clip(
+                        hero_image_bytes=None,  # text-to-video
+                        caption=final_caption,
+                        brand_profile=brand,
+                        platform=day_brief.get("platform", "instagram"),
+                        post_id=post_id,
+                        tier="fast",
+                    )
+                    # Update Firestore with video metadata
+                    await firestore_client.update_post(brand_id, post_id, {
+                        "video_url": video_result["video_url"],
+                        "video": {
+                            "url": video_result["video_url"],
+                            "video_gcs_uri": video_result.get("video_gcs_uri"),
+                            "duration_seconds": 8,
+                            "model": video_result.get("model", "veo-3.1"),
+                        },
+                    })
+                    await event_queue.put({
+                        "event": "video_complete",
+                        "data": {
+                            "video_url": video_result["video_url"],
+                            "video_gcs_uri": video_result.get("video_gcs_uri"),
+                            "audio_note": "Add trending audio before publishing — silent video underperforms on this platform.",
+                        },
+                    })
+                except Exception as video_err:
+                    logger.error("Video generation failed for video_first post %s: %s", post_id, video_err)
+                    await event_queue.put({
+                        "event": "video_error",
+                        "data": {"message": str(video_err)},
+                    })
+                finally:
+                    heartbeat_task.cancel()
+
         except Exception as exc:
             logger.error("Generation task error for post %s: %s", post_id, exc)
             try:

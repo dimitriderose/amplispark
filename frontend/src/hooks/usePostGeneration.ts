@@ -11,6 +11,7 @@ export interface GenerationState {
   imageUrl: string | null
   imageUrls: string[]        // carousel: all slide URLs
   videoUrl: string | null
+  audioNote: string | null   // tip for video_first posts (add audio before publishing)
   postId: string | null
   error: string | null
 }
@@ -25,6 +26,7 @@ export function usePostGeneration() {
     imageUrl: null,
     imageUrls: [],
     videoUrl: null,
+    audioNote: null,
     postId: null,
     error: null,
   })
@@ -46,6 +48,7 @@ export function usePostGeneration() {
       imageUrl: null,
       imageUrls: [],
       videoUrl: null,
+      audioNote: null,
       postId: null,
       error: null,
     })
@@ -97,6 +100,29 @@ export function usePostGeneration() {
         imageUrl: data.image_url || prev.imageUrl,
         imageUrls: data.image_urls?.length ? data.image_urls : prev.imageUrls,
       }))
+      // Don't close here — video_first posts have more events coming.
+      // The ES closes on video_complete, video_error, or natural connection end.
+    })
+
+    es.addEventListener('video_complete', (e: MessageEvent) => {
+      const data = JSON.parse(e.data)
+      setState(prev => ({
+        ...prev,
+        videoUrl: data.video_url,
+        audioNote: data.audio_note || null,
+        statusMessage: '',
+      }))
+      es.close()
+    })
+
+    es.addEventListener('video_error', (e: MessageEvent) => {
+      const data = JSON.parse(e.data)
+      // Video failed but we still have the caption — keep status as 'complete'
+      setState(prev => ({
+        ...prev,
+        statusMessage: '',
+        audioNote: `Video generation failed: ${data.message}. Use the "Generate Video" button to retry.`,
+      }))
       es.close()
     })
 
@@ -106,7 +132,11 @@ export function usePostGeneration() {
         const data = JSON.parse(e.data)
         setState(prev => ({ ...prev, status: 'error', error: data.message }))
       } else {
-        setState(prev => ({ ...prev, status: 'error', error: 'Connection lost' }))
+        // Natural connection close after stream ends — not an error if generation completed
+        setState(prev => {
+          if (prev.status === 'complete') return prev  // already done, ignore
+          return { ...prev, status: 'error', error: 'Connection lost' }
+        })
       }
       es.close()
     })
@@ -127,6 +157,7 @@ export function usePostGeneration() {
       imageUrl: null,
       imageUrls: [],
       videoUrl: null,
+      audioNote: null,
       postId: null,
       error: null,
     })
@@ -150,6 +181,7 @@ export function usePostGeneration() {
       imageUrl: post.imageUrl,
       imageUrls: post.imageUrls || (post.imageUrl ? [post.imageUrl] : []),
       videoUrl: post.videoUrl ?? null,
+      audioNote: null,
       postId: post.postId,
       error: null,
     })
