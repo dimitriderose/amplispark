@@ -2,7 +2,7 @@
 
 ## Overview
 
-Two small business personas reviewed the Amplifi codebase and UI across 4 rounds. The panel evaluated UX fixes incrementally as they were merged to `main`, reviewed live AI-generated output in Round 3, then watched a full live website recording in Round 4.
+Two small business personas reviewed the Amplifi codebase and UI across 5 rounds. The panel evaluated UX fixes incrementally as they were merged to `main`, reviewed live AI-generated output in Round 3, watched a full live website recording in Round 4, then navigated the full live website hands-on in Round 5 — covering Notion OAuth integration, Export & Share dropdown, Video Repurposing tab, Edit Brand page, and dedicated Export page.
 
 | Round | Composite | Delta | HEAD Commit |
 |-------|-----------|-------|-------------|
@@ -10,8 +10,9 @@ Two small business personas reviewed the Amplifi codebase and UI across 4 rounds
 | Round 2 (3 Flag Fixes) | 9.25/10 | +1.0 | `b738285` |
 | Round 3 (Live Output Review) | 9.4375/10 | +0.1875 | `a9e544d` |
 | Round 4 (Live Website Recording) | 9.625/10 | +0.1875 | `a9e544d` |
+| Round 5 (Live Website Demo — 10 Screens) | 9.8125/10 | +0.1875 | `7a706ed` |
 
-**Final Verdict:** Ship it. Voice Coach is the sleeper differentiator. One P1 bug (hashtag auto-clean) may be resolved — clean hashtags observed on LinkedIn in R4.
+**Final Verdict:** Ship it. 9.8125 composite after 5 rounds (+1.5625 total). Voice Coach remains the sleeper differentiator. All prior flags resolved. Buffer integration is the only remaining wish — accepted as deferred (closed beta). Notion connected, 4 export paths live, Edit Brand + Content Strategy operational.
 
 ---
 
@@ -312,48 +313,136 @@ Two small business personas reviewed the Amplifi codebase and UI across 4 rounds
 
 ---
 
-## Score Progression Summary (All 4 Rounds)
+## Round 5 — Live Website Demo Review (10 Screens)
+
+**Context:** Both personas navigated the full live Amplifi website running on localhost — every screen, every interaction, every feature. This is the first time they've explored the complete app hands-on rather than watching a recording. New since Round 4: Notion OAuth integration (live and connected), Export & Share dropdown with 4 export paths, Video Repurposing tab, full Edit Brand page with Content Strategy section, and dedicated Export page.
+
+**What the demo covers (10 screens):**
+
+| # | Screen | Key Content |
+|---|--------|-------------|
+| 1 | Landing Page | Hero, hackathon badge, YOUR BRANDS with green "Ready" badge, platform pills, How it Works, 6 capability cards |
+| 2 | Onboarding | "Tell us about your brand" — description, brand assets upload, website URL expander, Build My Brand Profile CTA |
+| 3 | Dashboard/Calendar | Brand header with ✓ Notion badge, 7-Day Content Calendar with AI images, brand scores 7-8/10, pillar color-coding, Voice Coach |
+| 4 | Edit Brand | Brand Identity, Visual Identity (colors, style, image/caption directives), Brand Assets (logo + upload), Content Strategy (8 themes, 3 competitors), Save/Re-Analyze/Cancel |
+| 5 | Posts Library | 7 post cards with Copy/Export/Approve per card, Copy All button, Export & Share dropdown |
+| 6 | Export & Share Dropdown | DOWNLOAD (ZIP with media, Calendar .ics), PUBLISH (Export to Notion), SHARE (Email calendar) |
+| 7 | Post Detail | Caption editor, carousel image viewer (1/3), Instagram platform preview, 5/5 hashtags, 455/2200 char count, Regenerate |
+| 8 | AI Brand Review | Score 8/10 "STRONG BRAND ALIGNMENT", Auto-approved, Engagement Prediction (Hook 9, CTA 8, Relevance 9, Platform Fit 8), Strengths, Suggested Improvements, Next Day → Day 2 |
+| 9 | Connections Tab | Social Voice Analysis (LinkedIn/Instagram/X with try demo + Connect), Publish & Export (Notion ✓ Connected to "Dimitri DeRose's Notion" workspace) |
+| 10 | Video Tab | Video Repurposing — upload mp4/mov up to 500MB → extract 2-3 platform-ready short clips |
+| 11 | Export Page | Dedicated export page with ZIP download, Approved filter, Export & Share dropdown |
+
+### Maria's Review — 9.75/10 (+0.25)
+
+| Screen | R4 | R5 | Delta | Notes |
+|--------|----|----|-------|-------|
+| Landing | 9.5 | **10** | +0.5 | "Welcome back — pick up where you left off" banner with a direct 'Open Derose & Associates →' button. I don't even have to scroll. The returning user experience is a separate flow from the first-time flow. That's product polish." |
+| Onboard | 8.5 | **9** | +0.5 | "Seeing the actual onboarding page live — 'Tell us about your brand' with the bakery example as placeholder text, drag-and-drop for brand assets, and 'Have a website? Paste it for even better results' as an expandable section rather than a required field. That respects how small businesses actually work. Not everyone has a marketing-ready website." |
+| Dashboard | 10 | 10 | — | "Still a 10. The ✓ Notion badge next to the tone tags is the new detail I noticed. It's not buried in settings — it's right in the brand header where I can see my connection status at a glance." |
+| Generate | 9.5 | 9.5 | — | |
+| Review | 10 | 10 | — | "Engagement Prediction bars with actual numbers — Hook 9, CTA 8, Relevance 9, Platform Fit 8. Strengths with green checkmarks calling out specific things like the De Minimis Safe Harbor strategy. Suggested Improvements telling me to add a relatable example. This is an AI explaining its own work and critiquing it. That's trust-building." |
+| Export | 9.5 | **10** | +0.5 | "The Export & Share dropdown is everything. Four paths: ZIP with media for when I want to save everything offline, .ics Calendar for Google/Apple/Outlook, Export to Notion for my planning system, and Email calendar to send the schedule to my business partner. I don't have to choose one workflow — I can use all of them depending on the situation." |
+| Video | 9 | **9.5** | +0.5 | "Video Repurposing as its own tab — upload a raw video and get 2-3 platform-ready clips. That's different from the Veo 3 generation on individual posts. This is for repurposing my existing content. Upload my farm delivery video, get an Instagram Reel and a TikTok out of it. Sunday night just got even more efficient." |
+| Voice Coach | 9 | 9 | — | |
+| Connections | — | **10** | NEW | "This is the screen that changes the product. Left side: connect my real LinkedIn, Instagram, X accounts so Amplifi can match my writing style. Right side: Notion already connected to 'Dimitri DeRose's Notion' with a selected database and a 'change' option. The 'try demo' links next to each social account lower the barrier — I can see what voice analysis looks like before connecting my real accounts." |
+| Edit Brand | — | **9.5** | NEW | "Eight content themes the AI generated — tax planning, IRS resolution, year-round bookkeeping, financial consulting for entrepreneurs, payroll, local success stories, tax law updates, financial audits. Plus three competitors identified: KPMG local branch, H&R Block, Local CPA Firms NYC. All removable with X buttons, all editable with Add fields. And the Re-Analyze Brand button means if I change my description, the AI rebuilds everything. This isn't a static profile — it's a living brand analysis." |
+| **Overall** | **9.5** | **9.75** | **+0.25** | |
+
+**Maria's key quote:** "The Connections tab is the feature I've been waiting for without knowing it. Connecting my Instagram so Amplifi learns how I actually write — not how a generic restaurant writes, but how *Verde Kitchen* writes — that closes the last gap between AI-generated and Maria-generated content. And the fact that Notion is already connected with one click, not buried behind API keys or developer docs, means Jason's workflow is now my workflow too. Generate, review, export to Notion, done."
+
+**Maria's remaining flag:** "No Buffer integration yet, but honestly? With Notion connected and Copy All still there, I have two solid export paths. Buffer can wait."
+
+### Jason's Review — 9.875/10 (+0.125)
+
+| Screen | R4 | R5 | Delta | Notes |
+|--------|----|----|-------|-------|
+| Landing | 8.5 | **9** | +0.5 | "The welcome-back banner is a smart returning user optimization. First-time visitors see the hero and 'How it works' — returning users get a one-click shortcut to their brand. That's two separate UX paths handled with one simple banner. Clean." |
+| Onboard | 8.5 | **9** | +0.5 | "The onboarding form is minimal — describe your business, optionally upload brand assets, optionally paste a website. Three inputs. That's the right level of friction for a tool that promises content in under 2 minutes. The 'Build My Brand Profile →' CTA is the only button. No distractions." |
+| Dashboard | 10 | 10 | — | |
+| Generate | 10 | 10 | — | |
+| Review | 10 | 10 | — | "Still a 10. The Suggested Improvements on the Day 1 post — 'the transition in Slide 3 from the specific rule to proactive year-round planning could be more explicitly tied to identifying opportunities like the De Minimis election' — that's not generic AI feedback. That's a content strategist who read the caption and understands the logical flow of the argument. This is what differentiates Amplifi from every 'AI caption generator' on the market." |
+| Export | 9 | **10** | +1.0 | "Four export paths in one dropdown. This is the feature that turns Amplifi from a content generator into a content operations platform. ZIP with media for archival. .ics Calendar for scheduling visibility across Google/Outlook. Export to Notion for my editing workflow. Email calendar for team coordination. The per-post Copy/Export/Approve buttons on every card in the Posts Library mean I can also handle individual posts without going to the detail view. Batch and granular — both supported." |
+| Video | 9 | 9 | — | |
+| Voice Coach | 9.5 | 9.5 | — | |
+| Connections | — | **10** | NEW | "This is the architecture I've been evaluating since Round 1. Social Voice Analysis: connect LinkedIn, and Amplifi learns my actual writing patterns — no emoji, long-form, authoritative. That's the Brand Analyst agent ingesting real data instead of relying solely on my description. The 'try demo' links prove the team already built per-platform demo data (the Round 2 fix). And on the right: Notion ✓ Connected to my actual workspace with a selected database and a 'change' option. My workflow is now: generate → review → one click Export to Notion → edit in Notion → schedule in Buffer when that API launches. The clipboard step is eliminated." |
+| Edit Brand | — | **10** | NEW | "The Content Strategy section is what an enterprise content tool charges $500/month for. Eight AI-generated content themes specific to a CPA firm — not generic 'share tips and tricks' but 'Navigating IRS resolution and tax relief' and 'Local NYC/Long Island business financial success stories.' Three competitors auto-identified: KPMG local branch, H&R Block business services, Local CPA Firms NYC. All editable. The Image Style Directive and Caption Style Directive give me control over the AI's creative direction without needing to understand prompt engineering. And the Re-Analyze Brand button means I can iterate — change my description, hit re-analyze, and the entire strategy rebuilds. This is brand intelligence, not a form." |
+| **Overall** | **9.75** | **9.875** | **+0.125** | |
+
+**Jason's key quote:** "Three things moved the needle in this walkthrough. First, the Connections tab proves the Notion integration is real — not a mockup, not a spec, it's connected to my actual workspace with my actual database selected. Second, the Export & Share dropdown gives me four export paths where Round 1 had one (ZIP). Third, the Edit Brand page with Content Strategy, image/caption directives, and Re-Analyze Brand turns the brand profile from a static form into an iterative intelligence layer. This is now a content operations platform that happens to use AI, not an AI tool that happens to generate content."
+
+**Jason's remaining flag:** "Buffer integration is the last piece. When their new API launches, Amplifi should be first in line. The architecture is ready — Connections tab already has the Publish & Export section. Adding a Buffer card next to Notion is a one-sprint feature. Until then, the Notion → Buffer manual workflow is acceptable."
+
+### New Features Assessed (Round 5)
+
+| Feature | Maria | Jason | Verdict |
+|---------|-------|-------|---------|
+| ✓ Notion badge in brand header | "Glanceable connection status" | "Proves integration is live, not mocked" | Ship as-is |
+| Export & Share dropdown (4 paths) | 10 — "covers every workflow" | 10 — "content operations platform" | Ship as-is |
+| Connections tab (Social Voice Analysis + Notion) | 10 — "the feature I was waiting for" | 10 — "architecture I've been evaluating since R1" | Ship as-is |
+| Edit Brand (Content Strategy + Re-Analyze) | 9.5 — "living brand analysis" | 10 — "brand intelligence, not a form" | Ship as-is |
+| Video Repurposing tab | 9.5 — "repurpose my existing video content" | 9 — "correct placement as separate tab" | Ship as-is |
+| Per-post Copy/Export/Approve buttons | Implicit in 10 export score | "Batch and granular — both supported" | Ship as-is |
+| Onboarding page (live) | 9 — "respects how small businesses work" | 9 — "right level of friction" | Ship as-is |
+| Dedicated Export page | Implicit | "Approved-only filter is correct" | Ship as-is |
+
+### Key Round 5 Observations
+
+| # | Observation | Maria | Jason | Impact |
+|---|------------|-------|-------|--------|
+| 8 | Connections tab is the breakthrough screen | 10 — "feature I was waiting for" | 10 — "architecture I've been evaluating since R1" | Both personas' highest-rated new screen |
+| 9 | Export & Share dropdown completes the content ops story | 10 — "covers every workflow" | 10 — "content operations platform" | Both upgraded Export from 9-9.5 to 10 |
+| 10 | Edit Brand with Content Strategy is brand intelligence | 9.5 — "living brand analysis" | 10 — "brand intelligence, not a form" | Differentiates from static profile tools |
+| 11 | Buffer is the only remaining wish | Accepted — "Buffer can wait" | Accepted — "one-sprint feature when API launches" | Not a blocker |
+
+---
+
+## Score Progression Summary (All 5 Rounds)
 
 ```
-          R1      R2      R3      R4
-Maria    8.5 ──→ 9.0 ──→ 9.25 ──→ 9.5     (+1.0 total)
-Jason    8.0 ──→ 9.5 ──→ 9.625──→ 9.75    (+1.75 total)
-──────────────────────────────────────────────
-AVG      8.25    9.25    9.4375   9.625    (+1.375 total)
+          R1      R2      R3      R4      R5
+Maria    8.5 ──→ 9.0 ──→ 9.25 ──→ 9.5  ──→ 9.75    (+1.25 total)
+Jason    8.0 ──→ 9.5 ──→ 9.625──→ 9.75 ──→ 9.875   (+1.875 total)
+──────────────────────────────────────────────────────────────────
+AVG      8.25    9.25    9.4375   9.625    9.8125   (+1.5625 total)
 ```
 
 ---
 
-## Per-Screen Score Comparison (All 4 Rounds)
+## Per-Screen Score Comparison (All 5 Rounds)
 
-| Screen | Maria R1 | Maria R2 | Maria R3 | Maria R4 | Jason R1 | Jason R2 | Jason R3 | Jason R4 |
-|--------|----------|----------|----------|----------|----------|----------|----------|----------|
-| Landing | 9 | 9 | 9 | 9.5 | 7.5 | 7.5 | 7.5 | 8.5 |
-| Onboard | 8.5 | 8.5 | 8.5 | 8.5 | 8.5 | 8.5 | 8.5 | 8.5 |
-| Dashboard | 9 | 9.5 | 9.5 | 10 | 8 | 9 | 9 | 10 |
-| Generate | 8.5 | 8.5 | 9.5 | 9.5 | 9 | 9.5 | 10 | 10 |
-| Review | 9 | 9 | 9.5 | 10 | 8 | 8.5 | 10 | 10 |
-| Export | 8.5 | 9.5 | 9.5 | 9.5 | 7.5 | 9 | 9 | 9 |
-| Video | 7 | 7 | 8.5 | 9 | 6 | 9 | 9 | 9 |
-| Voice Coach | 7.5 | 7.5 | 7.5 | 9 | 8 | 8 | 8 | 9.5 |
-
----
-
-## Flag Resolution (Final)
-
-| # | Flag | R1 | R2 | R3 | R4 | Status |
-|---|------|----|----|-----|-----|--------|
-| 1 | Demo voice data Instagram-only | Open | ✅ Resolved | ✅ | ✅ | Per-platform demos |
-| 2 | Export format ZIP-only | Open | ✅ Resolved | ✅ | ✅ | Copy All clipboard |
-| 3 | Video noise for text-first | Open | ✅ Resolved | ✅ | ✅ | Collapsed pill |
-| 4 | Output quality unknowable | Open | Open | ✅ **Resolved** | ✅ | Live output confirms brand alignment |
-| 5 | Hashtag pollution | — | — | 🟡 **New P1** | 🟢 **Likely resolved** | Clean hashtags on LinkedIn in R4; Instagram R3 had junk — may be platform-specific fix |
-| 6 | Voice Coach undervalued from code | — | — | — | ✅ **Identified** | Both personas +1.5 after live demo; sleeper differentiator |
+| Screen | Maria R1 | Maria R2 | Maria R3 | Maria R4 | Maria R5 | Jason R1 | Jason R2 | Jason R3 | Jason R4 | Jason R5 |
+|--------|----------|----------|----------|----------|----------|----------|----------|----------|----------|----------|
+| Landing | 9 | 9 | 9 | 9.5 | 10 | 7.5 | 7.5 | 7.5 | 8.5 | 9 |
+| Onboard | 8.5 | 8.5 | 8.5 | 8.5 | 9 | 8.5 | 8.5 | 8.5 | 8.5 | 9 |
+| Dashboard | 9 | 9.5 | 9.5 | 10 | 10 | 8 | 9 | 9 | 10 | 10 |
+| Generate | 8.5 | 8.5 | 9.5 | 9.5 | 9.5 | 9 | 9.5 | 10 | 10 | 10 |
+| Review | 9 | 9 | 9.5 | 10 | 10 | 8 | 8.5 | 10 | 10 | 10 |
+| Export | 8.5 | 9.5 | 9.5 | 9.5 | 10 | 7.5 | 9 | 9 | 9 | 10 |
+| Video | 7 | 7 | 8.5 | 9 | 9.5 | 6 | 9 | 9 | 9 | 9 |
+| Voice Coach | 7.5 | 7.5 | 7.5 | 9 | 9 | 8 | 8 | 8 | 9.5 | 9.5 |
+| Connections | — | — | — | — | 10 | — | — | — | — | 10 |
+| Edit Brand | — | — | — | — | 9.5 | — | — | — | — | 10 |
 
 ---
 
-## What Each Persona Would Tell a Friend
+## Flag Resolution (Final — Round 5)
 
-**Maria:** "There's this AI tool where you describe your business and it generates a week of social media posts. No sign-up, no credit card. You just describe Verde Kitchen, tell it your events, and it builds a whole content calendar with color-coded pillars. Sunday night I can copy all 7 captions to my clipboard and paste them into Instagram one by one. The whole batch session takes maybe 20 minutes instead of 2 hours. But the thing that surprised me? There's a Voice Coach — you can literally talk to it about your content strategy while you're looking at your calendar. I asked about farm delivery posts and it gave me ideas in my brand voice. It's like having a marketing strategist on a phone call while you're doing your Sunday night batch."
+| # | Flag | R1 | R2 | R3 | R4 | R5 | Status |
+|---|------|----|----|-----|-----|-----|--------|
+| 1 | Demo voice data Instagram-only | Open | ✅ | ✅ | ✅ | ✅ | Per-platform demos confirmed on Connections tab |
+| 2 | Export format ZIP-only | Open | ✅ | ✅ | ✅ | ✅ | 4 export paths: ZIP, .ics, Notion, Email |
+| 3 | Video noise for text-first | Open | ✅ | ✅ | ✅ | ✅ | Video Repurposing in separate tab now |
+| 4 | Output quality unknowable | Open | Open | ✅ | ✅ | ✅ | Confirmed across multiple posts and platforms |
+| 5 | Hashtag pollution | — | — | 🟡 P1 | 🟢 Likely fixed | ✅ | Clean hashtags confirmed: 5/5 on Instagram post, all professional |
+| 6 | Voice Coach undervalued from code | — | — | — | ✅ | ✅ | Remains top differentiator |
+| 7 | No Buffer integration | — | — | — | — | 🟡 **Accepted** | Buffer not accepting new developers; Notion + Copy All cover the gap |
+| 8 | Notion integration needed | — | — | — | — | ✅ **Resolved** | OAuth live, connected to real workspace, Export to Notion in dropdown |
 
-**Jason:** "I found a content tool that actually understands LinkedIn isn't Instagram. The demo shows a B2B coaching voice — no emoji, authoritative, the way I actually write. It collapses the video section on LinkedIn because it knows I don't need it. I can copy all my week's posts to clipboard and paste into Notion for final edits. The brand review scores each post with engagement predictions and catches its own mistakes. But the real differentiator is the Voice Coach — it's Gemini Live Audio having a multi-turn strategy conversation about your content while you're looking at your content calendar. It remembered we were discussing Facebook strategy and picked right back up. That's not a chatbot. That's a different product category from Buffer or Jasper. If you're a solopreneur who needs to sound like yourself at scale, this is the tool."
+---
+
+## What Each Persona Would Tell a Friend (Updated — Round 5)
+
+**Maria:** "Remember that AI content tool I told you about? It just got better. I connected my Notion workspace with one click — no API keys, no developer stuff. Now I generate a week of posts, click 'Export to Notion,' and my entire content calendar appears as a database I can edit. The Voice Coach is still the killer feature — I asked it about promoting our farm delivery special and it gave me a full strategy in my brand voice while I was looking at my calendar. But the new thing is the Connections tab. When I connect my real Instagram account, it'll learn how *I* actually write, not just what I described. For Sunday night batch sessions, this is now a 20-minute job instead of 2 hours. And if my business partner needs the schedule, I can email them a calendar invite directly from the app."
+
+**Jason:** "Amplifi isn't a content generator anymore — it's a content operations platform. Here's what changed: Notion OAuth integration is live. I connect my workspace, click 'Export to Notion,' and all 7 days of content land in a database with columns for platform, caption, hashtags, image URL, brand score, and approval status. I edit in Notion, schedule in Buffer when their API launches. The Edit Brand page shows me the AI's content strategy — eight specific themes like 'Navigating IRS resolution and tax relief,' three competitors it identified, image style directives, caption style directives — and I can re-analyze the whole thing if I change my positioning. The Export & Share dropdown gives me four paths: ZIP, calendar invite, Notion sync, or email. And the Connections tab is ready for LinkedIn voice analysis — when I connect, the AI learns my actual writing patterns. This is the tool I'd pay $50/month for. The only missing piece is Buffer direct-publish, and the architecture is already there waiting for their API."
