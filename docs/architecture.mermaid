@@ -9,13 +9,13 @@ graph TB
 
         subgraph Pipeline["ADK Sequential Pipeline"]
             BA["🔍 Brand Analyst Agent<br/>URL Scraping + Brand DNA<br/>Colors, Tone, Audience<br/>Temperature 0.15"]
-            STR["📅 Strategy Agent<br/>7-Day Content Calendar<br/>Pillar-Based Planning<br/>Event Integration"]
-            CC["✨ Content Creator Agent<br/>Gemini Interleaved Output<br/>Text + Image Together<br/>Carousel: 3-Slide Parallel Gen"]
-            RA["🔍 Review Agent<br/>Brand Alignment Check<br/>Revised Captions + Hashtags<br/>Auto-Clean Stopwords"]
+            STR["📅 Strategy Agent<br/>7-Day Content Calendar<br/>Pillar-Based Planning<br/>Social Proof Tiers<br/>Event Integration"]
+            CC["✨ Content Creator Agent<br/>Gemini Interleaved Output<br/>Text + Image Together<br/>Carousel: 3-Slide Parallel Gen<br/>video_first: Caption-Only → Veo"]
+            RA["🔍 Review Agent<br/>Calibrated 1-10 Scoring<br/>5 Engagement Dimensions<br/>Platform-Specific Checks<br/>Engagement Prediction"]
         end
 
         subgraph Support["Supporting Agents"]
-            VC["🗣️ Voice Coach<br/>Gemini Live API<br/>BidiGenerateContent<br/>Multi-Turn Sessions"]
+            VC["🗣️ Voice Coach<br/>Gemini Live API<br/>BidiGenerateContent<br/>Tier-Aware Strategy Context"]
             VID["🎬 Video Creator<br/>Veo 3.1<br/>Reels / TikTok Clips"]
         end
 
@@ -23,8 +23,12 @@ graph TB
             WS["🌐 Web Scraper<br/>httpx + BeautifulSoup"]
             BT["🏷️ Brand Tools<br/>ADK Tool Wrappers"]
             HS["🧹 Hashtag Sanitizer<br/>Stopword Filter<br/>Per-Platform Limits"]
-            EX["📦 Export Service<br/>ZIP: Image + Video + Caption<br/>Direct GCS Download"]
+            EX["📦 Export Service<br/>ZIP + Notion + .ics<br/>Direct GCS Download"]
             IF["🖼️ Image Fallback<br/>Separate Image-Only Gen<br/>On Interleaved Failure"]
+            PR["📋 Platform Registry<br/>platforms.py<br/>10 Platforms<br/>PlatformSpec Dataclass"]
+            BA_SVC["🎨 Brand Assets Service<br/>brand_assets.py<br/>Logo + Product Photo Cache"]
+            NC["🔗 Notion Client<br/>notion_client.py<br/>OAuth + Database Export"]
+            EC["📧 Email Client<br/>email_client.py<br/>Resend API · .ics Delivery"]
         end
     end
 
@@ -57,6 +61,15 @@ graph TB
     RA --> HS
     API --> EX
 
+    PR --> CC
+    PR --> RA
+    CC --> BA_SVC
+    VID --> BA_SVC
+    BA_SVC -->|"Reference Images"| GCS
+    API --> NC
+    API --> EC
+    NC -->|"OAuth + Export"| FS
+
     BA -->|"Brand Analysis<br/>(temp 0.15)"| GFlash
     STR -->|"Strategy Planning"| GFlash
     CC -->|"Interleaved<br/>Text + Image"| GFlash
@@ -84,6 +97,6 @@ graph TB
     class API cloud
     class BA,STR,CC,RA pipeline
     class VC,VID support
-    class WS,BT,HS,EX,IF tools
+    class WS,BT,HS,EX,IF,PR,BA_SVC,NC,EC tools
     class FS,GCS,FA gcp
     class GFlash,GLive gemini

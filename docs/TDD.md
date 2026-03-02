@@ -3,8 +3,8 @@
 
 **Category:** ✍️ Creative Storyteller
 **Author:** Software Architecture Team
-**Companion Document:** PRD — Amplifi v1.0
-**Version:** 1.2 | February 25, 2026 (updated from v1.1 Feb 23)
+**Companion Document:** PRD — Amplifi v1.3
+**Version:** 1.3 | March 2, 2026 (updated from v1.2 Feb 25)
 
 ---
 
@@ -12,9 +12,9 @@
 
 This Technical Design Document specifies the implementation architecture for Amplifi, an AI-powered creative director that produces complete social media content packages using Gemini's interleaved text and image output. It translates the PRD's product requirements into concrete engineering decisions, API contracts, data models, code structure, and deployment specifications.
 
-**Scope:** All P0 and P1 features from the PRD, plus shipped P2 features: brand analysis from URL (with deterministic analysis at temperature 0.15), content calendar generation with event integration, interleaved post generation with carousel support and image fallback, brand consistency review with auto-cleaned hashtags, React dashboard with tab-based navigation, image/video storage, streaming UI, Firebase Anonymous Auth, multi-turn Gemini Live voice coaching, Veo 3.1 video generation, full ZIP export with media, and platform-specific caption/hashtag enforcement.
+**Scope:** All P0 and P1 features from the PRD, plus shipped P2 features: brand analysis from URL (with deterministic analysis at temperature 0.15), content calendar generation with event integration and social proof tier system, interleaved post generation with carousel support, image fallback, video_first pipeline, and brand reference image injection, calibrated 1-10 review scoring with 5 engagement dimensions and platform-specific checks, React dashboard with tab-based navigation and Edit Brand page, image/video storage, streaming UI, Firebase Anonymous Auth, tier-aware Gemini Live voice coaching, Veo 3.1 video generation, full ZIP export with media, Platform Registry (10 platforms), Notion integration (OAuth + database export), calendar .ics export with email delivery, and platform-specific caption/hashtag enforcement.
 
-**Out of scope (unspecified):** Post analytics dashboard (P3). Remaining P2 features are specified in §12.1. P3 features are additive and do not affect core architecture.
+**Out of scope (unspecified):** Post analytics dashboard (P3). Remaining P2 features are specified in §14.1. P3 features are additive and do not affect core architecture.
 
 ---
 
@@ -344,6 +344,61 @@ strategy_agent = Agent(
 )
 ```
 
+### 3.3.1 Social Proof Tier System
+
+The Strategy Agent computes a social proof tier from the brand profile and adjusts pillar balance, CTA strategy, and content depth accordingly. The same tier logic is replicated identically in the Content Creator, Review Agent, and Voice Coach.
+
+```python
+# Social proof tier computation (shared across all agents)
+_has_years = bool(brand_profile.get("years_in_business"))
+_has_clients = bool(brand_profile.get("client_count"))
+
+if _has_years and _has_clients:
+    proof_tier = "data_rich"       # Full freedom: lead with hard numbers
+elif _has_years or _has_clients:
+    proof_tier = "partial_data"    # Lean on available data, process authority for gaps
+else:
+    proof_tier = "thin_profile"    # Education-heavy — teach to build credibility
+```
+
+| Tier | Condition | Pillar Balance | Promotion Cap | CTA Strategy |
+|------|-----------|---------------|---------------|--------------|
+| `data_rich` | years + clients | All 5 pillars, balanced | 2/week, can lead with social proof | Full rotation: engagement, conversion, implied |
+| `partial_data` | years OR clients | Education anchor (3+), available data only | 1-2/week, reference available data | Conversion CTAs reference available data only |
+| `thin_profile` | Neither | Education anchor (4+ of 7), UGC excluded | 1/week max, service-only (no social proof) | Engagement CTAs preferred, max 1 conversion/week |
+
+### 3.3.2 Platform Intelligence (Google Search Grounding)
+
+The Strategy Agent uses Google Search grounding to research the best platforms for a specific business type/industry. Results are cached in Firestore (keyed by industry + business_type, TTL 7 days).
+
+```python
+# Platform research with Google Search grounding
+config = types.GenerateContentConfig(
+    tools=[types.Tool(google_search=types.GoogleSearch())],
+    response_mime_type="application/json",
+    temperature=0.2,
+)
+```
+
+### 3.3.3 Post Metadata Fields
+
+Each day brief now includes `pillar`, `format`, and `cta_type` fields that are stored on the post document and passed to the Content Creator and Review Agent:
+
+```python
+# Strategy Agent output per day
+{
+    "pillar": "education",         # One of: education, inspiration, promotion, behind_the_scenes, user_generated
+    "format": "carousel",          # One of: original, carousel, thread_hook, blog_snippet, story, pin, video_first
+    "cta_type": "engagement",      # One of: engagement, conversion, implied, none
+    "derivative_type": "carousel", # How this post relates to its pillar
+    ...
+}
+```
+
+### 3.3.4 Prior Hook Deduplication
+
+The Strategy Agent receives a list of prior hooks from previously generated posts (for the same brand and plan) and instructs the LLM to avoid repeating hooks. This prevents repetitive content across the week.
+
 ## 3.4 Content Creator Agent ⭐ (Interleaved Output)
 
 This is the star of the submission. It uses Gemini's interleaved output to generate caption text and matching product images in a single API call. When a user uploads their own photo (P1 BYOP mode), the agent switches to image-understanding mode — analyzing the photo and generating captions for it instead of generating an image.
@@ -499,6 +554,43 @@ async def generate_post_fallback(brand_profile: dict, day_brief: dict):
     return results
 ```
 
+### 3.4.1 video_first Pipeline
+
+For posts with `derivative_type: "video_first"`, the Content Creator generates a caption-only (no image) and then automatically triggers Veo 3.1 video generation. This is the reverse of the standard flow where image comes first and video is additive.
+
+```
+Standard pipeline:  Caption + Image (interleaved) → optional Veo video from hero image
+video_first:        Caption-only (no image gen) → auto-trigger Veo text-to-video
+```
+
+The platform's `char_limits["video_first"]` enforces teaser-length captions (e.g., 200 chars for Instagram, 500 for LinkedIn).
+
+### 3.4.2 Brand Reference Image Injection
+
+The Content Creator and Video Creator both use the Brand Assets Service (`backend/services/brand_assets.py`) to inject up to 3 brand reference images into every Gemini generation call. This ensures visual consistency with the brand's actual assets.
+
+```python
+# Images prepended to Gemini request as visual reference
+ref_images = await get_brand_reference_images(brand_profile, max_images=3)
+# ref_images = [(bytes, mime_type), ...] — logo, product photos, style ref
+# Priority: logo → product_photos → style_reference → uploaded_assets
+# Cached in-memory per brand_id for process lifetime
+```
+
+### 3.4.3 Platform Registry Integration
+
+The Content Creator imports platform-specific content prompts from the Platform Registry (`backend/platforms.py`) rather than maintaining local platform dicts. This ensures all agents share a single source of truth for platform formatting rules.
+
+```python
+from backend.platforms import get as get_platform
+
+spec = get_platform(platform)  # Returns PlatformSpec
+# spec.content_prompt  — platform-specific generation instructions
+# spec.char_limits     — per-derivative character limits
+# spec.hashtag_limit   — max hashtags for this platform
+# spec.fold_at         — "see more" fold position (if applicable)
+```
+
 ## 3.5 Review Agent
 
 ```python
@@ -562,6 +654,81 @@ review_agent = Agent(
 )
 ```
 
+### 3.5.1 Calibrated 1-10 Scoring System (Shipped)
+
+The Review Agent now uses a calibrated 1-10 scoring rubric designed to prevent score inflation:
+
+| Score Range | Meaning |
+|-------------|---------|
+| 1-3 | Unusable — wrong format, off-brand, factual errors, broken formatting |
+| 4-5 | Below average — brand paragraphs, generic hooks, dual CTAs, vague social proof |
+| 6 | Acceptable — on-brand, no major violations, but unremarkable |
+| 7 | Good — genuine hook with pattern interrupt, platform-appropriate, brand-specific |
+| 8 | Strong — teaches something actionable, hook creates knowledge gap, CTA matches intent |
+| 9-10 | Exceptional — viral potential, perfectly crafted for platform algorithm |
+
+Approval threshold: `score >= 8` (hard-coded, not trusted from model output).
+
+### 3.5.2 Engagement Scoring (5 Dimensions)
+
+Each review returns `engagement_scores` with 5 independently scored dimensions:
+
+```json
+{
+  "engagement_scores": {
+    "hook_strength": 7,       // How compelling is the opening line?
+    "relevance": 8,           // How on-brand and relevant to target audience?
+    "cta_effectiveness": 6,   // How clear and motivating is the CTA?
+    "platform_fit": 9,        // Format, length, hashtag count for this platform?
+    "teaching_depth": 8       // Does it teach something specific and actionable?
+  },
+  "engagement_prediction": "high"  // "low" | "medium" | "high" | "viral"
+}
+```
+
+`teaching_depth` scores: 8-10 names a concrete technique/framework, 5-7 gives general advice, 1-4 is purely promotional, 0 for non-education posts.
+
+### 3.5.3 Platform-Specific Checks
+
+Review checks are loaded from the Platform Registry (`get_review_guidelines_block()`) and from per-platform check dictionaries covering all 10 platforms: Instagram (fold ≤125 chars), LinkedIn (fold ≤140 chars, no external links), TikTok (lowercase voice, keyword density), Facebook (shareability, engagement CTA default), X (280 char hard limit, no hashtag blocks), Pinterest (SEO keywords, no hashtags, no first-person), YouTube Shorts (video format, keyword SEO), Threads (anti-promotion, engagement-only CTA), Mastodon (CamelCase hashtags, no engagement bait), and Bluesky (300 char limit, specificity).
+
+### 3.5.4 Derivative-Specific Checks
+
+Additional checks are applied based on `derivative_type`: `video_first` (teaser length, curiosity-driven), `carousel` (3-slide structure, hook/teach/takeaway), `thread_hook` (3-7 posts, per-platform char limits, standalone value per post), `story` (≤50 words, single CTA), `blog_snippet` (150-200 words, bold opener), `pin` (title + description format, keyword-rich).
+
+### 3.5.5 Thin-Profile Social Proof Check
+
+For brands with `social_proof_tier == "thin_profile"`, a critical check deducts 3 points for any fabricated social proof: client references, client counts, years of experience, made-up statistics, dollar amounts, or percentages not in the brand profile. The only valid proof for thin-profile brands is teaching depth.
+
+### 3.5.6 CTA Type Enforcement
+
+The review enforces the `cta_type` assigned by the Strategy Agent (`engagement`, `conversion`, `implied`, `none`). Each type has specific scoring criteria — e.g., an `engagement` post with conversion language loses 2 points; a `none` post with any CTA loses 2 points.
+
+## 3.6 Voice Coach (Gemini Live API)
+
+The Voice Coach uses the Gemini Live API (`BidiGenerateContent`) for multi-turn voice coaching sessions. It now includes full strategic awareness — the same social proof tier system, pillar definitions, CTA strategy, and platform strengths that drive the content calendar.
+
+```python
+# Voice coach prompt injection (from backend/agents/voice_coach.py)
+# Builds tier-aware CONTENT STRATEGY CONTEXT block:
+# - Social proof tier block (data_rich / partial_data / thin_profile)
+# - Content pillars with tier-adjusted balance
+# - CTA approach with tier-appropriate guidance
+# - Platform strengths scoped to brand's connected_platforms
+strategy_context = (
+    f"CONTENT STRATEGY CONTEXT:\n"
+    f"You built this brand's content calendar — know these principles "
+    f"so you can explain WHY:\n\n"
+    f"{tier_block}\n\n{pillar_block}\n\n{cta_block}\n\n{platform_block}\n\n"
+    f"FORMAT LOGIC:\n"
+    f"- Carousels: Slide 1 hooks, Slide 2 teaches, Slide 3 takeaway\n"
+    f"- Threads: every post teaches; never end with brand pitch\n"
+    f"- Reels/video: outperforms static — always the reach play"
+)
+```
+
+Key capabilities: explain WHY the calendar has its specific pillar mix, coach caption writing in the brand's authentic voice, give platform-specific advice, and suggest content ideas grounded in the brand's actual business.
+
 ---
 
 # 4. API Specification
@@ -607,6 +774,63 @@ Body: multipart/form-data (images: jpg/png, documents: pdf — max 3 files)
 Response: { uploaded: [{ filename, url, type: "image" | "document" }] }
   // PDFs processed via Gemini multimodal for brand guide extraction
   // Images analyzed for brand colors, style, and product identification
+
+DELETE /api/brands/{brandId}/assets/{assetIndex}
+Response: { status: "deleted" }
+  // Removes an uploaded asset by index from the brand profile
+
+PATCH /api/brands/{brandId}/logo
+Body: { logo_url: string | null }
+Response: { status: "updated" }
+  // Sets or clears the brand logo URL
+```
+
+### Notion Integration
+
+```
+GET /api/brands/{brandId}/integrations/notion/auth-url
+Response: { url: string }
+  // Returns Notion OAuth authorization URL for the user to initiate connection
+
+GET /api/integrations/notion/callback?code={code}&state={brandId}
+Response: Redirect to /dashboard/{brandId}
+  // Handles Notion OAuth callback — exchanges code for access token, stores in Firestore
+
+POST /api/brands/{brandId}/integrations/notion/disconnect
+Response: { status: "disconnected" }
+  // Removes Notion tokens and database selection from the brand
+
+GET /api/brands/{brandId}/integrations/notion/databases
+Response: { databases: [{ id: string, title: string }] }
+  // Lists Notion databases accessible to the integration
+
+POST /api/brands/{brandId}/integrations/notion/select-database
+Body: { database_id: string }
+Response: { status: "selected" }
+  // Stores the selected Notion database for future exports
+
+POST /api/brands/{brandId}/plans/{planId}/export/notion
+Response: { exported: number, database_id: string }
+  // Exports all posts in the plan to the connected Notion database
+  // Creates one page per post with properties: Name, Platform, Day, Status,
+  // Caption, Posting Time, Content Type, Hashtags, Image URL
+  // Auto-creates missing database properties via ensure_database_schema()
+```
+
+### Calendar Export
+
+```
+GET /api/brands/{brandId}/plans/{planId}/calendar.ics
+Response: text/calendar (iCalendar .ics file)
+  // Downloads an .ics file with VEVENT entries for each day's posting schedule
+  // Events include: SUMMARY (platform + theme), DESCRIPTION (full caption),
+  // DTSTART (posting time), DTEND (posting time + 30 min)
+
+POST /api/brands/{brandId}/plans/{planId}/calendar/email
+Body: { email: string }
+Response: { status: "sent" }
+  // Sends the .ics calendar file as an email attachment via Resend API
+  // Subject: "Your {brand_name} Content Calendar — Amplifi"
 ```
 
 ### Content Planning
@@ -938,9 +1162,98 @@ function usePostGeneration(planId: string, dayIndex: number) {
 
 ---
 
-# 5. Data Model (Firestore)
+# 5. Platform Registry (Shipped)
 
-## 5.1 Complete Schema
+The Platform Registry (`backend/platforms.py`) is the single source of truth for all platform-specific configuration. Every backend agent imports from this module instead of maintaining local platform dicts. Adding a new platform requires one `PlatformSpec` entry here plus one entry in the frontend registry (`frontend/src/platformRegistry.ts`).
+
+## 5.1 PlatformSpec Dataclass
+
+```python
+@dataclass(frozen=True)
+class PlatformSpec:
+    key: str                          # "instagram"
+    display_name: str                 # "Instagram"
+    content_prompt: str               # Full platform-specific generation prompt
+    review_guidelines: str            # One-line summary for review agent
+    hashtag_limit: int                # Max hashtags (e.g., 5 for IG, 1 for X)
+    caption_max: int                  # Hard character limit (e.g., 2200 for IG)
+    char_limits: dict[str, int]       # Per-derivative limits: {"default": 1200, "video_first": 200}
+    fold_at: int | None               # "See more" fold position (125 for IG, 140 for LI)
+    image_aspect: str                 # "1:1", "16:9", "9:16", "1.91:1"
+    is_portrait_video: bool           # Whether video should be 9:16 (IG, TikTok)
+    derivative_types: list[str]       # Supported formats: ["original", "carousel", "video_first", ...]
+    voice: str                        # How content should *sound* on this platform
+```
+
+## 5.2 Platform Table (10 Platforms)
+
+| Platform | Key | fold_at | hashtag_limit | caption_max | image_aspect | derivative_types |
+|----------|-----|---------|---------------|-------------|--------------|-----------------|
+| Instagram | `instagram` | 125 | 5 | 2200 | 1:1 | original, carousel, story, video_first |
+| LinkedIn | `linkedin` | 140 | 5 | 3000 | 1.91:1 | original, carousel, blog_snippet, video_first |
+| X | `x` | — | 1 | 280 | 16:9 | original, thread_hook, video_first |
+| TikTok | `tiktok` | — | 6 | 2200 | 9:16 | original, carousel, video_first |
+| Facebook | `facebook` | — | 3 | 63206 | 1.91:1 | original, carousel, story, video_first |
+| Threads | `threads` | — | 3 | 500 | 1:1 | original |
+| Pinterest | `pinterest` | — | 0 | 500 | 2:3 | original, pin |
+| YouTube Shorts | `youtube_shorts` | — | 5 | 5000 | 9:16 | original, video_first |
+| Mastodon | `mastodon` | — | 5 | 500 | 1:1 | original |
+| Bluesky | `bluesky` | — | 3 | 300 | 1:1 | original, thread_hook |
+
+## 5.3 Public Helpers
+
+```python
+def get(key: str) -> PlatformSpec | None:
+    """Get a platform spec by key. Returns None if not found."""
+
+def keys() -> list[str]:
+    """Return all registered platform keys."""
+
+def get_review_guidelines_block() -> str:
+    """Build a formatted block of all platform review guidelines for the Review Agent prompt."""
+```
+
+## 5.4 Frontend Registry Mirror
+
+`frontend/src/platformRegistry.ts` mirrors the backend registry with display-oriented fields: `displayName`, `icon`, `foldAt`, `captionMax`, `hashtagLimit`, `color`. Used by `PlatformPreview` for live character counts and fold indicators.
+
+---
+
+# 6. Brand Assets Service (Shipped)
+
+The Brand Assets Service (`backend/services/brand_assets.py`) provides reference image injection for Gemini and Veo generation calls, ensuring visual consistency with the brand's actual assets.
+
+## 6.1 Priority Order
+
+Images are collected in priority order (up to `max_images`, default 3):
+
+1. **Logo** — `logo_url` field, or first image-type entry in `uploaded_assets`
+2. **Product photos** — `product_photos` list
+3. **Style reference** — `style_reference_gcs_uri` from brand analyst
+4. **Remaining uploaded image assets** — any other image uploads
+
+## 6.2 Caching
+
+Results are cached in-memory per `brand_id` for the process lifetime. Cache is keyed by `brand_id` and populated on first call.
+
+```python
+# Usage in Content Creator and Video Creator
+from backend.services.brand_assets import get_brand_reference_images
+
+ref_images = await get_brand_reference_images(brand_profile, max_images=3)
+# Returns: list[tuple[bytes, str]]  — (image_bytes, mime_type) per image
+```
+
+## 6.3 Consumers
+
+- **Content Creator** — prepends reference images as `types.Part.from_bytes()` to Gemini `generateContent` calls
+- **Video Creator** — includes reference images in Veo prompt context for visual consistency
+
+---
+
+# 7. Data Model (Firestore)
+
+## 7.1 Complete Schema
 
 ```
 amplifi-db/
@@ -971,6 +1284,19 @@ amplifi-db/
 │       ├── competitors: string[]          # ["competitor_a.com", "competitor_b.com"]
 │       ├── logo_url: string | null        # "gs://amplifi-assets/brands/{brandId}/logo.png"
 │       ├── product_photos: string[]       # ["gs://...", "gs://..."]
+│       ├── years_in_business: number | null    # e.g. 5 — used for social proof tier
+│       ├── client_count: number | null         # e.g. 200 — used for social proof tier
+│       ├── location: string | null             # "Austin, TX"
+│       ├── unique_selling_points: string | null # Brand differentiators
+│       ├── connected_platforms: string[]        # ["instagram", "linkedin", "x"] — platforms the user is active on
+│       ├── integrations: {                      # Third-party service connections
+│       │     notion: {
+│       │       access_token: string | null,
+│       │       workspace_name: string | null,
+│       │       database_id: string | null,
+│       │       database_name: string | null
+│       │     }
+│       │   }
 │       ├── created_at: timestamp
 │       ├── updated_at: timestamp
 │       ├── analysis_status: string        # "pending" | "analyzing" | "complete" | "failed"
@@ -1022,16 +1348,27 @@ amplifi-db/
 │               ├── hashtags: string[]     # ["#artisanbread", "#freshbaked", ...]
 │               ├── posting_time: string   # "11:30 AM EST"
 │               ├── status: string         # "draft" | "approved" | "posted"
+│               ├── pillar: string | null          # "education" | "inspiration" | "promotion" | "behind_the_scenes" | "user_generated"
+│               ├── format: string | null          # "original" | "carousel" | "thread_hook" | "blog_snippet" | "story" | "pin" | "video_first"
+│               ├── cta_type: string | null        # "engagement" | "conversion" | "implied" | "none"
+│               ├── derivative_type: string | null # How this post relates to its pillar
 │               │
 │               ├── review/                # Embedded document
-│               │   ├── overall_score: number     # 1-5
-│               │   ├── approved: boolean
-│               │   ├── tone_score: number
-│               │   ├── audience_score: number
-│               │   ├── platform_score: number
-│               │   ├── visual_score: number
-│               │   ├── quality_score: number
-│               │   ├── suggestions: string[]
+│               │   ├── score: number              # 1-10 (calibrated rubric)
+│               │   ├── brand_alignment: string    # "strong" | "moderate" | "weak"
+│               │   ├── approved: boolean          # true if score >= 8
+│               │   ├── strengths: string[]        # 2-3 strength descriptions
+│               │   ├── improvements: string[]     # 1-3 specific improvement suggestions
+│               │   ├── revision_notes: string | null  # Specific edit instructions if score < 8
+│               │   ├── revised_hashtags: string[] # Cleaned/validated hashtag array
+│               │   ├── engagement_scores: {       # 5 independently scored dimensions
+│               │   │     hook_strength: number,   # 1-10
+│               │   │     relevance: number,       # 1-10
+│               │   │     cta_effectiveness: number, # 1-10
+│               │   │     platform_fit: number,    # 1-10
+│               │   │     teaching_depth: number   # 1-10 (0 for non-education posts)
+│               │   │   }
+│               │   ├── engagement_prediction: string  # "low" | "medium" | "high" | "viral"
 │               │   └── reviewed_at: timestamp
 │               │
 │               ├── video/                 # Embedded document (P1)
@@ -1057,7 +1394,7 @@ amplifi-db/
 │               └── updated_at: timestamp
 ```
 
-## 5.2 Cloud Storage Structure
+## 7.2 Cloud Storage Structure
 
 ```
 gs://amplifi-assets-2026/
@@ -1082,7 +1419,7 @@ gs://amplifi-assets-2026/
 # Export: blob.download_as_bytes() — direct GCS download for ZIP packaging
 ```
 
-## 5.3 Cloud Storage Operations
+## 7.3 Cloud Storage Operations
 
 ```python
 from google.cloud import storage
@@ -1131,9 +1468,9 @@ async def upload_brand_asset(brand_id: str, file_bytes: bytes,
 
 ---
 
-# 6. Interleaved Output: Deep Dive
+# 8. Interleaved Output: Deep Dive
 
-## 6.1 How It Works
+## 8.1 How It Works
 
 The Gemini API's interleaved output generates text and images in a single `generateContent` call. The response contains an ordered list of `Part` objects that alternate between `text` parts and `inline_data` parts (raw image bytes).
 
@@ -1156,7 +1493,7 @@ response = client.models.generate_content(
 # ]
 ```
 
-## 6.2 Response Parsing
+## 8.2 Response Parsing
 
 ```python
 from dataclasses import dataclass
@@ -1201,7 +1538,7 @@ async def parse_interleaved_response(response, post_id: str) -> GeneratedPost:
     )
 ```
 
-## 6.3 Budget Management
+## 8.3 Budget Management
 
 ```python
 # Image generation cost tracking
@@ -1257,13 +1594,13 @@ class BudgetTracker:
         }
 ```
 
-## 6.4 Video Generation via Veo 3.1 (P1)
+## 8.4 Video Generation via Veo 3.1 (P1)
 
 Video generation is a **separate, additive flow** that builds on top of the P0 interleaved image output. It is NOT part of the SSE generation stream. It has its own endpoint, its own UI button, and its own async lifecycle.
 
 **Platform-aware display:** On text-first platforms (LinkedIn, X, Twitter, Facebook), the video section defaults to a collapsed pill ("🎬 Video Clip (not typical for this platform) ›") to reduce visual noise. `TEXT_PLATFORMS = new Set(['linkedin', 'x', 'twitter', 'facebook'])` controls this behavior. `videoExpanded` state (default `false`) toggles between collapsed pill and full section. State resets to collapsed on every `postId` change. Video-first platforms (Instagram, TikTok, Reels) always show the full expanded section.
 
-### 6.4.1 Architecture Decision
+### 8.4.1 Architecture Decision
 
 The interleaved output hero image becomes Veo's **first frame**, ensuring visual continuity between the static post and the video clip. This is the key design insight: the image and video share the same visual DNA because one literally starts from the other.
 
@@ -1281,7 +1618,7 @@ Interleaved Output (P0)              Veo Video (P1)
      ~10-20 sec                         ~2-3 min
 ```
 
-### 6.4.2 Veo API Integration
+### 8.4.2 Veo API Integration
 
 ```python
 from google import genai
@@ -1379,7 +1716,7 @@ async def upload_video_to_gcs(video_bytes: bytes, post_id: str) -> str:
     return signed_url
 ```
 
-### 6.4.3 REST Endpoint
+### 8.4.3 REST Endpoint
 
 ```python
 @app.post("/api/posts/{post_id}/generate-video")
@@ -1455,7 +1792,7 @@ async def get_video_job_status(job_id: str):
     return job
 ```
 
-### 6.4.4 Frontend Integration
+### 8.4.4 Frontend Integration
 
 ```typescript
 // useVideoGeneration.ts
@@ -1554,9 +1891,9 @@ function VideoGenerateButton({ postId, contentType }: Props) {
 
 ---
 
-# 7. Frontend Architecture
+# 9. Frontend Architecture
 
-## 7.1 React Component Tree
+## 9.1 React Component Tree
 
 ```
 App (React Router)
@@ -1677,7 +2014,7 @@ App (React Router)
         // Export is also integrated into Dashboard's Export tab — no separate page required
 ```
 
-## 7.2 Key UI Interactions
+## 9.2 Key UI Interactions
 
 ### Generation Stream (SSE Consumer)
 
@@ -1792,9 +2129,9 @@ function PostGenerator({ planId, dayIndex }: Props) {
 
 ---
 
-# 8. Deployment & Infrastructure
+# 10. Deployment & Infrastructure
 
-## 8.1 Docker Configuration
+## 10.1 Docker Configuration
 
 **Frontend Serving Strategy:** Same as Fireside — single container. Vite builds to `frontend/dist/`, FastAPI serves it via `StaticFiles`. One Dockerfile, one Cloud Run service, same-origin eliminates CORS in production.
 
@@ -1843,7 +2180,7 @@ python-dotenv==1.0.0
 python-multipart==0.0.9
 ```
 
-## 8.2 Terraform
+## 10.2 Terraform
 
 ```hcl
 # terraform/amplifi.tf
@@ -1909,7 +2246,7 @@ resource "google_storage_bucket" "amplifi_assets" {
 }
 ```
 
-## 8.3 Cloud Build Pipeline
+## 10.3 Cloud Build Pipeline
 
 ```yaml
 # cloudbuild-amplifi.yaml
@@ -1944,7 +2281,7 @@ substitutions:
 
 ---
 
-# 9. Repository Structure
+# 11. Repository Structure
 
 ```
 amplifi/
@@ -1952,20 +2289,25 @@ amplifi/
 │   ├── agents/
 │   │   ├── __init__.py
 │   │   ├── brand_analyst.py       # Brand Analyst Agent + system prompt
-│   │   ├── strategist.py          # Strategy Agent + calendar generation
-│   │   ├── content_creator.py     # Content Creator Agent (interleaved output)
+│   │   ├── strategy_agent.py      # Strategy Agent + calendar generation (social proof tiers)
+│   │   ├── content_creator.py     # Content Creator Agent (interleaved output, video_first)
 │   │   ├── video_creator.py       # Video Creator (Veo 3.1 integration, P1)
-│   │   └── reviewer.py            # Review Agent + consistency checks
+│   │   ├── review_agent.py        # Review Agent (calibrated 1-10 scoring, platform checks)
+│   │   └── voice_coach.py         # Voice Coach prompt builder (tier-aware strategy)
 │   ├── tools/
 │   │   ├── __init__.py
 │   │   ├── web_scraper.py         # fetch_website, extract colors
 │   │   ├── brand_tools.py         # analyze_brand_colors, extract_brand_voice
 │   │   └── review_tools.py        # check_brand_consistency, validate_hashtags
+│   ├── platforms.py               # Platform Registry — 10 platforms, PlatformSpec dataclass
 │   ├── services/
 │   │   ├── __init__.py
 │   │   ├── firestore_client.py    # All Firestore CRUD operations
 │   │   ├── storage_client.py      # Cloud Storage upload + signed URLs
-│   │   └── budget_tracker.py      # Image generation budget tracking
+│   │   ├── budget_tracker.py      # Image generation budget tracking
+│   │   ├── brand_assets.py        # Brand reference image injection (logo, product photos, style ref)
+│   │   ├── notion_client.py       # Notion OAuth + database export
+│   │   └── email_client.py        # Resend API — .ics calendar email delivery
 │   ├── models/
 │   │   ├── __init__.py
 │   │   ├── brand.py               # Pydantic models for BrandProfile
@@ -1982,9 +2324,11 @@ amplifi/
 │   │   └── index.html
 │   ├── src/
 │   │   ├── App.jsx
+│   │   ├── platformRegistry.ts    # Frontend mirror of Platform Registry
 │   │   ├── pages/
 │   │   │   ├── OnboardPage.jsx
 │   │   │   ├── DashboardPage.jsx
+│   │   │   ├── EditBrandPage.jsx  # Full brand profile editor + asset management
 │   │   │   ├── GeneratePage.jsx
 │   │   │   └── ExportPage.jsx
 │   │   ├── components/
@@ -1996,9 +2340,11 @@ amplifi/
 │   │   │   ├── ReviewPanel.jsx
 │   │   │   ├── PostLibrary.jsx
 │   │   │   ├── PostCard.jsx
+│   │   │   ├── PlatformPreview.jsx # Live character counts + fold indicators
 │   │   │   └── ActionBar.jsx
 │   │   ├── hooks/
 │   │   │   ├── usePostGeneration.ts # SSE hook
+│   │   │   ├── usePostLibrary.ts    # Post listing with auto-poll
 │   │   │   ├── useVideoGeneration.ts # Veo polling hook (P1)
 │   │   │   ├── useBrandProfile.ts
 │   │   │   └── useContentPlan.ts
@@ -2019,9 +2365,9 @@ amplifi/
 
 ---
 
-# 10. Testing Strategy
+# 12. Testing Strategy
 
-## 10.1 Testing Tiers
+## 12.1 Testing Tiers
 
 | Tier | What | How | When |
 |------|------|-----|------|
@@ -2032,7 +2378,7 @@ amplifi/
 | **End-to-End** | Full flow: paste URL → analysis → calendar → generate 7 posts → review | Manual testing with real business URLs | Week 2 Friday |
 | **Budget** | Verify cost tracking accuracy across multiple generations | Automated test with counter assertions | Week 2 |
 
-## 10.2 Critical Test Cases
+## 12.2 Critical Test Cases
 
 ```python
 # test_content_creator.py
@@ -2074,9 +2420,9 @@ async def test_brand_analysis_from_url():
 
 ---
 
-# 11. Performance & Monitoring
+# 13. Performance & Monitoring
 
-## 11.1 Performance Targets
+## 13.1 Performance Targets
 
 | Metric | Target | Measurement |
 |--------|--------|-------------|
@@ -2092,7 +2438,7 @@ async def test_brand_analysis_from_url():
 | Video upload to GCS | < 5s | MP4 upload + signed URL |
 | Cold start | < 8s | Cloud Run first request |
 
-## 11.2 Latency Optimization
+## 13.2 Latency Optimization
 
 ```python
 # Parallel review: run review while user looks at generated content
@@ -2115,7 +2461,7 @@ async def stream_and_upload(response_parts):
     return urls
 ```
 
-## 11.3 Observability
+## 13.3 Observability
 
 ```python
 # Key metrics
@@ -2136,56 +2482,64 @@ logger.info("generation_event", extra={
 
 ---
 
-# 12. PRD Cross-Reference & Compliance Matrix
+# 14. PRD Cross-Reference & Compliance Matrix
 
 | PRD Requirement | TDD Section | Implementation Status |
 |---|---|---|
 | Brand analysis from URL (P0) | §3.2 Brand Analyst Agent, §4.1 POST /api/brands/{id}/analyze | ✓ Specified |
 | Content calendar generation (P0) | §3.3 Strategy Agent, §4.1 POST /api/plans | ✓ Specified |
-| Interleaved post generation (P0) | §3.4 Content Creator Agent, §6 Interleaved Output Deep Dive | ✓ Specified |
+| Interleaved post generation (P0) | §3.4 Content Creator Agent, §8 Interleaved Output Deep Dive | ✓ Specified |
 | Brand consistency review (P0) | §3.5 Review Agent, §4.1 POST /api/review/{postId} | ✓ Specified |
-| React dashboard (P0) | §7 Frontend Architecture | ✓ Specified |
-| Image storage — Cloud Storage (P0) | §5.2 Cloud Storage Structure, §5.3 Operations | ✓ Specified |
+| React dashboard (P0) | §9 Frontend Architecture | ✓ Specified |
+| Image storage — Cloud Storage (P0) | §7.2 Cloud Storage Structure, §7.3 Operations | ✓ Specified |
 | Streaming UI — SSE (P0) | §4.2 SSE Implementation, §4.3 TypeScript Client | ✓ Specified |
-| Generation error handling | §4.2 SSE error/retry flow, §4.3 error event type, §7.2 error UI | ✓ Specified |
-| Budget protection | §4.2 Budget guard (429), §6.3 BudgetTracker | ✓ Specified |
-| Individual download (P0) | §7.1 PostCard Export button, §4.1 GET /api/posts/{id}/export | ✓ ZIP download (image + video + caption) |
-| Bring Your Own Photos (P1) | §3.4 Mode B, §4.1 Photo Upload endpoint, §4.2 user_photo_url, §5.1 day schema, §7.1 PhotoDropZone | ✓ Specified |
-| Content repurposing / pillars (P1) | §3.3 Strategy Agent pillar prompt, §5.1 pillars subcollection + day pillar fields, §7.1 PillarSummary/PillarTag | ✓ Specified |
-| Business persona (P1) | §3.2 Brand Analyst business_type prompt, §4.1 POST /api/brands, §5.1 business_type field, §7.1 BusinessTypeBadge | ✓ Specified |
-| Event-aware calendar (P1) | §3.3 Strategy Agent BUSINESS_EVENTS_THIS_WEEK prompt, §4.1 POST /api/plans business_events param, §5.1 business_events field, §7.1 EventsInput | ✓ Specified |
-| Visual identity seed (P1) | §3.2 Brand Analyst image_style_directive output, §3.4 Content Creator Mode A prepend, §5.1 image_style_directive field, §7.1 ImageStyleDirective | ✓ Specified |
-| Caption style directive (P1) | §3.2 Brand Analyst caption_style_directive output, §3.4 Content Creator base_context prepend, §5.1 caption_style_directive field, §7.1 CaptionStyleDirective | ✓ Specified |
-| Video generation via Veo 3.1 (P1) | §6.4 Video Generation, §6.4.2 Veo API, §6.4.3 REST endpoint, §6.4.4 Frontend | ✓ Specified |
-| ZIP export (P2) | §12.1.1 Full Export (shipped — per-post ZIP + bulk plan ZIP with media) | ✓ Shipped |
-| Engagement prediction (P2) | §12.1.8 Engagement Prediction Scoring | ✓ Specified |
-| Social media voice analysis (P2) | §12.1.9 Social Media Voice Analysis | ✓ Specified |
-| Platform meta intelligence (P2) | §12.1.10 Platform Meta Intelligence | ✓ Specified |
-| Video repurposing / smart editing (P2) | §12.1.12 Video Repurposing / Smart Editing | ✓ Specified |
-| Instagram grid consistency (P2) | §12.1.11 Instagram Grid Visual Consistency | ✓ Specified |
-| One-tap caption export (P2) | §12.1.1 Full Export (shipped — clipboard + ZIP) | ✓ Shipped |
-| Platform preview formatting (P2) | §12.1.2 Platform Preview Formatting | ✓ Specified |
-| Content editing/regeneration (P2) | §12.1.3 Content Editing & Regeneration | ✓ Specified |
-| Competitor visibility toggle (P2) | §12.1.4 Competitor Visibility Toggle | ✓ Specified |
-| AI image quality validation (P2) | §12.1.5 AI Image Quality Validation | ✓ Specified |
-| Description-first onboarding (P2) | §12.1.6 Description-First Onboarding Option | ✓ Specified |
-| Multi-platform formatting (P2) | §12.1.7 Multi-Platform Formatting | ✓ Specified |
-| Frontend serving (single container) | §8.1 Docker Configuration | ✓ Specified |
+| Generation error handling | §4.2 SSE error/retry flow, §4.3 error event type, §9.2 error UI | ✓ Specified |
+| Budget protection | §4.2 Budget guard (429), §8.3 BudgetTracker | ✓ Specified |
+| Individual download (P0) | §9.1 PostCard Export button, §4.1 GET /api/posts/{id}/export | ✓ ZIP download (image + video + caption) |
+| Bring Your Own Photos (P1) | §3.4 Mode B, §4.1 Photo Upload endpoint, §4.2 user_photo_url, §7.1 day schema, §9.1 PhotoDropZone | ✓ Specified |
+| Content repurposing / pillars (P1) | §3.3 Strategy Agent pillar prompt, §7.1 pillars subcollection + day pillar fields, §9.1 PillarSummary/PillarTag | ✓ Specified |
+| Business persona (P1) | §3.2 Brand Analyst business_type prompt, §4.1 POST /api/brands, §7.1 business_type field, §9.1 BusinessTypeBadge | ✓ Specified |
+| Event-aware calendar (P1) | §3.3 Strategy Agent BUSINESS_EVENTS_THIS_WEEK prompt, §4.1 POST /api/plans business_events param, §7.1 business_events field, §9.1 EventsInput | ✓ Specified |
+| Visual identity seed (P1) | §3.2 Brand Analyst image_style_directive output, §3.4 Content Creator Mode A prepend, §7.1 image_style_directive field, §9.1 ImageStyleDirective | ✓ Specified |
+| Caption style directive (P1) | §3.2 Brand Analyst caption_style_directive output, §3.4 Content Creator base_context prepend, §7.1 caption_style_directive field, §9.1 CaptionStyleDirective | ✓ Specified |
+| Video generation via Veo 3.1 (P1) | §8.4 Video Generation, §8.4.2 Veo API, §8.4.3 REST endpoint, §8.4.4 Frontend | ✓ Specified |
+| Platform Registry (P2) | §5 Platform Registry | ✓ Shipped |
+| Brand reference images (P2) | §6 Brand Assets Service, §3.4.2 Brand Reference Image Injection | ✓ Shipped |
+| Calibrated review scoring (P2) | §3.5.1 Calibrated 1-10 Scoring, §3.5.2 Engagement Scoring | ✓ Shipped |
+| Social proof tiers (P2) | §3.3.1 Social Proof Tier System | ✓ Shipped |
+| Edit Brand page (P2) | §4.1 DELETE asset, PATCH logo | ✓ Shipped |
+| Notion integration (P2) | §4.1 Notion Integration endpoints | ✓ Shipped |
+| Calendar .ics export (P2) | §4.1 Calendar Export endpoints | ✓ Shipped |
+| Voice coach strategic awareness (P2) | §3.6 Voice Coach | ✓ Shipped |
+| ZIP export (P2) | §14.1.1 Full Export (shipped — per-post ZIP + bulk plan ZIP with media) | ✓ Shipped |
+| Engagement prediction (P2) | §3.5.2 Engagement Scoring (shipped) | ✓ Shipped |
+| Social media voice analysis (P2) | §14.1.9 Social Media Voice Analysis | ✓ Specified |
+| Platform meta intelligence (P2) | §14.1.10 Platform Meta Intelligence | ✓ Specified |
+| Video repurposing / smart editing (P2) | §14.1.12 Video Repurposing / Smart Editing | ✓ Specified |
+| Instagram grid consistency (P2) | §6 Brand Assets Service (shipped via brand reference images) | ✓ Shipped |
+| One-tap caption export (P2) | §14.1.1 Full Export (shipped — clipboard + ZIP) | ✓ Shipped |
+| Platform preview formatting (P2) | §14.1.2 Platform Preview Formatting | ✓ Specified |
+| Content editing/regeneration (P2) | §14.1.3 Content Editing & Regeneration | ✓ Specified |
+| Competitor visibility toggle (P2) | §14.1.4 Competitor Visibility Toggle | ✓ Specified |
+| AI image quality validation (P2) | §14.1.5 AI Image Quality Validation | ✓ Specified |
+| Description-first onboarding (P2) | §14.1.6 Description-First Onboarding Option | ✓ Specified |
+| Multi-platform formatting (P2) | §5 Platform Registry (shipped) | ✓ Shipped |
+| Frontend serving (single container) | §10.1 Docker Configuration | ✓ Specified |
 | CORS configuration | §4.2 FastAPI app setup | ✓ Specified |
 | Gemini model compliance | §3.4 model="gemini-2.5-flash" | ✓ gemini-2.5-flash with ["TEXT", "IMAGE"] |
 | ADK compliance | §3.1 SequentialAgent pipeline | ✓ ADK SequentialAgent |
-| Cloud Run + Firestore + Storage | §8 Deployment, §5 Data Model | ✓ All three services |
-| Interleaved output (category req) | §6 Deep Dive, responseModalities | ✓ ["TEXT", "IMAGE"] |
-| Automated deployment (bonus) | §8.2 Terraform, §8.3 Cloud Build | ✓ Specified |
-| Public GitHub repo | §9 Repository Structure | ✓ MIT License |
+| Cloud Run + Firestore + Storage | §10 Deployment, §7 Data Model | ✓ All three services |
+| Interleaved output (category req) | §8 Deep Dive, responseModalities | ✓ ["TEXT", "IMAGE"] |
+| Automated deployment (bonus) | §10.2 Terraform, §10.3 Cloud Build | ✓ Specified |
+| Public GitHub repo | §11 Repository Structure | ✓ MIT License |
 
-## 12.1 P2 Architecture Notes (Post-Hackathon)
+## 14.1 P2 Architecture Notes (Post-Hackathon)
 
 These features are documented in the PRD and sequenced by PM sprint priority (see PRD Post-Hackathon P2 Roadmap). Each includes implementation detail sufficient to build.
 
 ---
 
-### 12.1.1 Full Export (Shipped)
+### 14.1.1 Full Export (Shipped)
 
 **Type:** Frontend + backend endpoints | **Status:** Shipped
 
@@ -2230,7 +2584,7 @@ URL.revokeObjectURL(url);
 
 ---
 
-### 12.1.2 Platform Preview Formatting (Sprint 4)
+### 14.1.2 Platform Preview Formatting (Sprint 4)
 
 **Effort:** 1–2 days | **Type:** Frontend components
 
@@ -2325,7 +2679,7 @@ No backend changes. No Firestore changes. Pure frontend.
 
 ---
 
-### 12.1.3 Content Editing & Regeneration (Sprint 4)
+### 14.1.3 Content Editing & Regeneration (Sprint 4)
 
 **Effort:** 1–2 days | **Type:** New endpoint + frontend
 
@@ -2419,7 +2773,7 @@ const RegenerateButton: React.FC<{ planId: string; dayIndex: number }> = ({ plan
 
 ---
 
-### 12.1.4 Competitor Visibility Toggle (Sprint 4)
+### 14.1.4 Competitor Visibility Toggle (Sprint 4)
 
 **Effort:** 2–3 hours | **Type:** Frontend only
 
@@ -2456,7 +2810,7 @@ Competitor data is always extracted during brand analysis (it informs content st
 
 ---
 
-### 12.1.5 AI Image Quality Validation (Sprint 5)
+### 14.1.5 AI Image Quality Validation (Sprint 5)
 
 **Effort:** 4–6 hours | **Type:** Prompt change + frontend indicator
 
@@ -2501,7 +2855,7 @@ brands/{brandId}/
 
 ---
 
-### 12.1.6 Description-First Onboarding Option (Sprint 5)
+### 14.1.6 Description-First Onboarding Option (Sprint 5)
 
 **Effort:** 3–4 hours | **Type:** Frontend flow change + A/B test
 
@@ -2555,7 +2909,7 @@ No backend API changes — the `POST /api/brands` endpoint already accepts `desc
 
 ---
 
-### 12.1.7 Multi-Platform Formatting (Sprint 5)
+### 14.1.7 Multi-Platform Formatting (Sprint 5)
 
 **Effort:** 1–2 days | **Type:** Prompt engineering per platform
 
@@ -2612,7 +2966,7 @@ PLATFORM_PROMPTS = {
 
 ---
 
-### 12.1.8 Engagement Prediction Scoring (Sprint 6)
+### 14.1.8 Engagement Prediction Scoring (Sprint 6)
 
 **Effort:** 3–5 days | **Type:** New tool on Review Agent
 
@@ -2677,7 +3031,7 @@ plans/{planId}/days[N]/
 
 ---
 
-### 12.1.9 Social Media Voice Analysis (Sprint 6)
+### 14.1.9 Social Media Voice Analysis (Sprint 6)
 
 **Effort:** 3–5 days | **Type:** OAuth integrations + new input pipeline
 
@@ -2750,7 +3104,7 @@ IMPORTANT: Generated content should match this existing voice, not replace it.
 
 ---
 
-### 12.1.10 Platform Meta Intelligence (Sprint 6)
+### 14.1.10 Platform Meta Intelligence (Sprint 6)
 
 **Effort:** 2–3 days | **Type:** Data pipeline + Strategy Agent tool
 
@@ -2802,7 +3156,7 @@ platform_trends/{platform}_{industry}/
 
 ---
 
-### 12.1.11 Instagram Grid Visual Consistency (Sprint 6)
+### 14.1.11 Instagram Grid Visual Consistency (Sprint 6)
 
 **Effort:** 2–3 days | **Type:** Style reference image + Content Creator update
 
@@ -2861,7 +3215,7 @@ brands/{brandId}/
 
 ---
 
-### 12.1.12 Video Repurposing / Smart Editing (Sprint 7+)
+### 14.1.12 Video Repurposing / Smart Editing (Sprint 7+)
 
 **Effort:** 1–2 weeks | **Type:** New agent + async processing pipeline + FFmpeg integration
 
@@ -3112,7 +3466,7 @@ RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
 
 ---
 
-# 13. Environment Variable Manifest
+# 15. Environment Variable Manifest
 
 | Variable | Required | Description | Example |
 |---|---|---|---|
@@ -3135,7 +3489,7 @@ BUDGET_LIMIT_USD=100
 
 ---
 
-# 14. Architectural Differences from Fireside
+# 16. Architectural Differences from Fireside
 
 For engineers working on both projects, here is a comparison of the key architectural differences:
 
@@ -3156,7 +3510,7 @@ For engineers working on both projects, here is a comparison of the key architec
 
 ---
 
-# 15. Post-Hackathon Architecture Migration
+# 17. Post-Hackathon Architecture Migration
 
 This section catalogs every architectural decision made for the 3-week hackathon that will NOT survive contact with real users at scale. These are not bugs — they are intentional shortcuts that need planned migrations.
 
@@ -3165,9 +3519,9 @@ This section catalogs every architectural decision made for the 3-week hackathon
 - 🟡 **Degraded** — Works but poorly. Users will notice. Fix within first month.
 - 🟢 **Technical Debt** — Works fine but limits future features. Fix when convenient.
 
-## 15.1 🔴 Single-Container Monolith → Microservices
+## 17.1 🔴 Single-Container Monolith → Microservices
 
-**Hackathon:** One Docker container runs FastAPI + React + all 4 ADK agents in-process (§8.1). Single Cloud Run service.
+**Hackathon:** One Docker container runs FastAPI + React + all 4 ADK agents in-process (§10.1). Single Cloud Run service.
 
 **Why it breaks:** A content generation request (Brand Analyst → Strategy → Content Creator → Review) holds a Cloud Run instance for 30-60 seconds while 4 sequential LLM calls complete. The Content Creator with interleaved output blocks for 10-20 seconds per post; generating 7 posts = 70-140 seconds of wall-clock time per user. At 50 concurrent users generating weekly calendars, you need ~50 warm Cloud Run instances each burning CPU while waiting on Gemini API responses.
 
@@ -3188,11 +3542,11 @@ HACKATHON                           PRODUCTION
 
 - Split into 3 services: Frontend (Firebase Hosting / CDN), API Gateway (stateless Cloud Run), Agent Workers (Cloud Run Jobs — no request timeout, billed per vCPU-second)
 - Generation requests enqueue via Cloud Tasks; workers pull and process
-- Video generation (§6.4) already uses this async job pattern — extend it to all generation
+- Video generation (§8.4) already uses this async job pattern — extend it to all generation
 
 **Effort:** 2-3 weeks.
 
-## 15.2 🔴 Gemini API Rate Limits — The Hard Ceiling
+## 17.2 🔴 Gemini API Rate Limits — The Hard Ceiling
 
 **Hackathon:** Direct Gemini API calls from a single GCP project. Every agent call = 1 API request.
 
@@ -3209,9 +3563,9 @@ Interleaved output (TEXT + IMAGE) requests are computationally expensive and may
 
 **Effort:** 1-2 weeks for queuing + caching. Vertex AI migration is a config change.
 
-## 15.3 🔴 In-Memory BudgetTracker → Persistent Budget Service
+## 17.3 🔴 In-Memory BudgetTracker → Persistent Budget Service
 
-**Hackathon:** `BudgetTracker` (§6.3) is a Python class instance in memory on a single Cloud Run container.
+**Hackathon:** `BudgetTracker` (§8.3) is a Python class instance in memory on a single Cloud Run container.
 
 **Why it breaks:** Cloud Run is stateless. Instance scales down → budget resets to zero. Two instances running simultaneously have independent counters — each thinks it has the full $100 budget. 2x overspend without knowing.
 
@@ -3223,9 +3577,9 @@ Interleaved output (TEXT + IMAGE) requests are computationally expensive and may
 
 **Effort:** Half a day. Should be done during hackathon if time allows.
 
-## 15.4 🔴 No Authentication / Single-Tenant → Multi-Tenant with Auth
+## 17.4 🔴 No Authentication / Single-Tenant → Multi-Tenant with Auth
 
-**Hackathon:** No authentication. One brand, one user. The Firestore schema (§5.1) has no `user_id` scoping on any document.
+**Hackathon:** No authentication. One brand, one user. The Firestore schema (§7.1) has no `user_id` scoping on any document.
 
 **Why it breaks:** Adding multi-tenancy retroactively requires restructuring every Firestore path from `brands/{brandId}/...` to `users/{userId}/brands/{brandId}/...` — affecting every query in the codebase.
 
@@ -3238,7 +3592,7 @@ Interleaved output (TEXT + IMAGE) requests are computationally expensive and may
 
 **Effort:** 1 week. Auth is fast; restructuring Firestore + updating every query is the bulk.
 
-## 15.5 🟡 SSE Streaming → Job Polling
+## 17.5 🟡 SSE Streaming → Job Polling
 
 **Hackathon:** Server-Sent Events (§4.2) for generation stream.
 
@@ -3252,12 +3606,12 @@ Interleaved output (TEXT + IMAGE) requests are computationally expensive and may
 - Generation request returns `job_id` immediately
 - Client polls `GET /api/jobs/{jobId}` every 2 seconds
 - Backend writes generation progress to Firestore in real-time
-- This is exactly the video generation pattern (§6.4.3) — extend to all content generation
+- This is exactly the video generation pattern (§8.4.3) — extend to all content generation
 - Alternative: Firestore `onSnapshot` listeners for real-time push without direct server connection
 
-**Effort:** 3-4 days (pattern already exists in §6.4).
+**Effort:** 3-4 days (pattern already exists in §8.4).
 
-## 15.6 🟡 Sequential Agent Pipeline → Parallel Generation
+## 17.6 🟡 Sequential Agent Pipeline → Parallel Generation
 
 **Hackathon:** ADK SequentialAgent (§3.1) runs all 4 agents in-process, serially. 7 posts × 15 seconds each = ~2 minutes wall-clock.
 
@@ -3271,9 +3625,9 @@ Interleaved output (TEXT + IMAGE) requests are computationally expensive and may
 
 **Effort:** 1-2 weeks. Parallelization alone delivers 7x speedup for calendar generation.
 
-## 15.7 🟡 Signed URLs (7-day expiry) → CDN + Permanent URLs
+## 17.7 🟡 Signed URLs (7-day expiry) → CDN + Permanent URLs
 
-**Hackathon:** Generated images served via GCS signed URLs (§5.3) that expire in 7 days.
+**Hackathon:** Generated images served via GCS signed URLs (§7.3) that expire in 7 days.
 
 **Why it degrades:** User returns after 2 weeks — all content images are broken links. Signed URLs aren't CDN-cacheable (unique signatures). Every image request hits GCS directly — no edge caching for distant users.
 
@@ -3284,7 +3638,7 @@ Interleaved output (TEXT + IMAGE) requests are computationally expensive and may
 
 **Effort:** 1-2 days. Mostly configuration.
 
-## 15.8 🟡 No Billing → Stripe Subscriptions
+## 17.8 🟡 No Billing → Stripe Subscriptions
 
 **Hackathon:** Free, unlimited usage funded by $100 Google Cloud credit. Shared global budget.
 
@@ -3298,7 +3652,7 @@ Interleaved output (TEXT + IMAGE) requests are computationally expensive and may
 
 **Effort:** 1-2 weeks.
 
-## 15.9 🟢 No Social Publishing
+## 17.9 🟢 No Social Publishing
 
 **Hackathon:** Generate → download. No scheduling, no publishing, no calendar sync.
 
@@ -3312,21 +3666,23 @@ Interleaved output (TEXT + IMAGE) requests are computationally expensive and may
 
 **Effort:** 3-4 weeks for 2-3 platforms (~1 week per platform due to OAuth + media upload quirks).
 
-## 15.10 🟢 No Analytics / Feedback Loop
+**Buffer Integration (Planned):** Buffer is currently in closed beta for their new API and not accepting new developer applications. We plan to integrate Buffer for scheduled publishing once API access becomes available. Full design is documented in `docs/buffer-notion-integration-plan.md` (OAuth flow, channel selection, publish endpoints, rate limits).
+
+## 17.10 🟢 No Analytics / Feedback Loop
 
 **Hackathon:** Generate and forget. AI never learns what works for a specific brand.
 
 **Why this is debt:** Strategy Agent makes identical recommendations regardless of past performance. No engagement data = no improvement over time.
 
 **Migration:**
-- Pull engagement metrics from social media APIs (requires §15.9)
+- Pull engagement metrics from social media APIs (requires §17.9)
 - Store per-post metrics in Firestore: impressions, likes, comments, shares
 - Feedback loop: top-performing posts become few-shot examples in Strategy Agent prompts
 - Dashboard: engagement charts, best-performing content types, optimal posting times
 
 **Effort:** 2-3 weeks (after social integrations are complete).
 
-## 15.11 🟢 No Content Library / Asset Management
+## 17.11 🟢 No Content Library / Asset Management
 
 **Hackathon:** Generated images stored in flat GCS paths. No tagging, search, or reuse.
 
@@ -3339,21 +3695,21 @@ Interleaved output (TEXT + IMAGE) requests are computationally expensive and may
 
 **Effort:** 1 week.
 
-## 15.12 Migration Priority
+## 17.12 Migration Priority
 
 | Priority | Item | Effort | Why First |
 |---|---|---|---|
-| **Week 1** | §15.3 Persistent Budget | 0.5 days | Prevents overspend. Trivial fix. |
-| **Week 1** | §15.4 Auth + Multi-Tenant | 1 week | Can't have multiple users without it. |
-| **Week 2** | §15.2 Rate Limit Queuing | 1-2 weeks | 10th user gets 429 without it. |
-| **Week 2** | §15.7 CDN + Permanent URLs | 1-2 days | Images break after 7 days. |
-| **Week 3-4** | §15.1 Microservices Split | 2-3 weeks | Unblocks scaling past ~20 concurrent users. |
-| **Week 3-4** | §15.6 Parallel Generation | 1-2 weeks | 7x speedup for core UX. |
-| **Week 5-6** | §15.5 Job Polling | 3-4 days | Resilient generation. |
-| **Week 5-6** | §15.8 Billing | 1-2 weeks | Revenue. |
-| **Month 3+** | §15.9 Social Publishing | 3-4 weeks | Makes this a real product. |
-| **Month 3+** | §15.10 Analytics | 2-3 weeks | Makes this a sticky product. |
-| **Month 3+** | §15.11 Asset Library | 1 week | Power user quality-of-life. |
+| **Week 1** | §17.3 Persistent Budget | 0.5 days | Prevents overspend. Trivial fix. |
+| **Week 1** | §17.4 Auth + Multi-Tenant | 1 week | Can't have multiple users without it. |
+| **Week 2** | §17.2 Rate Limit Queuing | 1-2 weeks | 10th user gets 429 without it. |
+| **Week 2** | §17.7 CDN + Permanent URLs | 1-2 days | Images break after 7 days. |
+| **Week 3-4** | §17.1 Microservices Split | 2-3 weeks | Unblocks scaling past ~20 concurrent users. |
+| **Week 3-4** | §17.6 Parallel Generation | 1-2 weeks | 7x speedup for core UX. |
+| **Week 5-6** | §17.5 Job Polling | 3-4 days | Resilient generation. |
+| **Week 5-6** | §17.8 Billing | 1-2 weeks | Revenue. |
+| **Month 3+** | §17.9 Social Publishing | 3-4 weeks | Makes this a real product. |
+| **Month 3+** | §17.10 Analytics | 2-3 weeks | Makes this a sticky product. |
+| **Month 3+** | §17.11 Asset Library | 1 week | Power user quality-of-life. |
 
 **Total estimated effort:** 8-12 weeks to production-ready.
 
@@ -3362,6 +3718,6 @@ Interleaved output (TEXT + IMAGE) requests are computationally expensive and may
 ---
 
 *Document created: February 21, 2026*
-*Updated: February 23, 2026*
-*Companion PRD: prd-amplifi.md v1.1*
+*Updated: March 2, 2026 (v1.3 — Platform Registry, Brand Assets, Notion/Calendar integrations, calibrated scoring, social proof tiers, voice coach strategy)*
+*Companion PRD: PRD.md v1.3*
 *Hackathon deadline: March 16, 2026*
