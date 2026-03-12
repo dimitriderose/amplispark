@@ -2,10 +2,9 @@
 # ──────────────────────────────────────────────────────────────────────────────
 # Amplifi — One-command deploy to Cloud Run
 #
-# Reads Firebase config from .env (gitignored), submits a Cloud Build job
-# that builds the Docker image, pushes to Artifact Registry, and deploys
-# to Cloud Run. The Gemini API key is managed by Terraform on Cloud Run,
-# not by this script.
+# Reads config from .env (gitignored), submits a Cloud Build job that builds
+# the Docker image, pushes to Artifact Registry, and deploys to Cloud Run
+# with all required environment variables.
 #
 # Prerequisites:
 #   1. gcloud CLI installed and authenticated
@@ -43,6 +42,7 @@ REQUIRED_VARS=(
   VITE_FIREBASE_MESSAGING_SENDER_ID
   VITE_FIREBASE_APP_ID
   GCP_PROJECT_ID
+  GOOGLE_API_KEY
 )
 
 for var in "${REQUIRED_VARS[@]}"; do
@@ -52,9 +52,12 @@ for var in "${REQUIRED_VARS[@]}"; do
   fi
 done
 
+REGION="${GCP_REGION:-us-central1}"
+PROJECT_NUMBER=$(gcloud projects describe "$GCP_PROJECT_ID" --format='value(projectNumber)')
+
 echo "Deploying Amplifi to Cloud Run..."
-echo "  Project:  $GCP_PROJECT_ID"
-echo "  Region:   ${GCP_REGION:-us-central1}"
+echo "  Project:  $GCP_PROJECT_ID ($PROJECT_NUMBER)"
+echo "  Region:   $REGION"
 echo ""
 
 cd "$PROJECT_ROOT"
@@ -69,7 +72,9 @@ _VITE_FIREBASE_PROJECT_ID=$VITE_FIREBASE_PROJECT_ID,\
 _VITE_FIREBASE_STORAGE_BUCKET=$VITE_FIREBASE_STORAGE_BUCKET,\
 _VITE_FIREBASE_MESSAGING_SENDER_ID=$VITE_FIREBASE_MESSAGING_SENDER_ID,\
 _VITE_FIREBASE_APP_ID=$VITE_FIREBASE_APP_ID,\
-_REGION=${GCP_REGION:-us-central1}"
+_GOOGLE_API_KEY=$GOOGLE_API_KEY,\
+_PROJECT_NUMBER=$PROJECT_NUMBER,\
+_REGION=$REGION"
 
 echo ""
 echo "Deploy complete! Your app is live at:"
