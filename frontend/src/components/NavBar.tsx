@@ -1,10 +1,23 @@
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { A } from '../theme'
+import { useAuth } from '../hooks/useAuth'
 
 export default function NavBar() {
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams] = useSearchParams()
+  const { user, isSignedIn, signIn, signOut } = useAuth()
+  const [accountOpen, setAccountOpen] = useState(false)
+  const accountRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (accountRef.current && !accountRef.current.contains(e.target as Node)) setAccountOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
 
   // Extract brandId from dashboard/edit/export path segments, or from ?brand_id= on generate routes
   const dashboardMatch = location.pathname.match(/^\/dashboard\/([^/]+)/)
@@ -70,6 +83,75 @@ export default function NavBar() {
           </button>
         )}
       </div>
+
+      {/* Account */}
+      {isSignedIn && user ? (
+        <div ref={accountRef} style={{ position: 'relative' }}>
+          <button
+            onClick={() => setAccountOpen(!accountOpen)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '4px 10px', borderRadius: 8,
+              border: `1px solid ${A.border}`, background: 'transparent',
+              cursor: 'pointer', fontSize: 12, fontWeight: 500, color: A.text,
+            }}
+          >
+            {user.photoURL ? (
+              <img src={user.photoURL} alt="" style={{ width: 22, height: 22, borderRadius: '50%' }} />
+            ) : (
+              <div style={{
+                width: 22, height: 22, borderRadius: '50%',
+                background: `linear-gradient(135deg, ${A.indigo}, ${A.violet})`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: 'white', fontSize: 10, fontWeight: 700,
+              }}>
+                {(user.displayName || user.email || '?')[0].toUpperCase()}
+              </div>
+            )}
+            Account
+          </button>
+          {accountOpen && (
+            <div style={{
+              position: 'absolute', right: 0, top: '100%', marginTop: 6,
+              background: A.surface, border: `1px solid ${A.border}`,
+              borderRadius: 10, padding: 10, minWidth: 180,
+              boxShadow: '0 8px 32px rgba(0,0,0,0.12)', zIndex: 100,
+            }}>
+              <div style={{ padding: '4px 8px', marginBottom: 6 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: A.text }}>
+                  {user.displayName || 'User'}
+                </div>
+                {user.email && (
+                  <div style={{ fontSize: 11, color: A.textMuted, marginTop: 2 }}>{user.email}</div>
+                )}
+              </div>
+              <button
+                onClick={() => { setAccountOpen(false); signOut(); navigate('/') }}
+                style={{
+                  width: '100%', padding: '6px 8px', borderRadius: 6,
+                  border: 'none', background: 'transparent', cursor: 'pointer',
+                  fontSize: 12, fontWeight: 500, color: A.text, textAlign: 'left',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = A.surfaceAlt)}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              >
+                Sign Out
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <button
+          onClick={signIn}
+          style={{
+            padding: '5px 14px', borderRadius: 8,
+            border: `1px solid ${A.border}`, background: 'transparent',
+            cursor: 'pointer', fontSize: 13, fontWeight: 500, color: A.text,
+          }}
+        >
+          Sign in
+        </button>
+      )}
     </nav>
   )
 }

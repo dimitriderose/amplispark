@@ -1,5 +1,12 @@
 import { initializeApp } from 'firebase/app'
-import { getAuth, signInAnonymously, onAuthStateChanged, type User } from 'firebase/auth'
+import {
+  getAuth,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signOut,
+  onAuthStateChanged,
+  type User,
+} from 'firebase/auth'
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
@@ -13,28 +20,33 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig)
 export const auth = getAuth(app)
 
-/**
- * Sign in anonymously. Firebase persists the UID in IndexedDB,
- * so the same user gets the same UID across page reloads.
- */
-export async function ensureAnonymousAuth(): Promise<User> {
-  // If already signed in, return immediately
-  if (auth.currentUser) return auth.currentUser
+const googleProvider = new GoogleAuthProvider()
 
-  // Wait for auth state to initialize (Firebase may restore from cache)
-  const existing = await new Promise<User | null>((resolve) => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      unsubscribe()
-      resolve(user)
-    })
-  })
-  if (existing) return existing
+export async function signInWithGoogle(): Promise<User> {
+  const result = await signInWithPopup(auth, googleProvider)
+  return result.user
+}
 
-  // No cached session — sign in anonymously
-  const cred = await signInAnonymously(auth)
-  return cred.user
+export async function signOutUser(): Promise<void> {
+  await signOut(auth)
 }
 
 export function getUid(): string | null {
   return auth.currentUser?.uid ?? null
 }
+
+export function getCurrentUser(): {
+  displayName: string | null
+  photoURL: string | null
+  email: string | null
+} | null {
+  const u = auth.currentUser
+  if (!u) return null
+  return {
+    displayName: u.displayName,
+    photoURL: u.photoURL,
+    email: u.email,
+  }
+}
+
+export { onAuthStateChanged, type User }

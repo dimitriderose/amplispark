@@ -40,18 +40,6 @@ export default function DashboardPage() {
     }
   }, [plan?.plan_id, brandId])
 
-  // Persist brandId to localStorage so grandfathering can claim it on next visit
-  useEffect(() => {
-    if (!brandId) return
-    try {
-      const stored: string[] = JSON.parse(localStorage.getItem('amplifi_brand_ids') || '[]')
-      if (!stored.includes(brandId)) {
-        stored.push(brandId)
-        localStorage.setItem('amplifi_brand_ids', JSON.stringify(stored))
-      }
-    } catch { /* localStorage unavailable */ }
-  }, [brandId])
-
   const approvedParam = searchParams.get('approved')
   const notionParam = searchParams.get('notion')
   const approvedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)

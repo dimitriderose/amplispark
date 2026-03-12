@@ -4,6 +4,77 @@ import { A } from '../theme'
 import { useAuth } from '../hooks/useAuth'
 import { api } from '../api/client'
 
+function AccountDropdown({ user, onSignOut }: {
+  user: { displayName: string | null; photoURL: string | null; email: string | null }
+  onSignOut: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(!open)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '6px 12px', borderRadius: 10,
+          border: `1px solid ${A.border}`, background: A.surface,
+          cursor: 'pointer', fontSize: 13, fontWeight: 500, color: A.text,
+        }}
+      >
+        {user.photoURL ? (
+          <img src={user.photoURL} alt="" style={{ width: 24, height: 24, borderRadius: '50%' }} />
+        ) : (
+          <div style={{
+            width: 24, height: 24, borderRadius: '50%',
+            background: `linear-gradient(135deg, ${A.indigo}, ${A.violet})`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: 'white', fontSize: 11, fontWeight: 700,
+          }}>
+            {(user.displayName || user.email || '?')[0].toUpperCase()}
+          </div>
+        )}
+        {user.displayName || 'Account'}
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', right: 0, top: '100%', marginTop: 6,
+          background: A.surface, border: `1px solid ${A.border}`,
+          borderRadius: 12, padding: 12, minWidth: 200,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.12)', zIndex: 100,
+        }}>
+          {user.email && (
+            <div style={{ fontSize: 12, color: A.textMuted, marginBottom: 10, padding: '0 4px' }}>
+              {user.email}
+            </div>
+          )}
+          <button
+            onClick={() => { setOpen(false); onSignOut() }}
+            style={{
+              width: '100%', padding: '8px 12px', borderRadius: 8,
+              border: 'none', background: 'transparent', cursor: 'pointer',
+              fontSize: 13, fontWeight: 500, color: A.text, textAlign: 'left',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = A.surfaceAlt)}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+          >
+            Sign Out
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 interface BrandSummary {
   brand_id: string
   business_name?: string
@@ -91,27 +162,8 @@ const PREVIEW_DAYS = [
 
 export default function LandingPage() {
   const navigate = useNavigate()
-  const { uid } = useAuth()
+  const { uid, user, isSignedIn, signIn, signOut } = useAuth()
   const [myBrands, setMyBrands] = useState<BrandSummary[]>([])
-  const grandfathered = useRef(false)
-
-  // Grandfathering: claim any localStorage brand IDs under the new UID
-  useEffect(() => {
-    if (!uid || grandfathered.current) return
-    grandfathered.current = true
-    try {
-      const stored: string[] = JSON.parse(localStorage.getItem('amplifi_brand_ids') || '[]')
-      const claims = stored.map((id) =>
-        api.claimBrand(id, uid).catch(() => { /* brand may already be claimed */ })
-      )
-      // Re-fetch brands after all claims settle
-      Promise.allSettled(claims).then(() => {
-        api.listBrands(uid)
-          .then((res) => setMyBrands((res as unknown as { brands: BrandSummary[] }).brands || []))
-          .catch(() => {})
-      })
-    } catch { /* localStorage unavailable */ }
-  }, [uid])
 
   // Fetch user's brands once UID is available
   useEffect(() => {
@@ -121,10 +173,45 @@ export default function LandingPage() {
       .catch(() => {})
   }, [uid])
 
+  const handleAction = async () => {
+    if (!isSignedIn) {
+      try {
+        await signIn()
+      } catch {
+        return // user closed popup
+      }
+    }
+    navigate('/onboard')
+  }
+
   const hasBrands = myBrands.length > 0
 
   return (
     <div style={{ minHeight: '100vh', background: A.bg }}>
+
+      {/* ── Header ── */}
+      <header style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        padding: '12px 24px', maxWidth: 960, margin: '0 auto',
+      }}>
+        <span style={{ fontSize: 18, fontWeight: 800, color: A.text, letterSpacing: -0.5 }}>
+          Amplifi
+        </span>
+        {isSignedIn && user ? (
+          <AccountDropdown user={user} onSignOut={signOut} />
+        ) : (
+          <button
+            onClick={signIn}
+            style={{
+              padding: '6px 16px', borderRadius: 8,
+              border: `1px solid ${A.border}`, background: 'transparent',
+              cursor: 'pointer', fontSize: 13, fontWeight: 500, color: A.text,
+            }}
+          >
+            Sign in
+          </button>
+        )}
+      </header>
 
       {/* ── Welcome-back banner (returning users only) ── */}
       {hasBrands && (
@@ -223,7 +310,7 @@ export default function LandingPage() {
 
         <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
           <button
-            onClick={() => navigate('/onboard')}
+            onClick={handleAction}
             style={{
               padding: hasBrands ? '12px 28px' : '14px 32px',
               borderRadius: 10,
@@ -564,10 +651,10 @@ export default function LandingPage() {
         }}>
           {hasBrands
             ? 'Each brand gets its own AI-powered content strategy and calendar.'
-            : 'No sign-up, no credit card. Describe your business and watch the magic.'}
+            : 'Sign in with Google, describe your business, and watch the magic.'}
         </p>
         <button
-          onClick={() => navigate('/onboard')}
+          onClick={handleAction}
           style={{
             padding: hasBrands ? '12px 32px' : '16px 40px',
             borderRadius: 10,

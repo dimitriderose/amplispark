@@ -1,31 +1,50 @@
-import { useState, useEffect } from 'react'
-import { onAuthStateChanged, type User } from 'firebase/auth'
-import { auth, ensureAnonymousAuth } from '../api/firebase'
+import { useState, useEffect, useCallback } from 'react'
+import {
+  auth,
+  signInWithGoogle,
+  signOutUser,
+  onAuthStateChanged,
+  type User,
+} from '../api/firebase'
 
-/**
- * React hook that manages Firebase Anonymous Auth.
- * On first mount it triggers anonymous sign-in (or restores a cached session).
- * Returns { uid, loading }.
- */
+export interface AuthUser {
+  displayName: string | null
+  photoURL: string | null
+  email: string | null
+}
+
 export function useAuth() {
   const [uid, setUid] = useState<string | null>(null)
+  const [user, setUser] = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Listen for auth state changes
-    const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
-      setUid(user?.uid ?? null)
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser: User | null) => {
+      if (firebaseUser) {
+        setUid(firebaseUser.uid)
+        setUser({
+          displayName: firebaseUser.displayName,
+          photoURL: firebaseUser.photoURL,
+          email: firebaseUser.email,
+        })
+      } else {
+        setUid(null)
+        setUser(null)
+      }
       setLoading(false)
     })
-
-    // Trigger anonymous auth
-    ensureAnonymousAuth().catch((err) => {
-      console.error('Anonymous auth failed:', err)
-      setLoading(false)
-    })
-
     return unsubscribe
   }, [])
 
-  return { uid, loading }
+  const signIn = useCallback(async () => {
+    await signInWithGoogle()
+  }, [])
+
+  const signOut = useCallback(async () => {
+    await signOutUser()
+  }, [])
+
+  const isSignedIn = uid !== null
+
+  return { uid, user, loading, isSignedIn, signIn, signOut }
 }
