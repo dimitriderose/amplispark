@@ -33,7 +33,9 @@ export default function NavBar() {
 
   const staticLinks = [
     { path: '/', label: 'Home' },
-    { path: '/onboard', label: 'Get Started' },
+    isSignedIn
+      ? { path: '/brands', label: 'My Brands' }
+      : { path: '/onboard', label: 'Get Started' },
   ]
 
   const isActive = (path: string) => location.pathname === path

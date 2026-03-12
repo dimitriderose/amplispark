@@ -1,16 +1,6 @@
-import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { A } from '../theme'
 import { useAuth } from '../hooks/useAuth'
-import { api } from '../api/client'
-
-interface BrandSummary {
-  brand_id: string
-  business_name?: string
-  industry?: string
-  analysis_status?: string
-  description?: string
-}
 
 const FEATURES = [
   {
@@ -91,16 +81,7 @@ const PREVIEW_DAYS = [
 
 export default function LandingPage() {
   const navigate = useNavigate()
-  const { uid, isSignedIn, signIn } = useAuth()
-  const [myBrands, setMyBrands] = useState<BrandSummary[]>([])
-
-  // Fetch user's brands once UID is available
-  useEffect(() => {
-    if (!uid) return
-    api.listBrands(uid)
-      .then((res) => setMyBrands((res as unknown as { brands: BrandSummary[] }).brands || []))
-      .catch(() => {})
-  }, [uid])
+  const { isSignedIn, signIn } = useAuth()
 
   const handleAction = async () => {
     if (!isSignedIn) {
@@ -110,57 +91,17 @@ export default function LandingPage() {
         return // user closed popup
       }
     }
-    navigate('/onboard')
+    navigate('/brands')
   }
-
-  const hasBrands = myBrands.length > 0
 
   return (
     <div style={{ minHeight: '100vh', background: A.bg }}>
-
-      {/* ── Welcome-back banner (returning users only) ── */}
-      {hasBrands && (
-        <div style={{
-          borderBottom: `1px solid ${A.border}`,
-          background: A.indigoLight,
-          padding: '10px 24px',
-        }}>
-          <div style={{
-            maxWidth: 860,
-            margin: '0 auto',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 12,
-          }}>
-            <span style={{ fontSize: 13, color: A.indigo, fontWeight: 500 }}>
-              Welcome back — pick up where you left off
-            </span>
-            <button
-              onClick={() => navigate(`/dashboard/${myBrands[0].brand_id}`)}
-              style={{
-                padding: '5px 14px',
-                borderRadius: 8,
-                border: 'none',
-                background: A.indigo,
-                color: 'white',
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              Open {myBrands[0].business_name || 'Dashboard'} →
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* ── Hero ─────────────────────────────────────────────── */}
       <section style={{
         maxWidth: 860,
         margin: '0 auto',
-        padding: hasBrands ? '48px 24px 48px' : '96px 24px 80px',
+        padding: '96px 24px 80px',
         textAlign: 'center',
       }}>
         {/* Badge */}
@@ -175,19 +116,19 @@ export default function LandingPage() {
           fontSize: 12,
           fontWeight: 600,
           color: A.indigo,
-          marginBottom: hasBrands ? 20 : 28,
+          marginBottom: 28,
           letterSpacing: 0.3,
         }}>
           ✨ Built for Google's Gemini API Developer Competition
         </div>
 
         <h1 style={{
-          fontSize: hasBrands ? 'clamp(28px, 5vw, 48px)' : 'clamp(36px, 6vw, 64px)',
+          fontSize: 'clamp(36px, 6vw, 64px)',
           fontWeight: 800,
           color: A.text,
           lineHeight: 1.08,
           letterSpacing: -1.5,
-          marginBottom: hasBrands ? 16 : 24,
+          marginBottom: 24,
         }}>
           Your entire week of content.
           <br />
@@ -200,135 +141,52 @@ export default function LandingPage() {
           </span>
         </h1>
 
-        {!hasBrands && (
-          <p style={{
-            fontSize: 18,
-            color: A.textSoft,
-            maxWidth: 520,
-            margin: '0 auto 40px',
-            lineHeight: 1.65,
-          }}>
-            Amplifi analyzes your brand, plans your strategy, and streams captions &amp; images
-            together in real time — powered by Gemini 2.5 Flash's interleaved multimodal output.
-          </p>
-        )}
+        <p style={{
+          fontSize: 18,
+          color: A.textSoft,
+          maxWidth: 520,
+          margin: '0 auto 40px',
+          lineHeight: 1.65,
+        }}>
+          Amplifi analyzes your brand, plans your strategy, and streams captions &amp; images
+          together in real time — powered by Gemini 2.5 Flash's interleaved multimodal output.
+        </p>
 
         <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
           <button
             onClick={handleAction}
             style={{
-              padding: hasBrands ? '12px 28px' : '14px 32px',
+              padding: '14px 32px',
               borderRadius: 10,
               border: 'none',
               cursor: 'pointer',
               background: `linear-gradient(135deg, ${A.indigo}, ${A.violet})`,
               color: 'white',
-              fontSize: hasBrands ? 14 : 16,
+              fontSize: 16,
               fontWeight: 600,
               boxShadow: `0 8px 32px ${A.indigo}40`,
             }}
           >
-            {hasBrands ? '+ New Brand' : 'Build My Brand Profile →'}
+            Build My Brand Profile →
           </button>
-          {!hasBrands && (
-            <button
-              onClick={() => {
-                document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })
-              }}
-              style={{
-                padding: '14px 24px',
-                borderRadius: 10,
-                cursor: 'pointer',
-                border: `1px solid ${A.border}`,
-                background: 'transparent',
-                color: A.textSoft,
-                fontSize: 15,
-              }}
-            >
-              See how it works ↓
-            </button>
-          )}
+          <button
+            onClick={() => {
+              document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })
+            }}
+            style={{
+              padding: '14px 24px',
+              borderRadius: 10,
+              cursor: 'pointer',
+              border: `1px solid ${A.border}`,
+              background: 'transparent',
+              color: A.textSoft,
+              fontSize: 15,
+            }}
+          >
+            See how it works ↓
+          </button>
         </div>
       </section>
-
-      {/* ── Your Brands (below hero for returning users) ── */}
-      {hasBrands && (
-        <section style={{
-          maxWidth: 860,
-          margin: '0 auto',
-          padding: '0 24px 48px',
-        }}>
-          <h3 style={{ fontSize: 14, fontWeight: 600, color: A.textSoft, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            Your Brands
-          </h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {myBrands.map((b) => (
-              <button
-                key={b.brand_id}
-                onClick={() => navigate(`/dashboard/${b.brand_id}`)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 12,
-                  padding: '14px 16px',
-                  borderRadius: 12,
-                  border: `1px solid ${A.border}`,
-                  background: A.surface,
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  width: '100%',
-                  transition: 'border-color 0.15s, box-shadow 0.15s',
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.borderColor = A.indigo + '50'
-                  e.currentTarget.style.boxShadow = `0 2px 12px ${A.indigo}15`
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.borderColor = A.border
-                  e.currentTarget.style.boxShadow = 'none'
-                }}
-              >
-                <div style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 10,
-                  background: `linear-gradient(135deg, ${A.indigo}, ${A.violet})`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'white',
-                  fontSize: 17,
-                  fontWeight: 700,
-                  flexShrink: 0,
-                }}>
-                  {(b.business_name || b.description || '?')[0].toUpperCase()}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: A.text }}>
-                    {b.business_name || b.description?.slice(0, 40) || 'Untitled Brand'}
-                  </div>
-                  {b.industry && (
-                    <div style={{ fontSize: 12, color: A.textMuted, marginTop: 2 }}>
-                      {b.industry}
-                    </div>
-                  )}
-                </div>
-                <span style={{
-                  fontSize: 11,
-                  fontWeight: 500,
-                  color: b.analysis_status === 'complete' ? A.emerald : A.amber,
-                  padding: '3px 10px',
-                  borderRadius: 10,
-                  background: (b.analysis_status === 'complete' ? A.emerald : A.amber) + '15',
-                }}>
-                  {b.analysis_status === 'complete' ? 'Ready' : b.analysis_status || 'Pending'}
-                </span>
-                <span style={{ color: A.textMuted, fontSize: 16 }}>&rarr;</span>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
 
       {/* ── Platform strip ───────────────────────────────────── */}
       <section style={{
@@ -541,38 +399,36 @@ export default function LandingPage() {
       {/* ── Final CTA ────────────────────────────────────────── */}
       <section style={{
         borderTop: `1px solid ${A.border}`,
-        padding: hasBrands ? '48px 24px' : '80px 24px',
+        padding: '80px 24px',
         textAlign: 'center',
       }}>
-        <h2 style={{ fontSize: hasBrands ? 24 : 32, fontWeight: 700, color: A.text, marginBottom: 16 }}>
-          {hasBrands ? 'Add another brand' : "Ready to see your brand's content?"}
+        <h2 style={{ fontSize: 32, fontWeight: 700, color: A.text, marginBottom: 16 }}>
+          Ready to see your brand's content?
         </h2>
         <p style={{
-          fontSize: hasBrands ? 14 : 16,
+          fontSize: 16,
           color: A.textSoft,
           marginBottom: 32,
           maxWidth: 400,
           margin: '0 auto 32px',
         }}>
-          {hasBrands
-            ? 'Each brand gets its own AI-powered content strategy and calendar.'
-            : 'Sign in with Google, describe your business, and watch the magic.'}
+          Sign in with Google, describe your business, and watch the magic.
         </p>
         <button
           onClick={handleAction}
           style={{
-            padding: hasBrands ? '12px 32px' : '16px 40px',
+            padding: '16px 40px',
             borderRadius: 10,
             border: 'none',
             cursor: 'pointer',
             background: `linear-gradient(135deg, ${A.indigo}, ${A.violet})`,
             color: 'white',
-            fontSize: hasBrands ? 15 : 17,
+            fontSize: 17,
             fontWeight: 700,
             boxShadow: `0 8px 40px ${A.indigo}50`,
           }}
         >
-          {hasBrands ? '+ New Brand' : 'Get Started Free →'}
+          Get Started Free →
         </button>
         <p style={{ fontSize: 12, color: A.textMuted, marginTop: 16 }}>
           Powered by Gemini 2.5 Flash · Google Cloud

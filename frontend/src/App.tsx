@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import NavBar from './components/NavBar'
 import LandingPage from './pages/LandingPage'
+import BrandsPage from './pages/BrandsPage'
 import OnboardPage from './pages/OnboardPage'
 import DashboardPage from './pages/DashboardPage'
 import GeneratePage from './pages/GeneratePage'
@@ -16,6 +17,7 @@ export default function App() {
       <NavBar />
       <Routes>
         <Route path="/" element={<LandingPage />} />
+        <Route path="/brands" element={<BrandsPage />} />
         <Route path="/onboard" element={<OnboardPage />} />
         <Route path="/dashboard/:brandId" element={<DashboardPage />} />
         <Route path="/edit/:brandId" element={<EditBrandPage />} />
