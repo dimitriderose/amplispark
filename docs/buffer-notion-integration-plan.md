@@ -1,5 +1,16 @@
 # Amplifi — Buffer + Notion Integrations
 
+## Implementation Status
+
+| Integration | Status | Notes |
+|---|---|---|
+| **Notion OAuth + Export** | **Shipped (v1.4)** | Full OAuth 2.0 flow, database selection, bulk export. See `backend/services/notion_client.py`, endpoints in `server.py`. |
+| **.ics Calendar Download** | **Shipped (v1.4)** | `GET /api/brands/{id}/plans/{pid}/calendar.ics` — download iCalendar file with all posts as events. |
+| **.ics Calendar Email** | **Shipped (v1.4)** | `POST /api/brands/{id}/plans/{pid}/calendar/email` — sends .ics via Resend with inline "Add to Calendar" prompt. |
+| **Buffer** | **Pending** | Buffer's new API is in closed beta — not accepting new developer applications. Design is ready below; will wire up once API access is granted. |
+
+---
+
 ## Context
 
 After generating and approving posts, users currently can only export via ZIP or clipboard copy. There's no way to push content to a scheduling tool or content calendar. Adding **Buffer** (for scheduling/publishing to social platforms) and **Notion** (for exporting a structured content calendar) gives users a seamless path from AI-generated content to actual publishing.
@@ -184,27 +195,27 @@ Full caption is also included as page body (paragraph blocks) for readability in
 
 ## Implementation Sequence
 
-### Phase 1: .ics Calendar — Download + Email (no external API keys needed)
-1. .ics generation helper in `server.py` (build VCALENDAR string from plan + posts)
-2. `GET .../calendar.ics` download endpoint + `downloadCalendar()` in `client.ts`
-3. Email client service (`email_client.py` — Resend) + `POST .../calendar/email` endpoint + `emailCalendar()` in `client.ts`
-4. "Download Calendar" + "Email Calendar" buttons in PostLibrary
+### Phase 1: .ics Calendar — Download + Email ✅ SHIPPED
+1. ~~.ics generation helper in `server.py` (build VCALENDAR string from plan + posts)~~
+2. ~~`GET .../calendar.ics` download endpoint + `downloadCalendar()` in `client.ts`~~
+3. ~~Email client service (`email_client.py` — Resend) + `POST .../calendar/email` endpoint + `emailCalendar()` in `client.ts`~~
+4. ~~"Download Calendar" + "Email Calendar" buttons in PostLibrary~~
 
-### Phase 2: Notion Integration (OAuth — fully buildable now)
-5. `backend/services/notion_client.py` — validate, search databases, create page
-6. Data model updates (`brand.py` — integrations field, `post.py` — publish_status)
-7. Notion OAuth endpoints: auth-url, callback, disconnect, databases, select-database
-8. Notion export endpoint: `POST .../export/notion`
-9. Frontend: Notion card in `IntegrationConnect.tsx`, render in DashboardPage
-10. Frontend: "Export to Notion" buttons on PostCard + bulk export in PostLibrary
+### Phase 2: Notion Integration (OAuth) ✅ SHIPPED
+5. ~~`backend/services/notion_client.py` — validate, search databases, create page~~
+6. ~~Data model updates (`brand.py` — integrations field, `post.py` — publish_status)~~
+7. ~~Notion OAuth endpoints: auth-url, callback, disconnect, databases, select-database~~
+8. ~~Notion export endpoint: `POST .../export/notion`~~
+9. ~~Frontend: Notion card in `IntegrationConnect.tsx`, render in DashboardPage~~
+10. ~~Frontend: "Export to Notion" buttons on PostCard + bulk export in PostLibrary~~
 
-### Phase 3: Buffer Integration (design now, wire up when API access granted)
+### Phase 3: Buffer Integration (pending API access)
 11. `backend/services/buffer_client.py` — validate token, get channels, create post
 12. Buffer endpoints: connect, disconnect, channels, publish
 13. Frontend: Buffer card in `IntegrationConnect.tsx` (token-paste)
 14. Frontend: "Send to Buffer" button on PostCard
 
-Phase 1 = standalone, ships immediately. Phase 2 = Notion OAuth is fully documented and available. Phase 3 = Buffer API is in public beta — design the code, wire up once we have API access.
+Phase 1 + Phase 2 = shipped in v1.4. Phase 3 = Buffer API is in closed beta — design is ready, will wire up once API access is granted.
 
 ---
 

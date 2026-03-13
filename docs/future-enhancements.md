@@ -4,19 +4,6 @@ Items identified during the Agent Quality Overhaul (Feb 2026) and Multi-Platform
 
 ---
 
-## High Priority
-
-### Audio / Sound Layer for Video
-- **Problem**: Veo generates silent video. TikTok, IG Reels, YT Shorts, FB Reels all penalize silent video in their algorithms.
-- **Options**:
-  - FFmpeg post-processing with royalty-free music library
-  - Veo audio capabilities (if available in future API versions)
-  - Integrate a music API (e.g., Epidemic Sound, Artlist)
-  - Generate "caption-style" text overlays on video frames
-- **Interim**: `audio_note` field tells user to add audio manually before publishing
-
----
-
 ## Medium Priority
 
 ### Mastodon Alt Text Pipeline
@@ -115,3 +102,6 @@ Items identified during the Agent Quality Overhaul (Feb 2026) and Multi-Platform
 
 ### Best Posting Times
 - **Shipped**: Each brief includes a `suggested_time` field derived from AI-researched best posting times per platform. Calendar cards display and sort by suggested time.
+
+### Audio / Sound Layer for Video
+- **Shipped**: Veo 3.1 generates video with audio natively — no post-processing or royalty-free music integration needed. Previously listed under High Priority when Veo generated silent video.
