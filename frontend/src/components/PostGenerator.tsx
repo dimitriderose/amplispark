@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import type React from 'react'
 import { A } from '../theme'
 import type { GenerationState } from '../hooks/usePostGeneration'
 import { useVideoGeneration } from '../hooks/useVideoGeneration'
@@ -19,6 +20,9 @@ interface Props {
   onRegenerate?: (instructions?: string) => void
   onVideoGenerated?: () => void
   byopRecommendation?: string
+  editMediaSlot?: React.ReactNode
+  editVideoSlot?: React.ReactNode
+  overrideImageUrl?: string | null
 }
 
 // RegenerateButton with optional instructions input
@@ -139,7 +143,7 @@ function CaptionOnlyBanner({ recommendation, onToggle }: { recommendation: strin
   )
 }
 
-export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, onVideoGenerated, byopRecommendation }: Props) {
+export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, onVideoGenerated, byopRecommendation, editMediaSlot, editVideoSlot, overrideImageUrl }: Props) {
   const [copied, setCopied] = useState(false)
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [editingCaption, setEditingCaption] = useState(false)
@@ -157,7 +161,8 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
   const captionRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  const { status, statusMessage, captionChunks, caption, hashtags, imageUrl, imageUrls, postId, error } = state
+  const { status, statusMessage, captionChunks, caption, hashtags, imageUrl: stateImageUrl, imageUrls, postId, error } = state
+  const imageUrl = overrideImageUrl || stateImageUrl
   const [carouselIndex, setCarouselIndex] = useState(0)
   const isCarousel = imageUrls.length > 1
 
@@ -465,6 +470,7 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
                 platform={dayBrief.platform}
                 caption={savedCaption}
                 imageUrl={imageUrl ?? undefined}
+                imageUrls={imageUrls.length > 1 ? imageUrls : undefined}
                 videoUrl={isVideoFirst ? (videoUrl ?? undefined) : undefined}
                 hashtagCount={hashtags.length}
               />
@@ -574,19 +580,7 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
                     loop
                     style={{ width: '100%', borderRadius: 8, marginTop: 4 }}
                   />
-                  <a
-                    href={videoUrl}
-                    download={`amplifi-video-${postId}.mp4`}
-                    style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 4,
-                      marginTop: 8, padding: '5px 12px', borderRadius: 6,
-                      border: `1px solid ${A.border}`, background: A.surfaceAlt,
-                      color: A.textSoft, fontSize: 11, textDecoration: 'none',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    ↓ Download Video
-                  </a>
+                  {editVideoSlot && <div style={{ marginTop: 10 }}>{editVideoSlot}</div>}
                 </div>
               ) : videoStatus === 'error' ? (
                 <div>
@@ -754,24 +748,6 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
                 </div>
               )}
             </div>
-            {/* Video download + audio note — below the video player */}
-            {isVideoFirst && videoUrl && (
-              <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <a
-                  href={videoUrl}
-                  download={`amplifi-video-${postId}.mp4`}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 4,
-                    padding: '5px 12px', borderRadius: 6,
-                    border: `1px solid ${A.border}`, background: A.surfaceAlt,
-                    color: A.textSoft, fontSize: 11, textDecoration: 'none',
-                    cursor: 'pointer', alignSelf: 'flex-start',
-                  }}
-                >
-                  ↓ Download Video
-                </a>
-              </div>
-            )}
             {isVideoFirst && state.audioNote && (
               <div style={{
                 padding: '8px 12px', borderRadius: 8, marginTop: 6,
@@ -780,6 +756,10 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
               }}>
                 🔊 {state.audioNote}
               </div>
+            )}
+            {/* Edit media slot — rendered directly below the media */}
+            {editMediaSlot && (
+              <div style={{ marginTop: 12 }}>{editMediaSlot}</div>
             )}
           </div>
         )}

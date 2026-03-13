@@ -35,7 +35,7 @@ def _get_model_and_aspect(
 
 
 def _build_prompt(caption: str, brand_profile: dict, platform: str,
-                   has_brand_refs: bool = False) -> str:
+                   has_brand_refs: bool = False, edit_prompt: str | None = None) -> str:
     brand_name = brand_profile.get("business_name", "")
     tone = brand_profile.get("tone", "professional and engaging")
     niche = brand_profile.get("industry", "")
@@ -43,9 +43,14 @@ def _build_prompt(caption: str, brand_profile: dict, platform: str,
     visual_style = brand_profile.get("visual_style", "")
     image_style_directive = brand_profile.get("image_style_directive", "")
 
-    parts = [
-        f"Create a dynamic, eye-catching social media video clip for {platform}.",
-    ]
+    if edit_prompt:
+        parts = [
+            f"Re-create this {platform}-optimized social media video clip with the following change: {edit_prompt}.",
+        ]
+    else:
+        parts = [
+            f"Create a dynamic, eye-catching {platform}-optimized social media video clip.",
+        ]
     if brand_name:
         parts.append(f"Brand: {brand_name}.")
     if niche:
@@ -88,6 +93,7 @@ async def generate_video_clip(
     platform: str,
     post_id: str,
     tier: str = "fast",
+    edit_prompt: str | None = None,
 ) -> dict:
     """Generate a video clip using Veo 3.1, upload to GCS, and return metadata.
 
@@ -113,7 +119,7 @@ async def generate_video_clip(
         mime = "image/png" if hero_image_bytes[:4] == b'\x89PNG' else "image/jpeg"
         hero_image = types.Image(image_bytes=hero_image_bytes, mime_type=mime)
 
-    prompt = _build_prompt(caption, brand_profile, platform, has_brand_refs=False)
+    prompt = _build_prompt(caption, brand_profile, platform, has_brand_refs=False, edit_prompt=edit_prompt)
 
     logger.info(
         "Starting Veo video generation: model=%s aspect=%s has_image=%s post_id=%s",

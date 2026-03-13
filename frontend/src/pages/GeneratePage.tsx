@@ -24,6 +24,7 @@ export default function GeneratePage() {
   // Local overrides for edited image URLs (post-edit)
   const [editedImageUrl, setEditedImageUrl] = useState<string | null>(null)
   const [editedEditCount, setEditedEditCount] = useState<number>(0)
+  const [editedVideoCount, setEditedVideoCount] = useState<number>(0)
 
   // Load the day brief so PostGenerator knows the platform (needed for video button eligibility)
   useEffect(() => {
@@ -41,7 +42,6 @@ export default function GeneratePage() {
   // Fetch brand to get image quality risk recommendation
   useEffect(() => {
     if (!brandId) return
-    interface BrandProfile { image_generation_risk?: 'high' | 'medium' | 'low'; byop_recommendation?: string }
     ;(api.getBrand(brandId) as Promise<any>)
       .then(res => {
         const brand = (res as any).brand_profile || res
@@ -153,6 +153,39 @@ export default function GeneratePage() {
           brandId={brandId}
           byopRecommendation={byopRecommendation}
           onVideoGenerated={() => setReviewKey(k => k + 1)}
+          overrideImageUrl={editedImageUrl}
+          editMediaSlot={
+            state.status === 'complete' && state.postId && brandId && (editedImageUrl || state.imageUrl || state.imageUrls.length > 0 || (state.videoUrl && dayBrief?.derivative_type === 'video_first'))
+              ? <EditMediaSection
+                  postId={state.postId}
+                  brandId={brandId}
+                  imageUrl={editedImageUrl || state.imageUrl || state.videoUrl!}
+                  imageUrls={state.imageUrls.length > 0 ? state.imageUrls : undefined}
+                  videoUrl={dayBrief?.derivative_type === 'video_first' ? state.videoUrl : undefined}
+                  derivativeType={dayBrief?.derivative_type}
+                  editCount={editedEditCount}
+                  onImageUpdated={(newUrl, newCount) => {
+                    setEditedImageUrl(newUrl)
+                    setEditedEditCount(newCount)
+                  }}
+                />
+              : undefined
+          }
+          editVideoSlot={
+            state.status === 'complete' && state.postId && brandId && state.videoUrl && dayBrief?.derivative_type !== 'video_first'
+              ? <EditMediaSection
+                  postId={state.postId}
+                  brandId={brandId}
+                  imageUrl={editedImageUrl || state.imageUrl || state.videoUrl}
+                  videoUrl={state.videoUrl}
+                  derivativeType="video_first"
+                  editCount={editedVideoCount}
+                  onImageUpdated={(_newUrl, newCount) => {
+                    setEditedVideoCount(newCount)
+                  }}
+                />
+              : undefined
+          }
         />
       </div>
 
@@ -188,25 +221,6 @@ export default function GeneratePage() {
               </button>
             </div>
           )}
-        </div>
-      )}
-
-      {/* AI Media Editor — shown once generation is complete and an image exists */}
-      {state.status === 'complete' && state.postId && brandId && (editedImageUrl || state.imageUrl) && (
-        <div style={{ marginTop: 16 }}>
-          <EditMediaSection
-            postId={state.postId}
-            brandId={brandId}
-            imageUrl={editedImageUrl || state.imageUrl!}
-            imageUrls={state.imageUrls.length > 0 ? state.imageUrls : undefined}
-            videoUrl={state.videoUrl}
-            derivativeType={dayBrief?.derivative_type}
-            editCount={editedEditCount}
-            onImageUpdated={(newUrl, newCount) => {
-              setEditedImageUrl(newUrl)
-              setEditedEditCount(newCount)
-            }}
-          />
         </div>
       )}
     </div>

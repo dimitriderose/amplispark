@@ -1134,8 +1134,50 @@ async def edit_post_media(brand_id: str, post_id: str, body: EditMediaBody):
     else:
         gcs_uri = post.get("image_gcs_uri") or (post.get("image_gcs_uris") or [None])[0]
 
+    # If no image URI found, check for video post and re-generate via Veo
     if not gcs_uri:
-        raise HTTPException(status_code=422, detail="No image found to edit on this post")
+        video_data = post.get("video") or {}
+        video_gcs_uri = video_data.get("video_gcs_uri")
+        if not video_gcs_uri:
+            raise HTTPException(status_code=422, detail="No image or video found to edit on this post")
+
+        from backend.agents.video_creator import generate_video_clip
+        caption = post.get("caption", "")
+        _platform = post.get("platform", "instagram")
+        tier = video_data.get("tier", "fast")
+
+        # Snapshot original video on first edit
+        if edit_count == 0 and not post.get("original_video_url"):
+            await firestore_client.update_post(brand_id, post_id, {"original_video_url": video_data.get("url")})
+
+        try:
+            result = await generate_video_clip(
+                hero_image_bytes=None,
+                caption=caption,
+                brand_profile=brand,
+                platform=_platform,
+                post_id=post_id,
+                tier=tier,
+                edit_prompt=body.edit_prompt,
+            )
+        except Exception as e:
+            import traceback
+            logger.error("edit_post_media video regen failed for post %s: %s\n%s", post_id, e, traceback.format_exc())
+            raise HTTPException(status_code=500, detail=f"Video re-generation failed: {e}")
+
+        new_edit_count = edit_count + 1
+        new_edit_history = post.get("edit_history", []) + [body.edit_prompt]
+        await firestore_client.update_post(brand_id, post_id, {
+            "video": {
+                **video_data,
+                "url": result["video_url"],
+                "video_gcs_uri": result["video_gcs_uri"],
+            },
+            "video_url": result["video_url"],
+            "edit_count": new_edit_count,
+            "edit_history": new_edit_history[-10:],
+        })
+        return {"image_url": result["video_url"], "edit_count": new_edit_count}
 
     # Snapshot original on first edit
     if edit_count == 0:
@@ -1148,7 +1190,14 @@ async def edit_post_media(brand_id: str, post_id: str, body: EditMediaBody):
 
     # Call image editor
     from backend.agents.image_editor import edit_image
+    from backend.platforms import get as get_platform
     gcs_bucket = os.environ.get("GCS_BUCKET_NAME", GCS_BUCKET_NAME)
+
+    # Resolve platform aspect ratio for the edit hint
+    _platform = post.get("platform", "instagram")
+    _derivative = post.get("derivative_type", "")
+    _DERIVATIVE_ASPECTS: dict[str, str] = {"story": "9:16", "pin": "2:3", "blog_snippet": "1.91:1"}
+    _aspect = _DERIVATIVE_ASPECTS.get(_derivative, get_platform(_platform).image_aspect)
 
     try:
         new_gcs_uri = await edit_image(
@@ -1158,9 +1207,12 @@ async def edit_post_media(brand_id: str, post_id: str, body: EditMediaBody):
             edit_history=edit_history,
             gcs_bucket=gcs_bucket,
             gemini_client=_live_client,
+            aspect_ratio=_aspect,
+            platform=_platform,
         )
     except Exception as e:
-        logger.error("edit_post_media failed for post %s: %s", post_id, e)
+        import traceback
+        logger.error("edit_post_media failed for post %s: %s\n%s", post_id, e, traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Image editing failed: {e}")
 
     # Update Firestore

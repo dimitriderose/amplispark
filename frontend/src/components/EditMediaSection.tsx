@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { A } from '../theme'
 import { api } from '../api/client'
 
@@ -26,12 +26,20 @@ export default function EditMediaSection({
   const [isExpanded, setIsExpanded] = useState(false)
   const [editPrompt, setEditPrompt] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [isAccepted, setIsAccepted] = useState(false)
   const [beforeUrl, setBeforeUrl] = useState('')
   const [currentUrl, setCurrentUrl] = useState(imageUrl)
   const [localEditCount, setLocalEditCount] = useState(editCount ?? 0)
   const [editHistory, setEditHistory] = useState<string[]>([])
   const [activeSlide, setActiveSlide] = useState(0)
   const referenceSlide = 0
+
+  // When switching slides, show the correct slide's image (reset edit state)
+  useEffect(() => {
+    const slideUrl = imageUrls ? imageUrls[activeSlide] : imageUrl
+    setCurrentUrl(slideUrl)
+    setBeforeUrl('')
+  }, [activeSlide]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const atLimit = localEditCount >= 8
 
@@ -49,12 +57,17 @@ export default function EditMediaSection({
       setLocalEditCount(result.edit_count)
       setEditHistory(h => [...h, editPrompt])
       setEditPrompt('')
-      onImageUpdated(result.image_url, result.edit_count)
+      setIsAccepted(false)  // new edit arrived — require Accept again
     } catch (err) {
       console.error('Edit failed', err)
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const handleAccept = () => {
+    onImageUpdated(currentUrl, localEditCount)
+    setIsAccepted(true)
   }
 
   const handleUndo = () => {
@@ -118,7 +131,7 @@ export default function EditMediaSection({
         }}
       >
         <span style={{ fontSize: 14, fontWeight: 600, color: A.text }}>
-          ✏️ {headerLabel}
+          ✨ {headerLabel}
         </span>
         <span style={{ fontSize: 12, color: A.textSoft }}>
           {isExpanded ? '▴' : '▸'}
@@ -132,29 +145,41 @@ export default function EditMediaSection({
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 120 }}>
                 <div style={{ fontSize: 10, color: A.textMuted, marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1 }}>Original</div>
-                <img
-                  src={beforeUrl}
-                  alt="Before"
-                  style={{ width: '100%', borderRadius: 8, border: `1px solid ${A.border}`, objectFit: 'cover', maxHeight: 200 }}
-                />
+                {videoUrl
+                  ? <video src={beforeUrl} controls muted loop style={{ width: '100%', borderRadius: 8, border: `1px solid ${A.border}`, maxHeight: 200 }} />
+                  : <img src={beforeUrl} alt="Before" style={{ width: '100%', borderRadius: 8, border: `1px solid ${A.border}`, objectFit: 'contain', maxHeight: 200, background: A.surfaceAlt }} />
+                }
               </div>
               <div style={{ flex: 1, minWidth: 120 }}>
-                <div style={{ fontSize: 10, color: A.indigo, marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1 }}>Edited</div>
-                <img
-                  src={currentUrl}
-                  alt="After"
-                  style={{ width: '100%', borderRadius: 8, border: `1px solid ${A.indigo}`, objectFit: 'cover', maxHeight: 200 }}
-                />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                  <span style={{ fontSize: 10, color: A.indigo, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1 }}>Edited</span>
+                  {isAccepted
+                    ? <span style={{ fontSize: 10, color: A.green || '#22c55e', fontWeight: 600 }}>✓ Accepted</span>
+                    : <button
+                        onClick={handleAccept}
+                        style={{
+                          padding: '2px 8px', borderRadius: 5, border: 'none',
+                          background: A.indigo, color: 'white',
+                          fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                        }}
+                      >
+                        ✓ Accept
+                      </button>
+                  }
+                </div>
+                {videoUrl
+                  ? <video src={currentUrl} controls muted loop style={{ width: '100%', borderRadius: 8, border: `1px solid ${A.indigo}`, maxHeight: 200 }} />
+                  : <img src={currentUrl} alt="After" style={{ width: '100%', borderRadius: 8, border: `1px solid ${A.indigo}`, objectFit: 'contain', maxHeight: 200, background: A.surfaceAlt }} />
+                }
               </div>
             </div>
           ) : (
             <div>
               <div style={{ fontSize: 10, color: A.textMuted, marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1 }}>Current</div>
-              <img
-                src={currentUrl}
-                alt="Current"
-                style={{ width: '100%', borderRadius: 8, border: `1px solid ${A.border}`, objectFit: 'cover', maxHeight: 200 }}
-              />
+              {videoUrl
+                ? <video src={videoUrl} controls muted loop style={{ width: '100%', borderRadius: 8, border: `1px solid ${A.border}`, maxHeight: 200 }} />
+                : <img src={currentUrl} alt="Current" style={{ width: '100%', borderRadius: 8, border: `1px solid ${A.border}`, objectFit: 'contain', maxHeight: 200, background: A.surfaceAlt }} />
+              }
             </div>
           )}
 

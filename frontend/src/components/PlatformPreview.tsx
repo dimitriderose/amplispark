@@ -37,7 +37,62 @@ function CharBar({ len, max }: { len: number; max: number }) {
   )
 }
 
-function LinkedInPreview({ caption, imageUrl, videoUrl }: { caption: string; imageUrl?: string; videoUrl?: string }) {
+function CarouselMedia({ imageUrl, imageUrls, videoUrl, aspectRatio }: {
+  imageUrl?: string
+  imageUrls?: string[]
+  videoUrl?: string
+  aspectRatio: string
+}) {
+  const slides = imageUrls && imageUrls.length > 1 ? imageUrls : imageUrl ? [imageUrl] : []
+  const isCarousel = slides.length > 1
+  const [idx, setIdx] = useState(0)
+  const active = slides[idx] ?? imageUrl
+
+  if (videoUrl) return (
+    <div style={{ width: '100%', aspectRatio, overflow: 'hidden' }}>
+      <video src={videoUrl} controls muted loop style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+    </div>
+  )
+  if (!active) return null
+  return (
+    <div style={{ width: '100%', aspectRatio, overflow: 'hidden', position: 'relative' }}>
+      <img src={active} alt={`Slide ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      {isCarousel && idx > 0 && (
+        <button onClick={() => setIdx(i => i - 1)} style={{
+          position: 'absolute', left: 6, top: '50%', transform: 'translateY(-50%)',
+          background: 'rgba(0,0,0,0.4)', border: 'none', borderRadius: '50%',
+          width: 24, height: 24, cursor: 'pointer', color: 'white', fontSize: 14,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>‹</button>
+      )}
+      {isCarousel && idx < slides.length - 1 && (
+        <button onClick={() => setIdx(i => i + 1)} style={{
+          position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
+          background: 'rgba(0,0,0,0.4)', border: 'none', borderRadius: '50%',
+          width: 24, height: 24, cursor: 'pointer', color: 'white', fontSize: 14,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>›</button>
+      )}
+      {isCarousel && (
+        <div style={{ position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 4 }}>
+          {slides.map((_, i) => (
+            <div key={i} onClick={() => setIdx(i)} style={{
+              width: 6, height: 6, borderRadius: '50%', cursor: 'pointer',
+              background: i === idx ? 'white' : 'rgba(255,255,255,0.5)',
+            }} />
+          ))}
+        </div>
+      )}
+      {isCarousel && (
+        <span style={{ position: 'absolute', top: 8, right: 8, fontSize: 10, color: 'white', background: 'rgba(0,0,0,0.4)', padding: '2px 6px', borderRadius: 10 }}>
+          {idx + 1}/{slides.length}
+        </span>
+      )}
+    </div>
+  )
+}
+
+function LinkedInPreview({ caption, imageUrl, imageUrls, videoUrl }: { caption: string; imageUrl?: string; imageUrls?: string[]; videoUrl?: string }) {
   const spec = getPlatform('linkedin')
   const foldAt = spec.foldAt!
   const max = spec.captionMax
@@ -60,13 +115,8 @@ function LinkedInPreview({ caption, imageUrl, videoUrl }: { caption: string; ima
       </div>
 
       {/* Media at LinkedIn's 1.91:1 ratio */}
-      {(imageUrl || videoUrl) && (
-        <div style={{ width: '100%', aspectRatio: '1.91 / 1', overflow: 'hidden' }}>
-          {videoUrl
-            ? <video src={videoUrl} controls muted loop style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            : <img src={imageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-          }
-        </div>
+      {(imageUrl || imageUrls?.length || videoUrl) && (
+        <CarouselMedia imageUrl={imageUrl} imageUrls={imageUrls} videoUrl={videoUrl} aspectRatio="1.91 / 1" />
       )}
 
       {/* Caption with fold simulation */}
@@ -169,20 +219,19 @@ function XPreview({ caption }: { caption: string }) {
   )
 }
 
-function InstagramPreview({ caption, imageUrl, videoUrl, structuredHashtagCount }: {
+function InstagramPreview({ caption, imageUrl, imageUrls, videoUrl, structuredHashtagCount }: {
   caption: string
   imageUrl?: string
+  imageUrls?: string[]
   videoUrl?: string
   structuredHashtagCount: number
 }) {
   const igSpec = getPlatform('instagram')
   const max = igSpec.captionMax
   const hashtagMax = igSpec.hashtagMax
-  // Count both inline # in caption and structured hashtags from the array
   const inlineCount = countInlineHashtags(caption)
   const totalHashtags = structuredHashtagCount + inlineCount
   const overHashtags = totalHashtags > hashtagMax
-
   return (
     <div style={{ borderRadius: 8, border: `1px solid ${A.border}`, overflow: 'hidden', background: A.surface }}>
       {/* Header */}
@@ -195,20 +244,15 @@ function InstagramPreview({ caption, imageUrl, videoUrl, structuredHashtagCount 
         <p style={{ fontSize: 11, fontWeight: 600, color: A.text, margin: 0 }}>Your Brand</p>
       </div>
 
-      {/* 1:1 square media crop */}
-      {videoUrl ? (
-        <div style={{ width: '100%', aspectRatio: '1 / 1', overflow: 'hidden' }}>
-          <video src={videoUrl} controls muted loop style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        </div>
-      ) : imageUrl ? (
-        <div style={{ width: '100%', aspectRatio: '1 / 1', overflow: 'hidden' }}>
-          <img src={imageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        </div>
-      ) : (
-        <div style={{ width: '100%', aspectRatio: '1 / 1', background: A.surfaceAlt, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <span style={{ fontSize: 24, opacity: 0.3 }}>🖼️</span>
-        </div>
-      )}
+      {/* 1:1 square media */}
+      {(imageUrl || imageUrls?.length || videoUrl)
+        ? <CarouselMedia imageUrl={imageUrl} imageUrls={imageUrls} videoUrl={videoUrl} aspectRatio="1 / 1" />
+        : (
+          <div style={{ width: '100%', aspectRatio: '1 / 1', background: A.surfaceAlt, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ fontSize: 24, opacity: 0.3 }}>🖼️</span>
+          </div>
+        )
+      }
 
       {/* Caption — Instagram shows ~125 chars then "more" */}
       <div style={{ padding: '8px 10px' }}>
@@ -230,20 +274,28 @@ function InstagramPreview({ caption, imageUrl, videoUrl, structuredHashtagCount 
   )
 }
 
-function GenericPreview({ caption, platform }: { caption: string; platform: string }) {
+function GenericPreview({ caption, platform, imageUrl, imageUrls, videoUrl }: {
+  caption: string; platform: string; imageUrl?: string; imageUrls?: string[]; videoUrl?: string
+}) {
   const max = getPlatform(platform).captionMax
   const overLimit = caption.length > max
+  const aspectRatio = platform === 'youtube_shorts' || platform === 'tiktok' ? '9 / 16' : '16 / 9'
 
   return (
-    <div style={{ borderRadius: 8, border: `1px solid ${A.border}`, padding: '10px 12px', background: A.surface }}>
-      <p style={{ fontSize: 11, color: A.text, margin: '0 0 8px', lineHeight: 1.5 }}>
-        {caption.slice(0, 100)}{caption.length > 100 ? '…' : ''}
-      </p>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <CharBar len={caption.length} max={max} />
-        <span style={{ fontSize: 10, color: overLimit ? A.coral : A.textMuted, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
-          {caption.length.toLocaleString()} / {max.toLocaleString()}
-        </span>
+    <div style={{ borderRadius: 8, border: `1px solid ${A.border}`, overflow: 'hidden', background: A.surface }}>
+      {(videoUrl || imageUrl || (imageUrls && imageUrls.length > 0)) && (
+        <CarouselMedia imageUrl={imageUrl} imageUrls={imageUrls} videoUrl={videoUrl} aspectRatio={aspectRatio} />
+      )}
+      <div style={{ padding: '8px 10px' }}>
+        <p style={{ fontSize: 11, color: A.text, margin: '0 0 8px', lineHeight: 1.5 }}>
+          {caption.slice(0, 100)}{caption.length > 100 ? '…' : ''}
+        </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <CharBar len={caption.length} max={max} />
+          <span style={{ fontSize: 10, color: overLimit ? A.coral : A.textMuted, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
+            {caption.length.toLocaleString()} / {max.toLocaleString()}
+          </span>
+        </div>
       </div>
     </div>
   )
@@ -253,11 +305,12 @@ interface PlatformPreviewProps {
   platform: string
   caption: string
   imageUrl?: string
+  imageUrls?: string[]
   videoUrl?: string
   hashtagCount: number
 }
 
-export default function PlatformPreview({ platform, caption, imageUrl, videoUrl, hashtagCount }: PlatformPreviewProps) {
+export default function PlatformPreview({ platform, caption, imageUrl, imageUrls, videoUrl, hashtagCount }: PlatformPreviewProps) {
   const normalized = normalizePlatform(platform)
 
   return (
@@ -265,13 +318,13 @@ export default function PlatformPreview({ platform, caption, imageUrl, videoUrl,
       <p style={{ fontSize: 11, fontWeight: 500, color: A.textSoft, margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: 0.5 }}>
         Platform Preview
       </p>
-      {normalized === 'linkedin' && <LinkedInPreview caption={caption} imageUrl={imageUrl} videoUrl={videoUrl} />}
+      {normalized === 'linkedin' && <LinkedInPreview caption={caption} imageUrl={imageUrl} imageUrls={imageUrls} videoUrl={videoUrl} />}
       {normalized === 'x' && <XPreview caption={caption} />}
       {normalized === 'instagram' && (
-        <InstagramPreview caption={caption} imageUrl={imageUrl} videoUrl={videoUrl} structuredHashtagCount={hashtagCount} />
+        <InstagramPreview caption={caption} imageUrl={imageUrl} imageUrls={imageUrls} videoUrl={videoUrl} structuredHashtagCount={hashtagCount} />
       )}
       {normalized !== 'linkedin' && normalized !== 'x' && normalized !== 'instagram' && (
-        <GenericPreview caption={caption} platform={normalized} />
+        <GenericPreview caption={caption} platform={normalized} imageUrl={imageUrl} imageUrls={imageUrls} videoUrl={videoUrl} />
       )}
     </div>
   )

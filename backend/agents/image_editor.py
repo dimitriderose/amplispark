@@ -1,10 +1,12 @@
-"""Image editor agent — conversational image editing via Gemini + Imagen 3 fallback."""
+"""Image editor agent — conversational image editing via Gemini Flash Image."""
 import asyncio
+import base64
+import io
 import logging
 import uuid
 
+from PIL import Image
 from google.cloud import storage
-from google import genai
 from google.genai import types
 
 logger = logging.getLogger(__name__)
@@ -17,10 +19,11 @@ async def edit_image(
     edit_history: list[str],
     gcs_bucket: str,
     gemini_client,
+    aspect_ratio: str = "1:1",
+    platform: str = "instagram",
 ) -> str:
-    """Edit an image using Gemini 2.0 Flash image generation.
+    """Edit an image using Gemini Flash Image generation.
     Returns new GCS URI of the edited image.
-    Falls back to Imagen 3 if primary fails.
     """
     # Download current image from GCS
     storage_client = storage.Client()
@@ -29,68 +32,52 @@ async def edit_image(
     bucket = storage_client.bucket(bucket_name)
     blob = bucket.blob(blob_path)
     image_bytes = blob.download_as_bytes()
-    mime_type = blob.content_type or "image/png"
 
-    # Build edit context from brand profile
-    brand_name = brand_profile.get("business_name") or brand_profile.get("name") or "the brand"
+    # Open image with PIL (SDK accepts PIL.Image directly)
+    pil_image = Image.open(io.BytesIO(image_bytes))
+
+    # Build edit instruction from brand profile
     tone = brand_profile.get("tone", "professional")
     visual_style = brand_profile.get("visual_style", "")
 
+    aspect_hint = f"Generate a {aspect_ratio} aspect ratio image.\n" if aspect_ratio != "1:1" else ""
+    edit_instruction = (
+        f"Edit this {platform}-optimized social media image.\n"
+        f"{aspect_hint}"
+        f"Edit instruction: {edit_prompt}.\n"
+        f"Maintain brand tone ({tone}) and visual style ({visual_style}). "
+        f"Keep brand identity consistent. Return only the edited image."
+    )
+
+    # Gemini Flash Image: contents is a list of [prompt_string, PIL.Image]
+    response = await asyncio.to_thread(
+        gemini_client.models.generate_content,
+        model="gemini-3.1-flash-image-preview",
+        contents=[edit_instruction, pil_image],
+        config=types.GenerateContentConfig(
+            response_modalities=["TEXT", "IMAGE"],
+        ),
+    )
+
+    # Extract image from response.parts (not response.candidates[0].content.parts)
     edited_bytes = None
     edited_mime = "image/png"
+    for part in response.parts:
+        if part.inline_data is not None:
+            edited_mime = part.inline_data.mime_type or "image/png"
+            edited_bytes = part.inline_data.data
+            break
 
-    try:
-        # Primary path — Gemini 2.0 Flash image generation
-        response = await asyncio.to_thread(
-            gemini_client.models.generate_content,
-            model="gemini-2.0-flash-preview-image-generation",
-            contents=[
-                types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
-                f"Edit this image: {edit_prompt}. Maintain brand tone ({tone}) and visual style ({visual_style}). Keep brand identity consistent. Return only the edited image."
-            ],
-            config=types.GenerateContentConfig(
-                response_modalities=["IMAGE", "TEXT"],
-                temperature=0.4,
-            ),
+    if not edited_bytes:
+        text_parts = [p.text for p in response.parts if p.text]
+        raise ValueError(
+            f"Gemini returned no image data. "
+            f"Response text: {' '.join(text_parts) or 'N/A'}"
         )
 
-        # Extract image from response
-        for part in response.candidates[0].content.parts:
-            if part.inline_data is not None:
-                edited_bytes = part.inline_data.data
-                edited_mime = part.inline_data.mime_type or "image/png"
-                break
-
-        if not edited_bytes:
-            raise ValueError("Gemini returned no image data")
-
-    except Exception as e:
-        logger.warning("image_editor: primary edit failed, trying fallback: %s", e)
-
-        # Fallback: Imagen 3 regeneration with edit hint
-        style_hint = f"{brand_profile.get('image_style_directive', visual_style)} Edit applied: {edit_prompt}"
-        if edit_history:
-            style_hint = (
-                f"Previous edits: {'; '.join(edit_history[-3:])}. "
-                f"New edit: {edit_prompt}. "
-                f"{brand_profile.get('image_style_directive', '')}"
-            )
-
-        img_response = await asyncio.to_thread(
-            gemini_client.models.generate_images,
-            model="imagen-3.0-generate-002",
-            prompt=style_hint[:1000],
-            config=types.GenerateImagesConfig(
-                number_of_images=1,
-                aspect_ratio="1:1",
-                safety_filter_level="block_only_high",
-            ),
-        )
-        if not img_response.generated_images:
-            raise ValueError("Imagen 3 fallback also failed to generate an image")
-        edited_bytes = img_response.generated_images[0].image.image_bytes
-        edited_mime = "image/png"
-        logger.info("image_editor: used Imagen 3 fallback for edit: %s", edit_prompt)
+    # Decode base64 if returned as string
+    if isinstance(edited_bytes, str):
+        edited_bytes = base64.b64decode(edited_bytes)
 
     # Save to GCS and return URI
     ext = "jpg" if "jpeg" in edited_mime else "png"
