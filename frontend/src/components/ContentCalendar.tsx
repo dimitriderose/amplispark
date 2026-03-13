@@ -65,9 +65,16 @@ interface Props {
   onGeneratePost?: (planId: string, dayIndex: number) => void
   onViewPost?: (planId: string, dayIndex: number, postId: string) => void
   onPhotoUploaded?: (dayIndex: number, photoUrl: string | null) => void
+  trendSummary?: {
+    researched_at: string
+    platform_trends: Record<string, any>
+    visual_trends: Record<string, any> | null
+    video_trends: Record<string, any> | null
+  }
+  onRefreshResearch?: () => void
 }
 
-export default function ContentCalendar({ plan, brandId, posts, onGeneratePost, onViewPost, onPhotoUploaded }: Props) {
+export default function ContentCalendar({ plan, brandId, posts, onGeneratePost, onViewPost, onPhotoUploaded, trendSummary, onRefreshResearch }: Props) {
   const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
   // Map posts by day_index+platform — use the latest post per (day, platform)
@@ -152,6 +159,43 @@ export default function ContentCalendar({ plan, brandId, posts, onGeneratePost, 
           )}
         </div>
       </div>
+
+      {/* Trend Research Banner */}
+      {trendSummary && (
+        <div style={{ marginBottom: 12, padding: '10px 14px', borderRadius: 8, background: '#f8f9ff', border: '1px solid #e0e4f0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <span>📊</span>
+            <span style={{ fontWeight: 600, fontSize: 13 }}>Trend Research</span>
+            <span style={{ fontSize: 11, color: '#888', marginLeft: 4 }}>
+              {new Date(trendSummary.researched_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+            </span>
+            {onRefreshResearch && (
+              <button onClick={onRefreshResearch} title="Refresh trend research" style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: 14 }}>↻ Refresh</button>
+            )}
+          </div>
+          {trendSummary.platform_trends && Object.keys(trendSummary.platform_trends).length > 0 && (
+            <div style={{ fontSize: 11, color: '#555', marginBottom: 3 }}>
+              <strong>Captions:</strong>{' '}
+              {Object.values(trendSummary.platform_trends)
+                .flatMap((t: any) => t?.trending_hooks?.slice(0, 2) ?? [])
+                .slice(0, 4)
+                .join(' · ')}
+            </div>
+          )}
+          {trendSummary.visual_trends && (
+            <div style={{ fontSize: 11, color: '#555', marginBottom: 3 }}>
+              <strong>Visuals:</strong>{' '}
+              {[...(trendSummary.visual_trends.trending_styles?.slice(0, 2) ?? []), trendSummary.visual_trends.format_performance].filter(Boolean).join(' · ').slice(0, 120)}
+            </div>
+          )}
+          {trendSummary.video_trends && (
+            <div style={{ fontSize: 11, color: '#555' }}>
+              <strong>Video:</strong>{' '}
+              {[...(trendSummary.video_trends.trending_formats?.slice(0, 2) ?? []), trendSummary.video_trends.optimal_lengths].filter(Boolean).join(' · ').slice(0, 120)}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Day-column grid */}
       <div style={{ display: 'grid', gridTemplateColumns: `repeat(${numDays}, 1fr)`, gap: 8 }}>

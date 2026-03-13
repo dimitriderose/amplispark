@@ -5,6 +5,7 @@ import { usePostGeneration } from '../hooks/usePostGeneration'
 import { api } from '../api/client'
 import PostGenerator from '../components/PostGenerator'
 import ReviewPanel from '../components/ReviewPanel'
+import EditMediaSection from '../components/EditMediaSection'
 
 export default function GeneratePage() {
   const { planId, dayIndex } = useParams<{ planId: string; dayIndex: string }>()
@@ -20,6 +21,9 @@ export default function GeneratePage() {
   const [byopRecommendation, setByopRecommendation] = useState<string | undefined>(undefined)
   const [reviewKey, setReviewKey] = useState(0)
   const hasRegenerated = useRef(false)
+  // Local overrides for edited image URLs (post-edit)
+  const [editedImageUrl, setEditedImageUrl] = useState<string | null>(null)
+  const [editedEditCount, setEditedEditCount] = useState<number>(0)
 
   // Load the day brief so PostGenerator knows the platform (needed for video button eligibility)
   useEffect(() => {
@@ -38,10 +42,11 @@ export default function GeneratePage() {
   useEffect(() => {
     if (!brandId) return
     interface BrandProfile { image_generation_risk?: 'high' | 'medium' | 'low'; byop_recommendation?: string }
-    ;(api.getBrand(brandId) as Promise<BrandProfile>)
+    ;(api.getBrand(brandId) as Promise<any>)
       .then(res => {
-        if (res.image_generation_risk === 'high') {
-          const rec = res.byop_recommendation
+        const brand = (res as any).brand_profile || res
+        if (brand.image_generation_risk === 'high') {
+          const rec = brand.byop_recommendation
           setByopRecommendation(
             typeof rec === 'string' && rec.trim().length > 0 ? rec : undefined
           )
@@ -183,6 +188,25 @@ export default function GeneratePage() {
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* AI Media Editor — shown once generation is complete and an image exists */}
+      {state.status === 'complete' && state.postId && brandId && (editedImageUrl || state.imageUrl) && (
+        <div style={{ marginTop: 16 }}>
+          <EditMediaSection
+            postId={state.postId}
+            brandId={brandId}
+            imageUrl={editedImageUrl || state.imageUrl!}
+            imageUrls={state.imageUrls.length > 0 ? state.imageUrls : undefined}
+            videoUrl={state.videoUrl}
+            derivativeType={dayBrief?.derivative_type}
+            editCount={editedEditCount}
+            onImageUpdated={(newUrl, newCount) => {
+              setEditedImageUrl(newUrl)
+              setEditedEditCount(newCount)
+            }}
+          />
         </div>
       )}
     </div>

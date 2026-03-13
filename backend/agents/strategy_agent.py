@@ -276,6 +276,122 @@ async def _research_industry_hooks(industry: str, platforms: list[str]) -> str:
         return ""
 
 
+async def _research_visual_trends(platform: str, industry: str) -> dict | None:
+    """Fetch current visual/image style trends via Google Search grounding.
+
+    Results are cached in Firestore for 7 days.
+    Returns None if research fails — callers treat it as optional enhancement.
+    """
+    # Check cache first
+    try:
+        cached = await firestore_client.get_platform_trends(f"visual_{platform}", industry)
+        if cached:
+            logger.info("Visual trends cache hit: %s / %s", platform, industry)
+            return cached
+    except Exception as e:
+        logger.warning("Visual trend cache read error: %s", e)
+
+    # Fetch from Gemini with Google Search grounding
+    try:
+        month_year = datetime.now().strftime('%B %Y')
+        prompt = (
+            f"Research what image styles and visual content formats are currently driving the\n"
+            f"highest engagement for {industry} brands on {platform} in {month_year}.\n"
+            "- What image styles perform best? (bold graphics, lifestyle photography, text overlays, minimal, etc.)\n"
+            "- Single image vs carousel vs infographic — which gets more reach right now?\n"
+            "- Trending composition patterns (close-ups, split screen, before/after, etc.)\n"
+            "- Color trends or aesthetic shifts specific to this industry on this platform\n\n"
+            "Return ONLY a valid JSON object with these keys:\n"
+            '{"trending_styles": [...], "format_performance": "...", "composition_tips": [...], "color_trends": "..."}'
+        )
+        response = await asyncio.to_thread(
+            client.models.generate_content,
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                tools=[types.Tool(google_search=types.GoogleSearch())],
+                temperature=0.2,
+            ),
+        )
+        raw = response.text.strip()
+        # Strip markdown fences if present
+        if raw.startswith("```"):
+            parts = raw.split("```")
+            raw = parts[1] if len(parts) > 1 else raw
+            if raw.startswith("json"):
+                raw = raw[4:]
+        result = json.loads(raw.strip())
+
+        # Save to cache (best-effort)
+        try:
+            await firestore_client.save_platform_trends(f"visual_{platform}", industry, result)
+        except Exception as ce:
+            logger.warning("Visual trend cache write error: %s", ce)
+
+        return result
+    except Exception as e:
+        logger.warning("Visual trend research failed (%s/%s): %s", platform, industry, e)
+        return None
+
+
+async def _research_video_trends(platform: str, industry: str) -> dict | None:
+    """Fetch current short-form video trend patterns via Google Search grounding.
+
+    Results are cached in Firestore for 7 days.
+    Returns None if research fails — callers treat it as optional enhancement.
+    """
+    # Check cache first
+    try:
+        cached = await firestore_client.get_platform_trends(f"video_{platform}", industry)
+        if cached:
+            logger.info("Video trends cache hit: %s / %s", platform, industry)
+            return cached
+    except Exception as e:
+        logger.warning("Video trend cache read error: %s", e)
+
+    # Fetch from Gemini with Google Search grounding
+    try:
+        month_year = datetime.now().strftime('%B %Y')
+        prompt = (
+            f"Research what short-form video formats and hook patterns are driving the highest\n"
+            f"engagement for {industry} brands on {platform} in {month_year}.\n"
+            "- What video formats are trending? (myth-bust reveal, talking head, b-roll montage, text-on-screen, etc.)\n"
+            "- Optimal video lengths currently performing best (in seconds)\n"
+            "- Hook patterns that drive 3-second retention (opening question, bold statement, visual hook, etc.)\n"
+            "- Audio trends (voiceover, trending sounds, silence + captions, etc.)\n\n"
+            "Return ONLY a valid JSON object with these keys:\n"
+            '{"trending_formats": [...], "optimal_lengths": "...", "hook_patterns": [...], "audio_notes": "..."}'
+        )
+        response = await asyncio.to_thread(
+            client.models.generate_content,
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                tools=[types.Tool(google_search=types.GoogleSearch())],
+                temperature=0.2,
+            ),
+        )
+        raw = response.text.strip()
+        # Strip markdown fences if present
+        if raw.startswith("```"):
+            parts = raw.split("```")
+            raw = parts[1] if len(parts) > 1 else raw
+            if raw.startswith("json"):
+                raw = raw[4:]
+        result = json.loads(raw.strip())
+
+        # Save to cache (best-effort)
+        try:
+            await firestore_client.save_platform_trends(f"video_{platform}", industry, result)
+        except Exception as ce:
+            logger.warning("Video trend cache write error: %s", ce)
+
+        return result
+    except Exception as e:
+        logger.warning("Video trend research failed (%s/%s): %s", platform, industry, e)
+        return None
+
+
 # ── Format-aware planning notes ───────────────────────────────────────────────
 
 _FORMAT_GUIDE = """PLATFORM FORMAT GUIDANCE (match content format to what works on each platform):
@@ -367,7 +483,7 @@ async def run_strategy(
     num_days: int = 7,
     business_events: str | None = None,
     platforms: list[str] | None = None,
-) -> list[dict]:
+) -> tuple[list[dict], dict]:
     """Run the Strategy Agent to generate a multi-day content plan.
 
     Args:
@@ -378,7 +494,7 @@ async def run_strategy(
         platforms: Optional list of platform keys. If None, AI recommends platforms.
 
     Returns:
-        List of day brief dicts, each describing one day's content.
+        Tuple of (list of day brief dicts, trend_summary dict).
     """
     industry = brand_profile.get("industry", "")
     all_platforms = platform_keys()
@@ -410,12 +526,23 @@ async def run_strategy(
 
     # ── Phase 0b: Fetch trends + industry hooks + posting frequency ────────
     trend_platforms = platforms[:5]  # Limit to 5 to avoid rate limits
+    primary_platform = trend_platforms[0] if trend_platforms else "instagram"
     trend_results = await asyncio.gather(
         *[_research_platform_trends(p, industry) for p in trend_platforms],
         _research_industry_hooks(industry, platforms),
         _research_posting_frequency(brand_profile, platforms),
+        _research_visual_trends(primary_platform, industry),
+        _research_video_trends(primary_platform, industry),
         return_exceptions=True,
     )
+    # Unpack visual and video from the end (added last)
+    video_result_raw = trend_results[-1]
+    visual_result_raw = trend_results[-2]
+    trend_results = trend_results[:-2]  # strip them before existing unpacking
+
+    visual_trends: dict | None = visual_result_raw if isinstance(visual_result_raw, dict) else None
+    video_trends: dict | None = video_result_raw if isinstance(video_result_raw, dict) else None
+
     # Last two results: hook research, then posting frequency
     freq_result_raw = trend_results[-1]
     freq_result: dict[str, dict] = (
@@ -452,6 +579,32 @@ async def run_strategy(
             f"\nINDUSTRY HOOK RESEARCH ({industry}):\n{hook_research}\n"
             "Use these hook patterns as inspiration for caption_hook values. "
             "Adapt them to be specific to this brand, not generic.\n"
+        )
+
+    visual_research_block = ""
+    if visual_trends:
+        styles = ", ".join(str(s) for s in visual_trends.get("trending_styles", [])[:4])
+        fmt = str(visual_trends.get("format_performance", ""))[:200]
+        tips = "; ".join(str(t) for t in visual_trends.get("composition_tips", [])[:3])
+        visual_research_block = (
+            f"\nVISUAL RESEARCH ({primary_platform.upper()}, {industry}):\n"
+            f"- Trending styles: {styles}\n"
+            f"- Format performance: {fmt}\n"
+            f"- Composition tips: {tips}\n"
+            "Use these findings to write specific image_prompt values — not generic 'professional image about X.'\n"
+        )
+
+    video_research_block = ""
+    if video_trends:
+        fmts = ", ".join(str(f) for f in video_trends.get("trending_formats", [])[:4])
+        lengths = str(video_trends.get("optimal_lengths", ""))[:200]
+        hooks = "; ".join(str(h) for h in video_trends.get("hook_patterns", [])[:3])
+        video_research_block = (
+            f"\nVIDEO RESEARCH ({primary_platform.upper()}, {industry}):\n"
+            f"- Trending formats: {fmts}\n"
+            f"- Optimal lengths: {lengths}\n"
+            f"- Hook patterns: {hooks}\n"
+            "For posts with derivative_type 'video_first', use these patterns in caption_hook and image_prompt.\n"
         )
 
     # ── Compute per-platform brief counts from researched frequency ──────────
@@ -599,7 +752,7 @@ The brand publishes on {num_platforms} platform(s): {platform_list}.
 
 BRAND PROFILE:
 {curated_profile}
-{platform_rec_block}{trends_context}{hook_research_block}
+{platform_rec_block}{trends_context}{hook_research_block}{visual_research_block}{video_research_block}
 BUSINESS_EVENTS_THIS_WEEK: {business_events or "None provided — generate thematic pillars based on brand profile and current season/timing."}
 
 Generate exactly {total_briefs} day briefs across {num_days} days and {num_platforms} platforms.
@@ -743,11 +896,17 @@ Return ONLY a valid JSON array of {total_briefs} objects. No markdown, no extra 
 
         # Platform concentration no longer needed — frequency research handles distribution
 
-        return validated
+        trend_summary = {
+            "researched_at": datetime.now().isoformat(),
+            "platform_trends": platform_trends_map,
+            "visual_trends": visual_trends,
+            "video_trends": video_trends,
+        }
+        return validated, trend_summary
 
     except Exception as e:
         logger.error(f"Strategy agent failed for brand {brand_id}: {e}")
-        return _fallback_plan(num_days, brand_profile, platforms)
+        return _fallback_plan(num_days, brand_profile, platforms), {}
 
 
 def _normalize_day(

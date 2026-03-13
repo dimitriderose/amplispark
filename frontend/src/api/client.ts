@@ -173,4 +173,28 @@ export const api = {
       `/api/brands/${brandId}/plans/${planId}/export/notion`,
       { method: 'POST' },
     ),
+
+  editPostMedia: (brandId: string, postId: string, body: { edit_prompt: string; slide_index?: number; target?: string }) =>
+    fetch(`/api/brands/${brandId}/posts/${postId}/edit-media`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then(r => {
+      if (!r.ok) return r.json().then(e => Promise.reject(new Error(e?.detail || 'Edit failed')))
+      return r.json()
+    }),
+
+  resetPostMedia: (brandId: string, postId: string, target?: string) =>
+    fetch(`/api/brands/${brandId}/posts/${postId}/edit-media/reset${target ? `?target=${target}` : ''}`, {
+      method: 'POST',
+    }).then(r => {
+      if (!r.ok) return r.json().then(e => Promise.reject(new Error(e?.detail || 'Reset failed')))
+      return r.json()
+    }),
+
+  refreshPlanResearch: (brandId: string, planId: string) =>
+    fetch(`/api/brands/${brandId}/plans/${planId}/refresh-research`, { method: 'POST' }).then(r => {
+      if (!r.ok) return r.json().then(e => Promise.reject(new Error(e?.detail || 'Refresh failed')))
+      return r.json()
+    }),
 }

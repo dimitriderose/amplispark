@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { A } from '../theme'
+import { api } from '../api/client'
 import { useBrandProfile } from '../hooks/useBrandProfile'
 import { useContentPlan } from '../hooks/useContentPlan'
 import { usePostLibrary } from '../hooks/usePostLibrary'
@@ -32,6 +33,21 @@ export default function DashboardPage() {
   const { posts: calendarPosts } = usePostLibrary(brandId ?? '', plan?.plan_id)
   const [activeTab, setActiveTab] = useState<Tab>('calendar')
   const [postsSubTab, setPostsSubTab] = useState<'weekly' | 'history'>('weekly')
+  const [trendSummaryOverride, setTrendSummaryOverride] = useState<any | null>(null)
+
+  const handleRefreshResearch = async () => {
+    if (!brandId || !plan?.plan_id) return
+    try {
+      const result = await api.refreshPlanResearch(brandId, plan.plan_id) as any
+      if (result?.trend_summary) {
+        setTrendSummaryOverride(result.trend_summary)
+      }
+    } catch (err) {
+      // Silently fail — research is optional enhancement
+    }
+  }
+
+  const activeTrendSummary = trendSummaryOverride ?? plan?.trend_summary
 
   // H-8: Store planId in sessionStorage so NavBar can include it in the Export link.
   useEffect(() => {
@@ -227,6 +243,8 @@ export default function DashboardPage() {
               onPhotoUploaded={(dayIndex, photoUrl) =>
                 setDayCustomPhoto(plan.plan_id, dayIndex, photoUrl)
               }
+              trendSummary={activeTrendSummary}
+              onRefreshResearch={handleRefreshResearch}
             />
           </div>
         ) : (

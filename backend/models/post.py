@@ -30,6 +30,9 @@ class Post(BaseModel):
     publish_status: Optional[dict] = None  # { "notion": { status, page_id, ... } }
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    original_image_url: Optional[str] = None   # snapshot before first edit (for reset)
+    edit_count: int = 0                         # number of edits applied to current image
+    thumbnail_url: Optional[str] = None        # custom thumbnail for video posts
 
 class VideoJob(BaseModel):
     job_id: str

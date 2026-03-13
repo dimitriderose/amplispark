@@ -30,7 +30,7 @@ from google import genai as _genai
 from google.genai import types as _gtypes
 from backend.config import GOOGLE_API_KEY, GEMINI_MODEL
 from backend.agents.brand_analyst import run_brand_analysis
-from backend.agents.strategy_agent import run_strategy
+from backend.agents.strategy_agent import run_strategy, _research_platform_trends, _research_visual_trends, _research_video_trends
 from backend.agents.voice_coach import build_coaching_prompt
 
 _live_client = _genai.Client(api_key=GOOGLE_API_KEY)
@@ -307,6 +307,11 @@ async def _refresh_signed_urls(post: dict) -> dict:
                 urls[i] = await get_signed_url(uri)
         except Exception:
             pass
+    if post.get("thumbnail_gcs_uri"):
+        try:
+            post["thumbnail_url"] = await get_signed_url(post["thumbnail_gcs_uri"])
+        except Exception:
+            pass
     return post
 
 
@@ -568,7 +573,7 @@ async def create_plan(brand_id: str, body: CreatePlanBody = Body(CreatePlanBody(
         # else: None → Strategy Agent uses AI recommendation (existing behavior)
 
     try:
-        days = await run_strategy(brand_id, brand, num_days, business_events=body.business_events, platforms=platforms)
+        days, trend_summary = await run_strategy(brand_id, brand, num_days, business_events=body.business_events, platforms=platforms)
     except Exception as e:
         logger.error(f"Strategy agent error for brand {brand_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -579,6 +584,7 @@ async def create_plan(brand_id: str, body: CreatePlanBody = Body(CreatePlanBody(
         "status": "complete",
         "days": days,
         "business_events": body.business_events,
+        "trend_summary": trend_summary,
     }
 
     try:
@@ -587,7 +593,7 @@ async def create_plan(brand_id: str, body: CreatePlanBody = Body(CreatePlanBody(
         logger.error(f"Failed to persist plan for brand {brand_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-    return {"plan_id": plan_id, "status": "complete", "days": days}
+    return {"plan_id": plan_id, "status": "complete", "days": days, "trend_summary": trend_summary}
 
 
 @app.get("/api/brands/{brand_id}/plans/{plan_id}")
@@ -597,6 +603,59 @@ async def get_plan(brand_id: str, plan_id: str):
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")
     return {"plan_profile": plan}
+
+
+@app.post("/api/brands/{brand_id}/plans/{plan_id}/refresh-research")
+async def refresh_plan_research(brand_id: str, plan_id: str):
+    """Re-run trend research for a plan and update its trend_summary in Firestore."""
+    brand = await firestore_client.get_brand(brand_id)
+    if not brand:
+        raise HTTPException(status_code=404, detail="Brand not found")
+    plan = await firestore_client.get_plan(plan_id, brand_id)
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+
+    industry = brand.get("industry", "")
+    stored_platforms = brand.get("selected_platforms", [])
+    platforms = stored_platforms if stored_platforms else ["instagram", "linkedin"]
+    primary_platform = platforms[0] if platforms else "instagram"
+
+    # Re-run all three research tracks in parallel (bypasses cache by using fresh calls)
+    # Clear cache for these keys first so research is truly fresh
+    for p in platforms[:5]:
+        try:
+            await firestore_client.save_platform_trends(p, industry, {})
+        except Exception:
+            pass
+    try:
+        await firestore_client.save_platform_trends(f"visual_{primary_platform}", industry, {})
+        await firestore_client.save_platform_trends(f"video_{primary_platform}", industry, {})
+    except Exception:
+        pass
+
+    platform_trends_results, visual_result, video_result = await asyncio.gather(
+        asyncio.gather(*[_research_platform_trends(p, industry) for p in platforms[:5]], return_exceptions=True),
+        _research_visual_trends(primary_platform, industry),
+        _research_video_trends(primary_platform, industry),
+        return_exceptions=True,
+    )
+
+    platform_trends_map = {}
+    if isinstance(platform_trends_results, (list, tuple)):
+        for p, r in zip(platforms[:5], platform_trends_results):
+            if isinstance(r, dict):
+                platform_trends_map[p] = r
+
+    trend_summary = {
+        "researched_at": datetime.utcnow().isoformat(),
+        "platform_trends": platform_trends_map,
+        "visual_trends": visual_result if isinstance(visual_result, dict) else None,
+        "video_trends": video_result if isinstance(video_result, dict) else None,
+    }
+
+    await firestore_client.update_plan(brand_id, plan_id, {"trend_summary": trend_summary})
+
+    return {"trend_summary": trend_summary}
 
 
 @app.put("/api/brands/{brand_id}/plans/{plan_id}/days/{day_index}")
@@ -791,6 +850,7 @@ async def stream_generate(
         final_hashtags: list = []
         final_image_url = None
         final_image_gcs_uri = None
+        gate_review = None
 
         try:
             # Heartbeat: sends "Still working..." every 15s if no events flowed
@@ -965,6 +1025,12 @@ class PatchPostBody(_PydanticBaseModel):
     hashtags: list[str] | None = None
 
 
+class EditMediaBody(_PydanticBaseModel):
+    edit_prompt: str
+    slide_index: Optional[int] = None   # for carousel posts; None = main image
+    target: Optional[str] = None        # "thumbnail" for video thumbnail editing
+
+
 @app.patch("/api/brands/{brand_id}/posts/{post_id}")
 async def patch_post_endpoint(brand_id: str, post_id: str, data: PatchPostBody):
     """Patch individual post fields (caption, hashtags) for inline editing."""
@@ -1038,6 +1104,118 @@ async def approve_post_endpoint(brand_id: str, post_id: str):
     await firestore_client.update_post(brand_id, post_id, {"status": "approved"})
     return {"status": "approved", "post_id": post_id}
 
+
+@app.post("/api/brands/{brand_id}/posts/{post_id}/edit-media")
+async def edit_post_media(brand_id: str, post_id: str, body: EditMediaBody):
+    """Apply a conversational edit to a post's image using AI."""
+    brand = await firestore_client.get_brand(brand_id)
+    if not brand:
+        raise HTTPException(status_code=404, detail="Brand not found")
+
+    post = await firestore_client.get_post(brand_id, post_id)
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+
+    # Enforce 8-edit cap per image
+    edit_count = post.get("edit_count", 0)
+    if edit_count >= 8:
+        raise HTTPException(status_code=422, detail="Edit limit reached (8 per image). Reset to start fresh.")
+
+    # Determine which GCS URI to edit
+    gcs_uri: str | None = None
+    if body.target == "thumbnail":
+        gcs_uri = post.get("thumbnail_gcs_uri")
+        if not gcs_uri:
+            raise HTTPException(status_code=422, detail="No editable thumbnail GCS URI found on this post")
+    elif body.slide_index is not None:
+        image_uris = post.get("image_gcs_uris", [])
+        if body.slide_index < len(image_uris):
+            gcs_uri = image_uris[body.slide_index]
+    else:
+        gcs_uri = post.get("image_gcs_uri") or (post.get("image_gcs_uris") or [None])[0]
+
+    if not gcs_uri:
+        raise HTTPException(status_code=422, detail="No image found to edit on this post")
+
+    # Snapshot original on first edit
+    if edit_count == 0:
+        original_key = "original_thumbnail_gcs_uri" if body.target == "thumbnail" else "original_image_gcs_uri"
+        if not post.get(original_key):
+            await firestore_client.update_post(brand_id, post_id, {original_key: gcs_uri})
+
+    # Get edit history for context
+    edit_history = post.get("edit_history", [])
+
+    # Call image editor
+    from backend.agents.image_editor import edit_image
+    gcs_bucket = os.environ.get("GCS_BUCKET_NAME", GCS_BUCKET_NAME)
+
+    try:
+        new_gcs_uri = await edit_image(
+            image_gcs_uri=gcs_uri,
+            edit_prompt=body.edit_prompt,
+            brand_profile=brand,
+            edit_history=edit_history,
+            gcs_bucket=gcs_bucket,
+            gemini_client=_live_client,
+        )
+    except Exception as e:
+        logger.error("edit_post_media failed for post %s: %s", post_id, e)
+        raise HTTPException(status_code=500, detail=f"Image editing failed: {e}")
+
+    # Update Firestore
+    new_edit_count = edit_count + 1
+    new_edit_history = edit_history + [body.edit_prompt]
+    update_data: dict = {
+        "edit_count": new_edit_count,
+        "edit_history": new_edit_history[-10:],  # keep last 10
+    }
+    if body.target == "thumbnail":
+        update_data["thumbnail_gcs_uri"] = new_gcs_uri
+    elif body.slide_index is not None:
+        image_uris = list(post.get("image_gcs_uris", []))
+        if body.slide_index < len(image_uris):
+            image_uris[body.slide_index] = new_gcs_uri
+        update_data["image_gcs_uris"] = image_uris
+    else:
+        update_data["image_gcs_uri"] = new_gcs_uri
+
+    await firestore_client.update_post(brand_id, post_id, update_data)
+
+    # Return signed URL for frontend
+    signed_url = await get_signed_url(new_gcs_uri)
+    return {"image_url": signed_url, "edit_count": new_edit_count}
+
+
+@app.post("/api/brands/{brand_id}/posts/{post_id}/edit-media/reset")
+async def reset_post_media(brand_id: str, post_id: str, target: str | None = None):
+    """Reset a post's image to the original pre-edit version."""
+    post = await firestore_client.get_post(brand_id, post_id)
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+
+    if target == "thumbnail":
+        original_uri = post.get("original_thumbnail_gcs_uri")
+        if not original_uri:
+            raise HTTPException(status_code=422, detail="No original thumbnail to restore")
+        await firestore_client.update_post(brand_id, post_id, {
+            "thumbnail_gcs_uri": original_uri,
+            "edit_count": 0,
+            "edit_history": [],
+        })
+        signed_url = await get_signed_url(original_uri)
+    else:
+        original_uri = post.get("original_image_gcs_uri")
+        if not original_uri:
+            raise HTTPException(status_code=422, detail="No original image to restore")
+        await firestore_client.update_post(brand_id, post_id, {
+            "image_gcs_uri": original_uri,
+            "edit_count": 0,
+            "edit_history": [],
+        })
+        signed_url = await get_signed_url(original_uri)
+
+    return {"image_url": signed_url}
 
 
 # ── Video Generation ──────────────────────────────────────────

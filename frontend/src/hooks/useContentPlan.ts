@@ -7,6 +7,12 @@ interface Plan {
   num_days?: number
   status?: string
   created_at?: string
+  trend_summary?: {
+    researched_at: string
+    platform_trends: Record<string, any>
+    visual_trends: Record<string, any> | null
+    video_trends: Record<string, any> | null
+  }
 }
 
 function normalizePlan(raw: any): Plan {
@@ -16,6 +22,7 @@ function normalizePlan(raw: any): Plan {
     num_days: raw.num_days,
     status: raw.status,
     created_at: raw.created_at,
+    trend_summary: raw.trend_summary ?? undefined,
   }
 }
 
