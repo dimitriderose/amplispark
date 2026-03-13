@@ -56,13 +56,14 @@ interface Props {
 export default function ContentCalendar({ plan, brandId, posts, onGeneratePost, onViewPost, onPhotoUploaded }: Props) {
   const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
-  // Map posts by day_index — use the latest post per day
-  const postsByDay: Record<number, Post> = {}
+  // Map posts by day_index+platform — use the latest post per (day, platform)
+  const postsByDayPlatform: Record<string, Post> = {}
   if (posts) {
     for (const post of posts) {
-      const existing = postsByDay[post.day_index]
+      const key = `${post.day_index}_${post.platform || ''}`
+      const existing = postsByDayPlatform[key]
       if (!existing || (post.created_at && existing.created_at && post.created_at > existing.created_at)) {
-        postsByDay[post.day_index] = post
+        postsByDayPlatform[key] = post
       }
     }
   }
@@ -107,13 +108,14 @@ export default function ContentCalendar({ plan, brandId, posts, onGeneratePost, 
       </div>
 
       {/* 7-day grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8 }}>
         {plan.days.map((day, i) => {
           const seriesColor = day.pillar_id ? seriesColorMap[day.pillar_id] : undefined
-          const dayPost = postsByDay[day.day_index ?? i]
+          const dayPost = postsByDayPlatform[`${day.day_index ?? i}_${day.platform || ''}`]
+            ?? postsByDayPlatform[`${day.day_index ?? i}_`]
           return (
             <DayCard
-              key={day.day_index ?? i}
+              key={`${day.day_index ?? i}_${day.platform || i}`}
               day={day}
               dayName={DAY_NAMES[i % 7]}
               brandId={brandId}
@@ -312,7 +314,12 @@ function DayCard({ day, dayName, brandId, planId, seriesColor, post, onGenerate,
         {/* Day + platform */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <span style={{ fontSize: 12, fontWeight: 600, color: A.textSoft }}>{dayName}</span>
-          <PlatformIcon size={14} color={platformSpec.color} />
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <PlatformIcon size={14} color={platformSpec.color} />
+            <span style={{ fontSize: 10, color: platformSpec.color, fontWeight: 500 }}>
+              {platformSpec.displayName}
+            </span>
+          </span>
         </div>
 
         {/* Pillar badge */}

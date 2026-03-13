@@ -31,10 +31,14 @@ export const api = {
     }),
 
   listPlans: (brandId: string) => request(`/api/brands/${brandId}/plans`),
-  createPlan: (brandId: string, numDays = 7, businessEvents?: string) =>
+  createPlan: (brandId: string, numDays = 7, businessEvents?: string, platforms?: string[]) =>
     request(`/api/brands/${brandId}/plans`, {
       method: 'POST',
-      body: JSON.stringify({ num_days: numDays, business_events: businessEvents || null }),
+      body: JSON.stringify({
+        num_days: numDays,
+        business_events: businessEvents || null,
+        ...(platforms && platforms.length > 0 ? { platforms } : {}),
+      }),
     }),
   getPlan: (brandId: string, planId: string) => request(`/api/brands/${brandId}/plans/${planId}`),
   updateDay: (brandId: string, planId: string, dayIndex: number, data: object) =>

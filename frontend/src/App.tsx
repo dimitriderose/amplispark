@@ -7,6 +7,7 @@ import DashboardPage from './pages/DashboardPage'
 import GeneratePage from './pages/GeneratePage'
 import EditBrandPage from './pages/EditBrandPage'
 import ExportPage from './pages/ExportPage'
+import PostHistoryPage from './pages/PostHistoryPage'
 import TermsPage from './pages/TermsPage'
 import PrivacyPage from './pages/PrivacyPage'
 import NotionCallbackPage from './pages/NotionCallbackPage'
@@ -23,6 +24,7 @@ export default function App() {
         <Route path="/edit/:brandId" element={<EditBrandPage />} />
         <Route path="/generate/:planId/:dayIndex" element={<GeneratePage />} />
         <Route path="/export/:brandId" element={<ExportPage />} />
+        <Route path="/brands/:brandId/history" element={<PostHistoryPage />} />
         <Route path="/terms" element={<TermsPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/auth/notion/callback" element={<NotionCallbackPage />} />

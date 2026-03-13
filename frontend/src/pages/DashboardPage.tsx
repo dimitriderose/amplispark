@@ -235,7 +235,12 @@ export default function DashboardPage() {
               </p>
             )}
             <EventsInput
-              onGenerate={(events) => generatePlan(7, events || undefined)}
+              onGenerate={(events) => {
+                const platforms = brand.platform_mode === 'manual' && brand.selected_platforms?.length
+                  ? brand.selected_platforms
+                  : undefined
+                generatePlan(7, events || undefined, platforms)
+              }}
               generating={generating}
               analysisStatus={brand.analysis_status}
             />
@@ -247,7 +252,20 @@ export default function DashboardPage() {
       {activeTab === 'posts' && (
         <div style={{ padding: 24, borderRadius: 12, background: A.surface, border: `1px solid ${A.border}` }}>
           {plan && brandId ? (
-            <PostLibrary brandId={brandId} planId={plan.plan_id} notionReady={!!brand.integrations?.notion?.database_id} />
+            <>
+              <PostLibrary brandId={brandId} planId={plan.plan_id} notionReady={!!brand.integrations?.notion?.database_id} />
+              <div style={{ textAlign: 'center', marginTop: 16 }}>
+                <button
+                  onClick={() => navigate(`/brands/${brandId}/history`)}
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    fontSize: 13, color: A.indigo, fontWeight: 500,
+                  }}
+                >
+                  View all posts across all plans &rarr;
+                </button>
+              </div>
+            </>
           ) : (
             <div style={{
               padding: 40, textAlign: 'center',

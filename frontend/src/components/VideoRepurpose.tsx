@@ -12,7 +12,8 @@ interface Clip {
   hook: string
   suggested_caption: string
   reason: string
-  clip_url: string
+  content_theme?: string
+  clip_url: string | null
   filename: string
 }
 
@@ -285,8 +286,17 @@ export default function VideoRepurpose({ brandId }: Props) {
                       }}>
                         {clip.duration_seconds}s
                       </span>
+                      {clip.content_theme && (
+                        <span style={{
+                          fontSize: 10, padding: '2px 8px', borderRadius: 20,
+                          background: A.indigo + '18', color: A.indigo, fontWeight: 600,
+                          border: `1px solid ${A.indigo}30`,
+                        }}>
+                          {clip.content_theme}
+                        </span>
+                      )}
                     </div>
-                    <a
+                    {clip.clip_url && <a
                       href={clip.clip_url}
                       download={clip.filename}
                       target="_blank"
@@ -300,8 +310,25 @@ export default function VideoRepurpose({ brandId }: Props) {
                       }}
                     >
                       ↓ Download
-                    </a>
+                    </a>}
                   </div>
+
+                  {/* Video preview */}
+                  {clip.clip_url && (
+                    <div style={{ padding: '8px 12px 0' }}>
+                      <video
+                        src={clip.clip_url}
+                        controls
+                        preload="none"
+                        aria-label={`${platLabel} clip preview`}
+                        style={{
+                          width: '100%', borderRadius: 6,
+                          background: '#000', maxHeight: 300,
+                          objectFit: 'contain',
+                        }}
+                      />
+                    </div>
+                  )}
 
                   {/* Clip details */}
                   <div style={{ padding: '10px 12px' }}>
@@ -313,6 +340,11 @@ export default function VideoRepurpose({ brandId }: Props) {
                     {clip.suggested_caption && (
                       <p style={{ fontSize: 11, color: A.textSoft, margin: '4px 0 0', lineHeight: 1.5 }}>
                         {clip.suggested_caption}
+                      </p>
+                    )}
+                    {clip.reason && (
+                      <p style={{ fontSize: 11, color: A.textSoft, margin: '6px 0 0', lineHeight: 1.5, fontStyle: 'italic' }}>
+                        Why this clip: {clip.reason}
                       </p>
                     )}
                   </div>

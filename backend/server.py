@@ -539,8 +539,16 @@ async def create_plan(brand_id: str, body: CreatePlanBody = Body(CreatePlanBody(
 
     num_days = max(1, min(body.num_days, 30))
 
+    platforms = body.platforms
+    if platforms is None:
+        stored = brand.get("selected_platforms", [])
+        mode = brand.get("platform_mode", "ai")
+        if mode == "manual" and stored:
+            platforms = stored
+        # else: None → Strategy Agent uses AI recommendation (existing behavior)
+
     try:
-        days = await run_strategy(brand_id, brand, num_days, business_events=body.business_events, platforms=body.platforms)
+        days = await run_strategy(brand_id, brand, num_days, business_events=body.business_events, platforms=platforms)
     except Exception as e:
         logger.error(f"Strategy agent error for brand {brand_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1179,6 +1187,7 @@ async def _run_video_repurposing(
                 "hook": clip["hook"],
                 "suggested_caption": clip["suggested_caption"],
                 "reason": clip["reason"],
+                "content_theme": clip.get("content_theme", ""),
                 "clip_gcs_uri": gcs_uri,
                 "filename": clip["filename"],
             })

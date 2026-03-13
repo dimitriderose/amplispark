@@ -27,6 +27,8 @@ class BrandProfileUpdate(BaseModel):
     image_generation_risk: Optional[str] = None
     byop_recommendation: Optional[str] = None
     ui_preferences: Optional[dict] = None
+    selected_platforms: Optional[List[str]] = None
+    platform_mode: Optional[str] = None
 
 
 class BrandProfile(BaseModel):
@@ -44,6 +46,8 @@ class BrandProfile(BaseModel):
     caption_style_directive: str = ""
     content_themes: List[str] = []
     competitors: List[str] = []
+    selected_platforms: List[str] = []
+    platform_mode: str = "ai"  # "ai" | "manual"
     logo_url: Optional[str] = None
     product_photos: List[str] = []
     uploaded_assets: List[dict] = []

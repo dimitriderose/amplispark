@@ -18,6 +18,7 @@ export default function PostLibrary({ brandId, planId, defaultFilter = 'all', no
   const navigate = useNavigate()
   const { posts, loading, error, refresh } = usePostLibrary(brandId, planId)
   const [filter, setFilter] = React.useState<Filter>(defaultFilter)
+  const [platformFilter, setPlatformFilter] = React.useState<string>('all')
   const [exporting, setExporting] = React.useState(false)
   const [dismissed, setDismissed] = React.useState<Set<string>>(new Set())
   const [exportError, setExportError] = React.useState<string | null>(null)
@@ -63,7 +64,15 @@ export default function PostLibrary({ brandId, planId, defaultFilter = 'all', no
   ]
 
   const visiblePosts = posts.filter(p => !dismissed.has(p.post_id))
-  const filtered = filter === 'all' ? visiblePosts : visiblePosts.filter(p => p.status === filter)
+  const statusFiltered = filter === 'all' ? visiblePosts : visiblePosts.filter(p => p.status === filter)
+  const uniquePlatforms = Array.from(new Set(statusFiltered.map(p => p.platform).filter(Boolean))) as string[]
+  // Auto-reset platform filter when it becomes invalid
+  React.useEffect(() => {
+    if (uniquePlatforms.length <= 1 || (platformFilter !== 'all' && !uniquePlatforms.includes(platformFilter))) {
+      setPlatformFilter('all')
+    }
+  }, [uniquePlatforms.length, platformFilter, uniquePlatforms])
+  const filtered = platformFilter === 'all' ? statusFiltered : statusFiltered.filter(p => p.platform === platformFilter)
 
   const handleCopyAll = () => {
     if (!navigator.clipboard || filtered.length === 0) return
@@ -364,8 +373,8 @@ export default function PostLibrary({ brandId, planId, defaultFilter = 'all', no
         </div>
       )}
 
-      {/* Filter tabs */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 16, flexWrap: 'wrap' }}>
+      {/* Status filter tabs */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 8, flexWrap: 'wrap' }}>
         {FILTERS.map(f => (
           <button
             key={f.key}
@@ -388,6 +397,29 @@ export default function PostLibrary({ brandId, planId, defaultFilter = 'all', no
         ))}
       </div>
 
+      {/* Platform filter */}
+      {uniquePlatforms.length > 1 && (
+        <div style={{ display: 'flex', gap: 4, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+          <span style={{ fontSize: 11, color: A.textMuted, marginRight: 4 }}>Platform:</span>
+          {['all', ...uniquePlatforms].map(p => (
+            <button
+              key={p}
+              onClick={() => setPlatformFilter(p)}
+              style={{
+                padding: '3px 8px', borderRadius: 12, fontSize: 11, cursor: 'pointer',
+                border: platformFilter === p ? 'none' : `1px solid ${A.border}`,
+                background: platformFilter === p ? A.violet : 'transparent',
+                color: platformFilter === p ? 'white' : A.textSoft,
+                fontWeight: platformFilter === p ? 600 : 400,
+                textTransform: 'capitalize',
+              }}
+            >
+              {p === 'all' ? 'All' : p}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Loading / error / empty states */}
       {loading && (
         <div style={{ padding: 40, textAlign: 'center', color: A.textSoft, fontSize: 14 }}>
@@ -406,7 +438,7 @@ export default function PostLibrary({ brandId, planId, defaultFilter = 'all', no
         }}>
           {visiblePosts.length === 0
             ? 'No posts yet — generate some from the calendar above!'
-            : `No ${filter} posts`}
+            : `No ${filter} posts${platformFilter !== 'all' ? ` on ${platformFilter}` : ''}`}
         </div>
       )}
 

@@ -2,7 +2,6 @@ import asyncio
 import json
 import logging
 import os
-import re
 import shutil
 import subprocess
 import tempfile
@@ -124,13 +123,29 @@ async def _analyze_video(video_file: object, client: object, brand_profile: dict
     industry = str(brand_profile.get("industry", "business"))[:40]
     caption_hint = str(brand_profile.get("caption_style_directive", ""))[:120]
 
+    content_themes = brand_profile.get("content_themes", [])
+    themes_str = ", ".join(t[:60] for t in content_themes[:6]) if content_themes else ""
+    competitors = brand_profile.get("competitors", [])
+    competitors_str = ", ".join(c[:40] for c in competitors[:3]) if competitors else ""
+
     caption_note = f" Write captions in this style: {caption_hint}" if caption_hint else ""
+
+    # Build strategy context block (only if data exists)
+    strategy_lines = ""
+    if themes_str or competitors_str:
+        parts = []
+        if themes_str:
+            parts.append(f"Content pillars: {themes_str}")
+        if competitors_str:
+            parts.append(f"Key competitors: {competitors_str}")
+        parts.append("For each clip, tag it to the most relevant content pillar from the list above. Prioritize clips covering DIFFERENT pillars.")
+        strategy_lines = "\n".join(parts) + "\n"
 
     # Build platform list from known keys
     platform_keys = list(_PLATFORM_CONFIGS.keys())
 
     prompt = f"""Analyze this video for a {industry} brand called "{business}" (tone: {tone}).
-
+{strategy_lines}
 Identify the TOP 3 most clip-worthy moments for social media short-form content.
 
 For each clip, choose the most suitable platform from: {platform_keys}
@@ -146,7 +161,8 @@ Return ONLY a valid JSON array with this exact structure:
     "platform": "reels",
     "hook": "The verbatim opening line or moment that immediately grabs attention",
     "suggested_caption": "A ready-to-post caption in the brand voice.{caption_note}",
-    "reason": "One sentence on why this moment is compelling"
+    "reason": "2-3 sentences: (1) why this moment stops the scroll, (2) what makes it right for this platform specifically, (3) the audience emotion it targets",
+    "content_theme": "The content pillar this clip best represents"
   }}
 ]
 
@@ -287,6 +303,7 @@ async def analyze_and_repurpose(
                 "hook": spec.get("hook", ""),
                 "suggested_caption": spec.get("suggested_caption", ""),
                 "reason": spec.get("reason", ""),
+                "content_theme": spec.get("content_theme", ""),
                 "clip_bytes": clip_bytes_data,
                 "filename": f"{clip_tag}.mp4",
             })

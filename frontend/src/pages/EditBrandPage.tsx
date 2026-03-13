@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { A } from '../theme'
 import { api } from '../api/client'
 import { useBrandProfile } from '../hooks/useBrandProfile'
+import { PLATFORMS } from '../platformRegistry'
 
 /** Convert a gs:// URI to a proxy-servable URL. */
 function gcsToUrl(gcsUri: string): string {
@@ -39,6 +40,8 @@ export default function EditBrandPage() {
   const [captionStyleDirective, setCaptionStyleDirective] = useState('')
   const [contentThemes, setContentThemes] = useState<string[]>([])
   const [competitors, setCompetitors] = useState<string[]>([])
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([])
+  const [platformMode, setPlatformMode] = useState<'ai' | 'manual'>('ai')
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
   const [assets, setAssets] = useState<UploadedAsset[]>([])
 
@@ -68,6 +71,8 @@ export default function EditBrandPage() {
     setCaptionStyleDirective(brand.caption_style_directive || '')
     setContentThemes(brand.content_themes || [])
     setCompetitors(brand.competitors || [])
+    setSelectedPlatforms(brand.selected_platforms || [])
+    setPlatformMode(brand.platform_mode || 'ai')
     setLogoUrl(brand.logo_url || null)
     setAssets(brand.uploaded_assets || [])
   }, [brand])
@@ -91,6 +96,8 @@ export default function EditBrandPage() {
         caption_style_directive: captionStyleDirective,
         content_themes: contentThemes,
         competitors,
+        selected_platforms: selectedPlatforms,
+        platform_mode: platformMode,
       })
       setSaveMsg('Saved successfully')
       setTimeout(() => setSaveMsg(''), 3000)
@@ -316,7 +323,83 @@ export default function EditBrandPage() {
             onChange={setCaptionStyleDirective} textarea rows={2} />
         </Section>
 
-        {/* ── Section 3: Brand Assets ────────────────────────── */}
+        {/* ── Section 3: Platform Strategy ──────────────────── */}
+        <Section title="Platform Strategy">
+          {/* Mode toggle */}
+          <div style={{ display: 'flex', gap: 4, background: A.surfaceAlt, borderRadius: 8, padding: 3 }}>
+            {([
+              { key: 'ai' as const, label: 'Let AI choose platforms' },
+              { key: 'manual' as const, label: "I'll select my platforms" },
+            ]).map(opt => (
+              <button
+                key={opt.key}
+                onClick={() => setPlatformMode(opt.key)}
+                style={{
+                  flex: 1, padding: '8px 12px', borderRadius: 6, border: 'none',
+                  cursor: 'pointer', fontSize: 12, fontWeight: platformMode === opt.key ? 600 : 400,
+                  background: platformMode === opt.key ? A.surface : 'transparent',
+                  color: platformMode === opt.key ? A.text : A.textSoft,
+                  boxShadow: platformMode === opt.key ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                  transition: 'all 0.15s',
+                }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
+          {platformMode === 'ai' ? (
+            <p style={{ fontSize: 12, color: A.textMuted, lineHeight: 1.5 }}>
+              AI mode: We'll analyze your brand and select the best 2-4 platforms
+            </p>
+          ) : (
+            <>
+              <p style={{ fontSize: 12, color: A.textMuted, lineHeight: 1.5, marginBottom: 4 }}>
+                Manual: Choose which platforms to include in your content plans
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 8 }}>
+                {Object.values(PLATFORMS).map(spec => {
+                  const Icon = spec.icon
+                  const isSelected = selectedPlatforms.includes(spec.key)
+                  return (
+                    <button
+                      key={spec.key}
+                      onClick={() => {
+                        setSelectedPlatforms(prev =>
+                          isSelected
+                            ? prev.filter(k => k !== spec.key)
+                            : [...prev, spec.key]
+                        )
+                      }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        padding: '8px 12px', borderRadius: 8,
+                        border: `1.5px solid ${isSelected ? spec.color : A.border}`,
+                        background: isSelected ? spec.color + '12' : 'transparent',
+                        cursor: 'pointer', transition: 'all 0.15s',
+                      }}
+                    >
+                      <Icon size={16} color={isSelected ? spec.color : A.textMuted} />
+                      <span style={{
+                        fontSize: 12, fontWeight: isSelected ? 600 : 400,
+                        color: isSelected ? spec.color : A.textSoft,
+                      }}>
+                        {spec.displayName}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+              {selectedPlatforms.length === 0 && (
+                <p style={{ fontSize: 11, color: A.coral, marginTop: 2 }}>
+                  Select at least 1 platform
+                </p>
+              )}
+            </>
+          )}
+        </Section>
+
+        {/* ── Section 4: Brand Assets ────────────────────────── */}
         <Section title="Brand Assets">
           {/* Logo */}
           <div style={{ marginBottom: 16 }}>
@@ -417,7 +500,7 @@ export default function EditBrandPage() {
           </div>
         </Section>
 
-        {/* ── Section 4: Content Strategy ────────────────────── */}
+        {/* ── Section 5: Content Strategy ────────────────────── */}
         <Section title="Content Strategy">
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
             <TagEditor label="Content Themes" tags={contentThemes} setTags={setContentThemes}
@@ -429,11 +512,11 @@ export default function EditBrandPage() {
 
         {/* ── Actions ────────────────────────────────────────── */}
         <div style={{ display: 'flex', gap: 12, paddingTop: 8, paddingBottom: 32 }}>
-          <button onClick={handleSave} disabled={saving} style={{
+          <button onClick={handleSave} disabled={saving || (platformMode === 'manual' && selectedPlatforms.length === 0)} style={{
             flex: 1, padding: '14px', borderRadius: 10, border: 'none',
-            cursor: saving ? 'not-allowed' : 'pointer',
-            background: saving ? A.surfaceAlt : `linear-gradient(135deg, ${A.indigo}, ${A.violet})`,
-            color: saving ? A.textMuted : 'white',
+            cursor: (saving || (platformMode === 'manual' && selectedPlatforms.length === 0)) ? 'not-allowed' : 'pointer',
+            background: (saving || (platformMode === 'manual' && selectedPlatforms.length === 0)) ? A.surfaceAlt : `linear-gradient(135deg, ${A.indigo}, ${A.violet})`,
+            color: (saving || (platformMode === 'manual' && selectedPlatforms.length === 0)) ? A.textMuted : 'white',
             fontSize: 15, fontWeight: 600, transition: 'all 0.2s',
           }}>
             {saving ? 'Saving...' : 'Save Changes'}

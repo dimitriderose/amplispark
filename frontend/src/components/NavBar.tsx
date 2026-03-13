@@ -23,11 +23,13 @@ export default function NavBar() {
   const dashboardMatch = location.pathname.match(/^\/dashboard\/([^/]+)/)
   const editMatch = location.pathname.match(/^\/edit\/([^/]+)/)
   const exportMatch = location.pathname.match(/^\/export\/([^/]+)/)
+  const historyMatch = location.pathname.match(/^\/brands\/([^/]+)\/history/)
   const generateMatch = location.pathname.match(/^\/generate\//)
   const activeBrandId =
     (dashboardMatch && dashboardMatch[1]) ||
     (editMatch && editMatch[1]) ||
     (exportMatch && exportMatch[1]) ||
+    (historyMatch && historyMatch[1]) ||
     (generateMatch && searchParams.get('brand_id')) ||
     null
 
@@ -82,6 +84,20 @@ export default function NavBar() {
             }}
           >
             Export
+          </button>
+        )}
+        {activeBrandId && (
+          <button
+            onClick={() => navigate(`/brands/${activeBrandId}/history`)}
+            style={{
+              padding: '5px 12px', borderRadius: 6,
+              background: historyMatch ? A.indigoLight : 'transparent',
+              border: 'none', cursor: 'pointer', fontSize: 13,
+              color: historyMatch ? A.indigo : A.textSoft,
+              fontWeight: historyMatch ? 600 : 400,
+            }}
+          >
+            History
           </button>
         )}
       </div>
