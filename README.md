@@ -11,6 +11,8 @@ An AI-powered creative director that analyzes your brand and produces complete, 
 Amplifi uses Gemini's interleaved text + image output to generate copy and visuals together in one coherent stream. Describe your business (or paste your website URL for deeper analysis), and get a full week of social media content tailored to your brand, across every platform.
 
 - **Brand-aware AI** — extracts your colors, tone, audience, and style automatically with deterministic analysis (temperature 0.15). Brand reference images (logo, product shots, style ref) are injected into every generation call for visual consistency.
+- **Multi-platform calendars with AI-researched posting frequency** — Gemini + Google Search grounding researches optimal posting frequency (posts/week) and best posting times per platform, tailored to each business type and industry. A 7-day plan produces 19-30+ briefs with variable stacking per day column. Cached in Firestore (7-day TTL).
+- **Suggested posting times** — each calendar card shows the AI-researched best time to post (e.g., "9:00 AM"), sorted within each day column by time
 - **Full weekly calendar** — 7 days of content with pillar-based strategy, event integration, and social proof tier awareness (education-first for new brands, data-forward for established ones)
 - **Interleaved generation** — captions and matching images born together via Gemini, with automatic fallback if interleaved mode fails to produce an image
 - **10-platform support** — Instagram, LinkedIn, X, TikTok, Facebook, Threads, Pinterest, YouTube Shorts, Mastodon, and Bluesky via a unified Platform Registry with per-platform character limits, hashtag caps, fold positions, and voice directives
@@ -23,7 +25,8 @@ Amplifi uses Gemini's interleaved text + image output to generate copy and visua
 - **Full export** — "Copy All" clipboard, per-post ZIP download (image + video + caption), bulk plan ZIP, Notion database export, and .ics calendar download/email
 - **Auto-review** — calibrated 1-10 scoring across 5 engagement dimensions (hook strength, relevance, CTA effectiveness, platform fit, teaching depth), platform-specific checks, engagement prediction (low/medium/high/viral), and auto-cleaned hashtags
 - **Platform previews** — live character counts, "see more" fold indicators, and platform-specific formatting
-- **Edit Brand page** — full brand profile editor with asset management (upload/delete photos, set/clear logo)
+- **Post History page** — searchable, filterable view of all generated posts across all content plans. Filters by status (approved/ready), platform, and pillar. Paginated with week headers.
+- **Edit Brand page** — full brand profile editor with asset management (upload/delete photos, set/clear logo), platform selector (AI-recommended or manual selection)
 - **Notion integration** — full OAuth flow to export your content calendar directly to a Notion database
 
 ## How it works
@@ -31,7 +34,7 @@ Amplifi uses Gemini's interleaved text + image output to generate copy and visua
 1. **Sign in with Google** — one-click Google Sign-In to link your brands to your account.
 2. **Describe your brand** — tell us about your business in a few sentences. Optionally add your website URL for deeper analysis.
 3. **AI builds your brand** — colors, tone, audience, competitors, style directives — all editable.
-4. **Get your week** — watch as a 7-day content calendar streams in live, post by post.
+4. **Get your week** — watch as a multi-platform 7-day content calendar streams in live, with AI-researched posting frequency and suggested posting times per platform.
 5. **Review and export** — approve posts, download ZIPs, export to Notion, or copy all captions to clipboard.
 
 ## Tech Stack
@@ -57,7 +60,7 @@ User Browser (React 19 + Firebase Google Auth)
     ←REST + SSE→ Cloud Run (FastAPI :8080)
                     ├── ADK Sequential Pipeline
                     │   ├── Brand Analyst Agent (temp 0.15)
-                    │   ├── Strategy Agent (social proof tiers)
+                    │   ├── Strategy Agent (social proof tiers, Google Search grounding for frequency + platform research)
                     │   ├── Content Creator Agent (interleaved output)
                     │   │   ├── Carousel: 3-slide parallel image gen
                     │   │   ├── video_first: caption-only → auto-Veo
@@ -85,8 +88,8 @@ See the full [architecture diagram](docs/architecture.mermaid) for agent interac
 
 | Document | Description |
 |---|---|
-| [Product Requirements (PRD)](docs/PRD.md) | v1.4 — Full product spec with Google Sign-In, Brands page, all P0/P1/P2 features shipped, social proof tier system |
-| [Technical Design (TDD)](docs/TDD.md) | v1.5 — Implementation spec covering Cloud Build CI/CD, SPA routing, Google Sign-In, Brands page, Platform Registry, integrations, calibrated review scoring |
+| [Product Requirements (PRD)](docs/PRD.md) | v1.5 — Full product spec with Google Sign-In, Brands page, all P0/P1/P2 features shipped, social proof tier system |
+| [Technical Design (TDD)](docs/TDD.md) | v1.6 — Implementation spec covering Cloud Build CI/CD, SPA routing, Google Sign-In, Brands page, Platform Registry, integrations, calibrated review scoring |
 | [Deployment Guide](docs/DEPLOYMENT.md) | Complete deployment guide — local dev, Cloud Build CI/CD (`deploy.sh`), manual Cloud Run deploy, Terraform IaC, environment variables, troubleshooting |
 | [Architecture Diagram](docs/architecture.mermaid) | Mermaid diagram — full agent pipeline, CI/CD infrastructure, Google Auth, Brands page, Notion/Email services, GCP data flows |
 | [UI Mockup](docs/amplifi-ui.jsx) | Interactive React prototype — 6 screens (Landing, Onboard, Brand, Calendar, Content, Dashboard) |

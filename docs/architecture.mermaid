@@ -2,7 +2,7 @@ graph TB
     subgraph Browser["User Browser (React 19 + TypeScript)"]
         FE["Frontend<br/>React 19 + TypeScript<br/>Vite 7<br/>React Router"]
         AUTH["Firebase Google Auth<br/>signInWithPopup<br/>Account Dropdown<br/>Profile Photo"]
-        PAGES["Pages<br/>Landing (marketing)<br/>Brands (paginated list)<br/>Dashboard / Generate<br/>Export / Edit Brand"]
+        PAGES["Pages<br/>Landing (marketing)<br/>Brands (paginated list)<br/>Dashboard / Generate<br/>Post History<br/>Export / Edit Brand"]
     end
 
     subgraph CloudRun["Google Cloud Run"]
@@ -10,7 +10,7 @@ graph TB
 
         subgraph Pipeline["ADK Sequential Pipeline"]
             BA["Brand Analyst Agent<br/>URL Scraping + Brand DNA<br/>Colors, Tone, Audience<br/>Temperature 0.15"]
-            STR["Strategy Agent<br/>7-Day Content Calendar<br/>Pillar-Based Planning<br/>Social Proof Tiers<br/>Event Integration"]
+            STR["Strategy Agent<br/>Multi-Platform Calendar<br/>AI-Researched Frequency<br/>Google Search Grounding<br/>Pillar-Based Planning<br/>Social Proof Tiers"]
             CC["Content Creator Agent<br/>Gemini Interleaved Output<br/>Text + Image Together<br/>Carousel: 3-Slide Parallel Gen<br/>video_first: Caption-Only then Veo"]
             RA["Review Agent<br/>Calibrated 1-10 Scoring<br/>5 Engagement Dimensions<br/>Platform-Specific Checks<br/>Engagement Prediction"]
         end
@@ -41,7 +41,7 @@ graph TB
     end
 
     subgraph GCP["Google Cloud Platform"]
-        FS[("Cloud Firestore<br/>Brand Profiles (owner_uid)<br/>Content Plans + Posts<br/>Video Jobs")]
+        FS[("Cloud Firestore<br/>Brand Profiles (owner_uid)<br/>Content Plans + Posts<br/>Video Jobs<br/>Frequency Cache (7-day TTL)")]
         GCS[("Cloud Storage<br/>Generated Images<br/>Generated Videos<br/>Uploaded Assets")]
         FA["Firebase Auth<br/>Google Sign-In Provider<br/>Persistent UIDs"]
     end
@@ -80,7 +80,7 @@ graph TB
     NC -->|"OAuth + Export"| FS
 
     BA -->|"Brand Analysis<br/>(temp 0.15)"| GFlash
-    STR -->|"Strategy Planning"| GFlash
+    STR -->|"Strategy + Frequency<br/>Google Search Grounding"| GFlash
     CC -->|"Interleaved<br/>Text + Image"| GFlash
     IF -->|"Image-Only<br/>Fallback"| GFlash
     RA -->|"Review + Revise"| GFlash

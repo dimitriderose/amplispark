@@ -3,8 +3,8 @@
 
 **Category:** ✍️ Creative Storyteller
 **Author:** Software Architecture Team
-**Companion Document:** PRD — Amplifi v1.4
-**Version:** 1.5 | March 12, 2026 (updated from v1.4 March 11)
+**Companion Document:** PRD — Amplifi v1.5
+**Version:** 1.6 | March 13, 2026 (updated from v1.5 March 12)
 
 ---
 
@@ -12,7 +12,7 @@
 
 This Technical Design Document specifies the implementation architecture for Amplifi, an AI-powered creative director that produces complete social media content packages using Gemini's interleaved text and image output. It translates the PRD's product requirements into concrete engineering decisions, API contracts, data models, code structure, and deployment specifications.
 
-**Scope:** All P0 and P1 features from the PRD, plus shipped P2 features: brand analysis from URL (with deterministic analysis at temperature 0.15), content calendar generation with event integration and social proof tier system, interleaved post generation with carousel support, image fallback, video_first pipeline, and brand reference image injection, calibrated 1-10 review scoring with 5 engagement dimensions and platform-specific checks, React dashboard with tab-based navigation and Edit Brand page, image/video storage, streaming UI, Firebase Google Sign-In with account dropdown, dedicated Brands page with pagination (5 per page), tier-aware Gemini Live voice coaching, Veo 3.1 video generation, full ZIP export with media, Platform Registry (10 platforms), Notion integration (OAuth + database export), calendar .ics export with email delivery, platform-specific caption/hashtag enforcement, Cloud Build CI/CD pipeline with `deploy.sh`, and SPA catch-all routing for deep links on Cloud Run.
+**Scope:** All P0 and P1 features from the PRD, plus shipped P2 features: brand analysis from URL (with deterministic analysis at temperature 0.15), content calendar generation with event integration and social proof tier system, interleaved post generation with carousel support, image fallback, video_first pipeline, and brand reference image injection, calibrated 1-10 review scoring with 5 engagement dimensions and platform-specific checks, React dashboard with tab-based navigation and Edit Brand page, image/video storage, streaming UI, Firebase Google Sign-In with account dropdown, dedicated Brands page with pagination (5 per page), tier-aware Gemini Live voice coaching, Veo 3.1 video generation, full ZIP export with media, Platform Registry (10 platforms), Notion integration (OAuth + database export), calendar .ics export with email delivery, platform-specific caption/hashtag enforcement, Cloud Build CI/CD pipeline with `deploy.sh`, SPA catch-all routing for deep links on Cloud Run, AI-researched posting frequency with Google Search grounding, and multi-platform calendar generation with brief_index/day_index separation.
 
 **Out of scope (unspecified):** Post analytics dashboard (P3). Remaining P2 features are specified in §14.1. P3 features are additive and do not affect core architecture.
 
@@ -289,7 +289,7 @@ def analyze_brand_colors(css_colors: list[str], logo_path: str | None = None) ->
 strategy_agent = Agent(
     name="strategy_agent",
     model="gemini-2.5-flash",
-    description="Creates a 7-day content calendar from a brand profile using pillar-based repurposing",
+    description="Creates a multi-platform content calendar with AI-researched posting frequency from a brand profile using pillar-based repurposing",
     instruction="""You are a social media strategist creating a weekly content calendar.
     
     PILLAR-BASED STRATEGY (P1):
@@ -380,8 +380,9 @@ The Strategy Agent uses Google Search grounding to research the best platforms f
 # Platform research with Google Search grounding
 config = types.GenerateContentConfig(
     tools=[types.Tool(google_search=types.GoogleSearch())],
-    response_mime_type="application/json",
     temperature=0.2,
+    # NOTE: response_mime_type="application/json" is NOT used here —
+    # it is incompatible with Google Search grounding and causes a 400 error.
 )
 ```
 
@@ -396,6 +397,7 @@ Each day brief now includes `pillar`, `format`, and `cta_type` fields that are s
     "format": "carousel",          # One of: original, carousel, thread_hook, blog_snippet, story, pin, video_first
     "cta_type": "engagement",      # One of: engagement, conversion, implied, none
     "derivative_type": "carousel", # How this post relates to its pillar
+    "suggested_time": "6:00 PM",  # AI-researched best posting time for this platform
     ...
 }
 ```
@@ -403,6 +405,54 @@ Each day brief now includes `pillar`, `format`, and `cta_type` fields that are s
 ### 3.3.4 Prior Hook Deduplication
 
 The Strategy Agent receives a list of prior hooks from previously generated posts (for the same brand and plan) and instructs the LLM to avoid repeating hooks. This prevents repetitive content across the week.
+
+### 3.3.5 Posting Frequency Research (Google Search Grounding)
+
+The Strategy Agent calls `_research_posting_frequency()` to determine optimal posting cadence per platform. This function uses Gemini with Google Search grounding to research how often a business in a given industry/type should post on each selected platform, and at what times.
+
+```python
+async def _research_posting_frequency(
+    industry: str, business_type: str, platforms: list[str]
+) -> dict:
+    """Research optimal posts/week and best posting times per platform.
+
+    Uses Gemini + Google Search to get current best-practice data.
+
+    Returns:
+        {
+            "instagram": {"posts_per_week": 4, "best_times": ["9:00 AM", "1:00 PM", "6:00 PM"]},
+            "linkedin": {"posts_per_week": 3, "best_times": ["8:00 AM", "12:00 PM"]},
+            ...
+        }
+    """
+```
+
+Results are cached in Firestore under the `posting_frequency` collection, keyed by `industry + business_type + platforms` (sorted, joined). Cache TTL is 7 days.
+
+The total number of briefs generated is computed as:
+
+```python
+total_briefs = sum(freq["posts_per_week"] for freq in platform_frequencies.values())
+```
+
+This replaces the previous fixed `num_days` (7) for generation count, allowing the calendar to contain more or fewer briefs depending on AI-researched frequency.
+
+The `_enforce_platform_concentration` function is disabled when frequency research is active, since the research output already handles platform distribution.
+
+### 3.3.6 Multi-Platform Brief Indexing
+
+With multi-platform calendars, the number of briefs can exceed 7 (one per day). Two indices track each brief's position:
+
+- **`brief_index`**: The brief's position in the `plan.days[]` array (0-based). This is the canonical array index used for URL navigation (e.g., `/generate/{planId}/{brief_index}`).
+- **`day_index`**: The calendar day number (0-6, Monday=0). Multiple briefs can share the same `day_index` if multiple posts are scheduled for the same day.
+
+Posts store both fields:
+- `day_index` is used for display grouping and day-based matching in the calendar view.
+- `brief_index` is used for URL navigation and API routing.
+
+On the frontend, `_arrayIndex` tracks the original array position through day-group sorting, ensuring that navigation links point to the correct brief even after the UI reorders items by day.
+
+Post deletion matches on `brief_index + platform` to uniquely identify the target brief within a plan.
 
 ## 3.4 Content Creator Agent ⭐ (Interleaved Output)
 
@@ -1346,7 +1396,8 @@ amplifi-db/
 │       └── posts/                         # Subcollection
 │           └── {postId}/
 │               ├── plan_id: string        # Parent plan reference
-│               ├── day_index: number      # 0-6
+│               ├── day_index: number      # 0-6 (calendar day, Monday=0)
+│               ├── brief_index: number    # Array position in plan.days[] — used for URL navigation
 │               ├── platform: string       # "instagram"
 │               ├── caption: string        # Full caption text
 │               ├── image_urls: string[]   # ["gs://amplifi-assets/generated/{postId}/image.png"]

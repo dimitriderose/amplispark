@@ -1,6 +1,6 @@
 # Future Enhancements — Platform & Content Pipeline
 
-Items identified during the Agent Quality Overhaul (Feb 2026) that are not addressed in the current plan. Organized by priority.
+Items identified during the Agent Quality Overhaul (Feb 2026) and Multi-Platform Enhancement (March 2026). Organized by priority.
 
 ---
 
@@ -34,11 +34,6 @@ Items identified during the Agent Quality Overhaul (Feb 2026) that are not addre
 - **Problem**: Collab posts (two accounts co-authoring) are one of the highest-reach formats on IG
 - **Constraint**: Requires both accounts to approve — can't be auto-generated
 - **Fix**: Strategy agent could suggest "collab with [partner type]" in day brief, user handles the invite
-
-### Cross-Platform Repurposing (Threads ↔ Instagram)
-- **Problem**: Meta allows sharing between Threads and Instagram but we treat them as isolated platforms
-- **Fix**: Add cross-platform awareness to strategy agent — link day briefs across platforms
-- **Example**: IG carousel → Threads conversation starter about the same topic
 
 ### Facebook Group vs Page Content
 - **Problem**: Facebook in 2026 is Group-centric — Page posts vs Group posts need different strategies
@@ -106,3 +101,17 @@ Items identified during the Agent Quality Overhaul (Feb 2026) that are not addre
 ### YouTube Shorts 3-Minute Duration
 - YouTube Shorts now supports up to 3 minutes, not just 60 seconds
 - Fix: Add note to YouTube Shorts prompt about extended duration option
+
+---
+
+## Completed (v1.5)
+
+### Cross-Platform Repurposing
+- **Shipped**: Multi-platform calendar now generates coordinated briefs across platforms with shared pillar IDs. Day briefs on the same day share a thematic angle but differ in format, tone, and hook per platform.
+- Previously listed under Medium Priority as "Cross-Platform Repurposing (Threads <-> Instagram)" — the implementation is broader than the original scope.
+
+### Platform-Specific Posting Frequency
+- **Shipped**: AI-researched posting frequency via Gemini + Google Search grounding determines the optimal posts/week per platform for each business type. Not hardcoded — dynamically researched and cached per brand.
+
+### Best Posting Times
+- **Shipped**: Each brief includes a `suggested_time` field derived from AI-researched best posting times per platform. Calendar cards display and sort by suggested time.
