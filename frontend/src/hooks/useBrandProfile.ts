@@ -31,6 +31,8 @@ interface BrandProfile {
   ui_preferences?: { show_competitors?: boolean }
   // Social voice analysis fields (populated after connecting a social account)
   connected_platforms?: string[]
+  selected_platforms?: string[]
+  platform_mode?: 'ai' | 'manual'
   social_voice_analyses?: Record<string, SocialVoiceAnalysis>
   social_voice_analysis?: SocialVoiceAnalysis
   social_voice_platform?: string
