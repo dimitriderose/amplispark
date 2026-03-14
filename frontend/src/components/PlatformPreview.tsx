@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { A } from '../theme'
-import { getPlatform } from '../platformRegistry'
+import { getPlatform, getMediaAspectRatio } from '../platformRegistry'
 
 function normalizePlatform(platform: string): string {
   return getPlatform(platform).key
@@ -92,13 +92,14 @@ function CarouselMedia({ imageUrl, imageUrls, videoUrl, aspectRatio }: {
   )
 }
 
-function LinkedInPreview({ caption, imageUrl, imageUrls, videoUrl }: { caption: string; imageUrl?: string; imageUrls?: string[]; videoUrl?: string }) {
+function LinkedInPreview({ caption, imageUrl, imageUrls, videoUrl, derivativeType }: { caption: string; imageUrl?: string; imageUrls?: string[]; videoUrl?: string; derivativeType?: string }) {
   const spec = getPlatform('linkedin')
   const foldAt = spec.foldAt!
   const max = spec.captionMax
   const isFolded = caption.length > foldAt
   const overLimit = caption.length > max
   const [expanded, setExpanded] = useState(false)
+  const mediaAspect = getMediaAspectRatio('linkedin', derivativeType)
 
   return (
     <div style={{ borderRadius: 8, border: `1px solid ${A.border}`, overflow: 'hidden', background: A.surface }}>
@@ -114,9 +115,9 @@ function LinkedInPreview({ caption, imageUrl, imageUrls, videoUrl }: { caption: 
         </div>
       </div>
 
-      {/* Media at LinkedIn's 1.91:1 ratio */}
+      {/* Media — aspect ratio adapts to derivative type */}
       {(imageUrl || imageUrls?.length || videoUrl) && (
-        <CarouselMedia imageUrl={imageUrl} imageUrls={imageUrls} videoUrl={videoUrl} aspectRatio="1.91 / 1" />
+        <CarouselMedia imageUrl={imageUrl} imageUrls={imageUrls} videoUrl={videoUrl} aspectRatio={mediaAspect} />
       )}
 
       {/* Caption with fold simulation */}
@@ -219,12 +220,13 @@ function XPreview({ caption }: { caption: string }) {
   )
 }
 
-function InstagramPreview({ caption, imageUrl, imageUrls, videoUrl, structuredHashtagCount }: {
+function InstagramPreview({ caption, imageUrl, imageUrls, videoUrl, structuredHashtagCount, derivativeType }: {
   caption: string
   imageUrl?: string
   imageUrls?: string[]
   videoUrl?: string
   structuredHashtagCount: number
+  derivativeType?: string
 }) {
   const igSpec = getPlatform('instagram')
   const max = igSpec.captionMax
@@ -232,6 +234,7 @@ function InstagramPreview({ caption, imageUrl, imageUrls, videoUrl, structuredHa
   const inlineCount = countInlineHashtags(caption)
   const totalHashtags = structuredHashtagCount + inlineCount
   const overHashtags = totalHashtags > hashtagMax
+  const mediaAspect = getMediaAspectRatio('instagram', derivativeType)
   return (
     <div style={{ borderRadius: 8, border: `1px solid ${A.border}`, overflow: 'hidden', background: A.surface }}>
       {/* Header */}
@@ -244,11 +247,11 @@ function InstagramPreview({ caption, imageUrl, imageUrls, videoUrl, structuredHa
         <p style={{ fontSize: 11, fontWeight: 600, color: A.text, margin: 0 }}>Your Brand</p>
       </div>
 
-      {/* 1:1 square media */}
+      {/* Media — aspect ratio adapts to derivative type */}
       {(imageUrl || imageUrls?.length || videoUrl)
-        ? <CarouselMedia imageUrl={imageUrl} imageUrls={imageUrls} videoUrl={videoUrl} aspectRatio="1 / 1" />
+        ? <CarouselMedia imageUrl={imageUrl} imageUrls={imageUrls} videoUrl={videoUrl} aspectRatio={mediaAspect} />
         : (
-          <div style={{ width: '100%', aspectRatio: '1 / 1', background: A.surfaceAlt, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ width: '100%', aspectRatio: mediaAspect, background: A.surfaceAlt, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <span style={{ fontSize: 24, opacity: 0.3 }}>🖼️</span>
           </div>
         )
@@ -274,12 +277,12 @@ function InstagramPreview({ caption, imageUrl, imageUrls, videoUrl, structuredHa
   )
 }
 
-function GenericPreview({ caption, platform, imageUrl, imageUrls, videoUrl }: {
-  caption: string; platform: string; imageUrl?: string; imageUrls?: string[]; videoUrl?: string
+function GenericPreview({ caption, platform, imageUrl, imageUrls, videoUrl, derivativeType }: {
+  caption: string; platform: string; imageUrl?: string; imageUrls?: string[]; videoUrl?: string; derivativeType?: string
 }) {
   const max = getPlatform(platform).captionMax
   const overLimit = caption.length > max
-  const aspectRatio = platform === 'youtube_shorts' || platform === 'tiktok' ? '9 / 16' : '16 / 9'
+  const aspectRatio = getMediaAspectRatio(platform, derivativeType)
 
   return (
     <div style={{ borderRadius: 8, border: `1px solid ${A.border}`, overflow: 'hidden', background: A.surface }}>
@@ -308,9 +311,10 @@ interface PlatformPreviewProps {
   imageUrls?: string[]
   videoUrl?: string
   hashtagCount: number
+  derivativeType?: string
 }
 
-export default function PlatformPreview({ platform, caption, imageUrl, imageUrls, videoUrl, hashtagCount }: PlatformPreviewProps) {
+export default function PlatformPreview({ platform, caption, imageUrl, imageUrls, videoUrl, hashtagCount, derivativeType }: PlatformPreviewProps) {
   const normalized = normalizePlatform(platform)
 
   return (
@@ -318,13 +322,13 @@ export default function PlatformPreview({ platform, caption, imageUrl, imageUrls
       <p style={{ fontSize: 11, fontWeight: 500, color: A.textSoft, margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: 0.5 }}>
         Platform Preview
       </p>
-      {normalized === 'linkedin' && <LinkedInPreview caption={caption} imageUrl={imageUrl} imageUrls={imageUrls} videoUrl={videoUrl} />}
+      {normalized === 'linkedin' && <LinkedInPreview caption={caption} imageUrl={imageUrl} imageUrls={imageUrls} videoUrl={videoUrl} derivativeType={derivativeType} />}
       {normalized === 'x' && <XPreview caption={caption} />}
       {normalized === 'instagram' && (
-        <InstagramPreview caption={caption} imageUrl={imageUrl} imageUrls={imageUrls} videoUrl={videoUrl} structuredHashtagCount={hashtagCount} />
+        <InstagramPreview caption={caption} imageUrl={imageUrl} imageUrls={imageUrls} videoUrl={videoUrl} structuredHashtagCount={hashtagCount} derivativeType={derivativeType} />
       )}
       {normalized !== 'linkedin' && normalized !== 'x' && normalized !== 'instagram' && (
-        <GenericPreview caption={caption} platform={normalized} imageUrl={imageUrl} imageUrls={imageUrls} videoUrl={videoUrl} />
+        <GenericPreview caption={caption} platform={normalized} imageUrl={imageUrl} imageUrls={imageUrls} videoUrl={videoUrl} derivativeType={derivativeType} />
       )}
     </div>
   )

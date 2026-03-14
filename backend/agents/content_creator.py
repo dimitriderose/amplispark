@@ -11,7 +11,7 @@ from backend.config import GOOGLE_API_KEY, GEMINI_MODEL
 from backend.platforms import get as get_platform
 
 # Interleaved text+image generation requires an image-capable model
-GEMINI_IMAGE_MODEL = "gemini-2.5-flash-image"
+GEMINI_IMAGE_MODEL = "gemini-3.1-flash-image-preview"
 from backend.services import budget_tracker as bt
 from backend.services.storage_client import upload_image_to_gcs
 from backend.services.brand_assets import get_brand_reference_images
@@ -154,6 +154,16 @@ def _enforce_char_limit(caption: str, platform: str, derivative_type: str = "") 
     limit = limits.get(derivative_type) or limits.get("default")
     if not limit or len(caption) <= limit:
         return caption
+    # Carousel-aware: cut at last complete slide boundary
+    if derivative_type == "carousel":
+        slide_starts = [m.start() for m in _SLIDE_RE.finditer(caption)]
+        for pos in reversed(slide_starts):
+            if pos <= limit - 1:
+                truncated = caption[:pos].rstrip()
+                if len(truncated) > limit // 3:
+                    return truncated
+                break
+    # Default: word-boundary truncation
     truncated = caption[: limit - 1]
     last_space = truncated.rfind(" ")
     if last_space > limit // 2:
@@ -185,6 +195,8 @@ async def _smart_condense(caption: str, platform: str, derivative_type: str) -> 
         f"RULES:\n"
         f"- Keep the hook (first sentence) intact or make it punchier\n"
         f"- Cut from the middle, never the hook or closing thought\n"
+        f"- For carousel captions: PRESERVE all Slide N: labels and the same number of slides. "
+        f"Shorten each slide's body, do NOT remove entire slides.\n"
         f"- The result must be a COMPLETE thought — no trailing '...' or cut-off sentences\n"
         f"- Do NOT add hashtags, explanations, or meta-commentary\n"
         f"- Output ONLY the shortened caption\n\n"
@@ -199,6 +211,16 @@ async def _smart_condense(caption: str, platform: str, derivative_type: str) -> 
         )
         condensed = _strip_markdown(resp.text.strip())
         if len(condensed) <= limit and len(condensed) > limit // 3:
+            # For carousels, verify slide count preserved
+            if derivative_type == "carousel":
+                original_count = len(_SLIDE_RE.findall(caption))
+                condensed_count = len(_SLIDE_RE.findall(condensed))
+                if condensed_count < original_count:
+                    logger.warning(
+                        "Smart condense dropped slides (%d→%d) — rejecting",
+                        original_count, condensed_count,
+                    )
+                    return _enforce_char_limit(caption, platform, derivative_type)
             logger.info("Smart condense: %d → %d chars", len(caption), len(condensed))
             return condensed
         logger.warning(
@@ -232,7 +254,7 @@ def _sanitize_hashtags(raw_tags: list[str], platform: str) -> list[str]:
 _SLIDE_RE = re.compile(r"Slide\s*\d+\s*[:\-–]\s*", re.IGNORECASE)
 
 
-def _parse_slide_descriptions(caption: str, max_slides: int = 3) -> list[str]:
+def _parse_slide_descriptions(caption: str, max_slides: int = 10) -> list[str]:
     """Extract per-slide text from a carousel-formatted caption."""
     parts = _SLIDE_RE.split(caption)
     # First part is usually empty or preamble text before "Slide 1:"
@@ -241,16 +263,29 @@ def _parse_slide_descriptions(caption: str, max_slides: int = 3) -> list[str]:
 
 
 def _extract_slide_headline(slide_text: str) -> str:
-    """Extract the first sentence (short headline) from a slide's text for overlay."""
+    """Extract the first sentence (short headline) from a slide's text for overlay.
+
+    Prefers a clean sentence break within 80 chars; falls back to word-boundary
+    truncation. Never cuts mid-word.
+    """
+    # Try to find the first sentence end within a generous limit
     for sep in ['. ', '! ', '? ', '.\n', '!\n', '?\n']:
         idx = slide_text.find(sep)
-        if idx != -1 and idx <= 60:
+        if idx != -1 and idx <= 80:
             return slide_text[:idx + 1].strip()
+    # Also try colon, em-dash, semicolon, or ellipsis as natural break points
+    for sep in [': ', ' — ', '; ', '… ', '... ', '...\n']:
+        idx = slide_text.find(sep)
+        if idx != -1 and idx <= 60:
+            if sep == ': ' and idx < 15:
+                continue  # Skip label prefix like "Technique: ..."
+            return slide_text[:idx].strip()
     if len(slide_text) <= 60:
         return slide_text
+    # Truncate at last word boundary, never mid-word
     truncated = slide_text[:60]
     last_space = truncated.rfind(' ')
-    return truncated[:last_space] if last_space > 0 else truncated
+    return (truncated[:last_space] if last_space > 0 else truncated) + '…'
 
 
 def _strip_markdown(text: str) -> str:
@@ -395,11 +430,15 @@ async def _review_gate(
         _proof_tier = _story.get("social_proof_tier") if isinstance(_story, dict) else None
         _cta_type = day_brief.get("cta_type")
 
+        _pillar_rg = day_brief.get("pillar", "education")
+
         post_for_review = {
             "caption": final_caption,
             "hashtags": parsed_hashtags,
             "platform": platform,
             "derivative_type": derivative_type,
+            "pillar": day_brief.get("pillar", "education"),
+            "content_theme": day_brief.get("content_theme", ""),
         }
         review = await review_post(
             post_for_review, brand_profile,
@@ -458,13 +497,38 @@ async def _review_gate(
         _char_limit = (_spec.char_limits or {}).get(derivative_type) or (_spec.char_limits or {}).get("default", 0)
         _limit_note = f" HARD LIMIT: {_char_limit} characters for {platform} {derivative_type}." if _char_limit else ""
         _FORMAT_NOTES = {
-            "carousel": "Preserve Slide 1:/Slide 2:/Slide 3: labels. Each slide on its own line. Slide 2 must have 2-4 sentences (insight + example). Use bullet points for multi-step explanations. Keep sentences short for mobile readability — break long ideas into bullets.",
-            "thread_hook": "Preserve numbered post format (1/, 2/, 3/). Each post <=280 chars for X, <=300 for Bluesky.",
-            "blog_snippet": "Maintain 2-3 short paragraphs. 150-200 words total.",
-            "pin": "Preserve PIN TITLE: and PIN DESCRIPTION: labels.",
-            "video_first": f"VIDEO CAPTION — teaser only, not an article. 1-2 sentences MAX.{_limit_note} Create curiosity, don't describe the video.",
-            "story": f"STORY — 1 sentence max, ultra-short and punchy.{_limit_note}",
-            "original": f"STANDARD POST — hook + body + close. 1-2 sentence paragraphs for mobile readability.{_limit_note}",
+            "carousel": (
+                f"STRUCTURAL CONSTRAINT (HARD RULE — violating this breaks the image pipeline):\n"
+                f"The following Slide labels are MACHINE-PARSED to generate individual images. "
+                f"You MUST preserve EVERY label exactly: "
+                f"{', '.join(f'Slide {i+1}:' for i in range(_spec.carousel_slide_count))}.\n"
+                f"- Do NOT remove, merge, renumber, or reword any Slide N: label\n"
+                f"- Do NOT restructure the caption to eliminate slide boundaries\n"
+                f"- Apply reviewer suggestions WITHIN individual slides, not by reorganizing\n"
+                f"Content pillar: '{_pillar_rg}' — preserve pillar-appropriate content. "
+                "Slide headlines ≤50 chars, ≤8 words — no generic words (Technique, Method, Step N). "
+                "Keep sentences short for mobile readability."
+            ),
+            "thread_hook": (
+                "Preserve numbered post format (1/, 2/, 3/) for X. "
+                "Bluesky threads do NOT need numbering. "
+                "Each post <=280 chars for X, <=300 for Bluesky. "
+                "Each post must contain a complete, standalone thought. "
+                f"Pillar '{_pillar_rg}' — each post must match the pillar approach."
+            ),
+            "blog_snippet": (
+                f"Maintain 2-3 short paragraphs. 150-200 words total.{_limit_note} "
+                "Closing question must be specific to the content — not generic."
+            ),
+            "pin": (
+                "Preserve PIN TITLE: and PIN DESCRIPTION: labels exactly (machine-parsed downstream). "
+                "PIN TITLE ≤100 chars with action verb and primary keyword. "
+                "PIN DESCRIPTION 200-250 chars with natural SEO keywords. "
+                "No emoji, no hashtags, no first-person."
+            ),
+            "video_first": f"VIDEO CAPTION — teaser only, not an article. 1-2 sentences MAX.{_limit_note} Create curiosity, don't describe the video. No brand paragraph.",
+            "story": f"STORY — 1 sentence max, ultra-short and punchy.{_limit_note} CTA is REQUIRED (swipe up / reply / DM). No hashtags in body.",
+            "original": f"STANDARD POST — hook before fold + body + close. 1-2 sentence paragraphs for mobile readability.{_limit_note}",
         }
         _fmt = _FORMAT_NOTES.get(derivative_type, "")
         _format_block = f"FORMAT: {derivative_type}\n{_fmt}\n\n" if _fmt else ""
@@ -486,7 +550,9 @@ async def _review_gate(
             f"\"Here's why it matters\", \"Let me explain\", \"Here's why you need to\"\n"
             f"- Open with a SPECIFIC, CONCRETE statement or a pattern-interrupt instead\n\n"
             f"{_format_block}"
-            f"REVIEWER SUGGESTIONS (apply ONLY if they don't violate the hard rules):\n"
+            f"REVIEWER SUGGESTIONS (apply within existing format structure — "
+            f"do NOT remove/merge/renumber structural labels like "
+            f"Slide N:, 1/, PIN TITLE:, PIN DESCRIPTION:):\n"
             f"{notes_text}\n\n"
             f"CURRENT CAPTION:\n{final_caption}\n\n"
             f"Rewrite the caption, fixing the issues while respecting the hard rules. "
@@ -504,6 +570,16 @@ async def _review_gate(
             platform,
             derivative_type,
         )
+        # Carousel safety: reject rewrites that lost slide structure
+        if derivative_type == "carousel":
+            orig_slides = len(_SLIDE_RE.findall(final_caption))
+            new_slides = len(_SLIDE_RE.findall(rewritten))
+            if orig_slides > 1 and new_slides < orig_slides:
+                logger.warning(
+                    "Review gate rewrite lost slides (%d→%d) — keeping original",
+                    orig_slides, new_slides,
+                )
+                return final_caption, parsed_hashtags, review
         if revised_hashtags and isinstance(revised_hashtags, list):
             parsed_hashtags = _sanitize_hashtags(revised_hashtags, platform)
         logger.info("Review gate rewrite complete for %s/%s", platform, derivative_type)
@@ -514,6 +590,8 @@ async def _review_gate(
             "hashtags": parsed_hashtags,
             "platform": platform,
             "derivative_type": derivative_type,
+            "pillar": day_brief.get("pillar", "education"),
+            "content_theme": day_brief.get("content_theme", ""),
         }
         final_review = await review_post(
             rewritten_for_review, brand_profile,
@@ -550,7 +628,8 @@ async def _review_gate(
             f"- Hook angle: {_hook_dir}\n"
             f"- Key message: {_key_msg}\n"
             f"- CTA type: {_cta_type or 'engagement'}\n\n"
-            f"REVIEWER FEEDBACK (these are the problems to avoid):\n{strong_notes}\n\n"
+            f"REVIEWER FEEDBACK (fix within existing structure — "
+            f"do NOT remove/merge/renumber structural labels):\n{strong_notes}\n\n"
             f"HARD RULES:\n{_rewrite_constraints}"
             f"- BANNED HOOKS — do NOT open with: "
             f"\"Are you...?\", \"Did you know...?\", \"What if...?\", \"In today's...\", "
@@ -570,6 +649,16 @@ async def _review_gate(
             _strip_markdown(_fix_mojibake(resp2.text.strip())),
             platform, derivative_type,
         )
+        # Carousel safety: reject rewrites that lost slide structure
+        if derivative_type == "carousel":
+            orig_slides = len(_SLIDE_RE.findall(final_caption))
+            strong_slides = len(_SLIDE_RE.findall(strong_rewrite))
+            if orig_slides > 1 and strong_slides < orig_slides:
+                logger.warning(
+                    "Review gate attempt 2 lost slides (%d→%d) — keeping original",
+                    orig_slides, strong_slides,
+                )
+                return final_caption, parsed_hashtags, review
 
         # Re-review attempt 2
         strong_for_review = {
@@ -577,6 +666,8 @@ async def _review_gate(
             "hashtags": parsed_hashtags,
             "platform": platform,
             "derivative_type": derivative_type,
+            "pillar": day_brief.get("pillar", "education"),
+            "content_theme": day_brief.get("content_theme", ""),
         }
         strong_review = await review_post(
             strong_for_review, brand_profile,
@@ -662,11 +753,19 @@ def _build_image_prompt(
     """Build a platform-aware image generation prompt."""
     _spec = get_platform(platform)
 
+    _color_block = ""
+    if color_hint:
+        _color_block = (
+            f"{color_hint} Incorporate these brand colors as accents — "
+            "through environment elements, clothing, props, lighting tint, or background tones. "
+            "Brand colors should be noticeable but not dominate the composition. "
+            "The palette should feel natural, not artificially saturated.\n"
+        )
     prompt = (
         f"Create a high-quality {aspect} {style['keyword']} for {platform}.\n"
         f"Subject: {enhanced_image_prompt}\n"
         f"Visual direction: {style['directives']}. {image_style_directive}\n"
-        f"{color_hint}\n"
+        f"{_color_block}"
     )
     if _spec.composition:
         prompt += f"COMPOSITION: {_spec.composition}\n"
@@ -691,18 +790,28 @@ def _build_image_prompt(
         prompt += "Leave center/lower third slightly uncluttered (text may be added separately).\n"
 
     prompt += (
-        "ABSOLUTE PROHIBITIONS:\n"
-        "- No AI-generated text, letters, numbers, words, labels, or typography\n"
-        "- No text, words, numbers, or typography on digital screens, monitors, TV displays, whiteboards, or software interfaces — show abstract data visualizations, graphs, or color patterns instead\n"
+        "SCENE GUIDANCE:\n"
+        "- Ground the subject in a specific, tangible environment — avoid generic or empty backdrops.\n"
+        "- Vary the setting to match the subject matter (kitchen for food, workshop for craft, park for lifestyle, etc.).\n"
+        "- Avoid GENERIC office/boardroom scenes. If the topic involves professional work, show a SPECIFIC workspace "
+        "(a real desk with real tools, a workshop, a client site) — not a sterile conference table.\n"
+        "- If the visual concept involves screens or monitors, show them — but their displays should contain abstract shapes, color gradients, or blurred content, never readable text.\n"
+        "- Props and environmental details should reinforce the subject, not distract from it.\n"
+    )
+    prompt += (
+        "ABSOLUTE PROHIBITIONS (text will be added in post-production — the image must be text-free):\n"
+        "- No AI-generated text, letters, numbers, words, labels, or typography anywhere in the image\n"
+        "- No readable text on any surface — screens, signs, books, clothing, whiteboards, packaging. Show abstract visuals, color fields, or blurred content instead\n"
         "- No watermarks, logos, brand marks, or signatures\n"
         "- No UI elements, buttons, frames, borders, or overlays\n"
         "- No fake screenshots, browser windows, or device mockups\n"
-        "- No floating/disconnected elements\n"
+        "- No floating/disconnected elements or glowing holographic shapes\n"
         "- No distorted anatomy, extra limbs, or wrong finger counts\n"
-        "- No transparent ghosting or overlapping objects\n"
-        "- No blurry pseudo-text shadows\n"
-        "- No fake social media UI (Instagram badges, like buttons)\n"
-        "- No lens artifacts (unwanted vignetting, chromatic aberration)\n"
+        "- No stock-photo cliches: handshake, lightbulb, puzzle pieces, gears, miniature people on oversized objects, "
+        "magnifying glass over documents, person reviewing paperwork, person pointing at or touching a screen/whiteboard, "
+        "person at laptop in modern office, generic conference room or boardroom, person holding tablet or clipboard, "
+        "blue holographic data visualizations, person with arms crossed posing at camera, "
+        "group standing around a table, team high-fiving, sticky notes on glass wall, rocket ship\n"
         f"{style_ref_block}"
     )
     return prompt
@@ -760,12 +869,19 @@ def _build_carousel_slide_prompt(
     carousel_notes = _spec.carousel_notes or ""
     mood = _infer_slide_mood(slide_text) if slide_text else (_spec.mood or "professional")
 
+    _color_block = ""
+    if color_hint:
+        _color_block = (
+            f"{color_hint} Incorporate these brand colors as accents — "
+            "through environment elements, clothing, props, lighting tint, or background tones. "
+            "Noticeable but not dominant.\n"
+        )
     prompt = (
         f"Create carousel slide {slide_num} image as a {style['keyword']}.\n"
         f"Visual direction: {style['directives']}.\n"
         f"Scene: {slide_visual_hint}\n"
-        f"MOOD: {mood}\n"
-        f"{color_hint}\n"
+        f"MOOD: {mood}.\n"
+        f"{_color_block}"
     )
     if _spec.composition:
         prompt += f"COMPOSITION: {_spec.composition}\n"
@@ -774,13 +890,37 @@ def _build_carousel_slide_prompt(
     if carousel_notes:
         prompt += f"CAROUSEL: {carousel_notes}\n"
     prompt += (
-        "Match the cover image's color grading and visual style exactly.\n"
-        "ABSOLUTE PROHIBITIONS:\n"
-        "- No AI-generated text, letters, numbers, words, labels, or typography\n"
-        "- No text, words, numbers, or typography on digital screens, monitors, TV displays, whiteboards, or software interfaces — show abstract data visualizations, graphs, or color patterns instead\n"
+        "VISUAL CONSISTENCY (CRITICAL): This slide MUST look like it belongs in the same "
+        "visual series as the cover image. Match ALL of the following exactly:\n"
+        "- Same visual style (e.g., editorial photo, hand-drawn illustration, 3D render)\n"
+        "- Same color temperature and grading (warm/cool, saturation level)\n"
+        "- Same lighting direction and quality\n"
+        "- Same depth of field or detail level\n"
+        "- Same background complexity (don't mix clean studio with busy street)\n"
+        "A viewer should feel these belong to the same visual series.\n"
+    )
+    # Per-slide composition variety
+    _SLIDE_COMPOSITIONS = {
+        2: "COMPOSITION: Medium close-up shot. Focus on hands, tools, or a detail. Shallow depth of field.\n",
+        3: "COMPOSITION: Wide or environmental shot. Show the full scene or space. Subject occupies less than 40% of frame.\n",
+        4: "COMPOSITION: Overhead/flat-lay or unusual angle. Bird's-eye view of workspace, ingredients, materials, or arrangement.\n",
+        5: "COMPOSITION: Tight close-up on texture, material, or expression. Abstract or detail-oriented.\n",
+        6: "COMPOSITION: Medium shot from a low or diagonal angle. Dynamic perspective with environmental context.\n",
+    }
+    prompt += _SLIDE_COMPOSITIONS.get(slide_num, "COMPOSITION: Vary the angle and framing from previous slides. Avoid repeating the same shot.\n")
+    prompt += (
+        "ABSOLUTE PROHIBITIONS (text will be added in post-production — the image must be text-free):\n"
+        "- No AI-generated text, letters, numbers, words, labels, or typography anywhere\n"
+        "- No readable text on any surface — screens, signs, books, whiteboards, packaging. Show abstract visuals or blurred content instead\n"
         "- No watermarks, logos, brand marks, or signatures\n"
         "- No UI elements, buttons, frames, borders, or overlays\n"
+        "- No floating/disconnected elements or glowing holographic shapes\n"
         "- No distorted anatomy, extra limbs, or wrong finger counts\n"
+        "- No stock-photo cliches: handshake, lightbulb, puzzle pieces, gears, miniature people on oversized objects, "
+        "magnifying glass over documents, person reviewing paperwork, person pointing at or touching a screen/whiteboard, "
+        "person at laptop in modern office, generic conference room or boardroom, person holding tablet or clipboard, "
+        "blue holographic data visualizations, person with arms crossed posing at camera, "
+        "group standing around a table, team high-fiving, sticky notes on glass wall, rocket ship\n"
         f"{style_ref_block}"
     )
     return prompt
@@ -804,38 +944,52 @@ async def _generate_carousel_images(
     Skips slide 0 if cover_image_bytes is already provided (from the interleaved call).
     """
     start = 1 if cover_image_bytes else 0
-    slides_to_generate = slide_descriptions[start:3]  # max 2 additional
+    slides_to_generate = slide_descriptions[start:]  # generate all remaining slides
     if not slides_to_generate:
         return []
 
     style = image_style or _get_image_style(None)
 
+    # Limit concurrent image API calls to avoid rate limiting
+    _sem = asyncio.Semaphore(3)
+
     async def _gen_one(slide_text: str, slide_num: int) -> tuple[bytes, str] | None:
-        prompt = _build_carousel_slide_prompt(
-            platform=platform,
-            style=style,
-            slide_num=slide_num,
-            slide_visual_hint=slide_text[:200],
-            color_hint=color_hint,
-            style_ref_block=style_ref_block,
-            slide_text=slide_text,
-        )
-        try:
-            resp = await asyncio.to_thread(
-                client.models.generate_content,
-                model=GEMINI_IMAGE_MODEL,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_modalities=["IMAGE"],
-                    temperature=0.7,
-                ),
+        async with _sem:
+            prompt = _build_carousel_slide_prompt(
+                platform=platform,
+                style=style,
+                slide_num=slide_num,
+                slide_visual_hint=slide_text[:200],
+                color_hint=color_hint,
+                style_ref_block=style_ref_block,
+                slide_text=slide_text,
             )
-            for part in resp.candidates[0].content.parts:
-                if part.inline_data:
-                    return (part.inline_data.data, part.inline_data.mime_type or "image/png")
-        except Exception as e:
-            logger.error("Carousel slide %d generation failed: %s", slide_num, e)
-        return None
+            # Pass cover image as visual reference for style consistency
+            contents: list = [prompt]
+            if cover_image_bytes:
+                contents.append(
+                    "The following image is the carousel COVER — match its visual style, "
+                    "color grading, lighting, and photographic approach exactly."
+                )
+                contents.append(types.Part.from_bytes(
+                    data=cover_image_bytes, mime_type="image/png"
+                ))
+            try:
+                resp = await asyncio.to_thread(
+                    client.models.generate_content,
+                    model=GEMINI_IMAGE_MODEL,
+                    contents=contents,
+                    config=types.GenerateContentConfig(
+                        response_modalities=["IMAGE"],
+                        temperature=0.7,
+                    ),
+                )
+                for part in resp.candidates[0].content.parts:
+                    if part.inline_data:
+                        return (part.inline_data.data, part.inline_data.mime_type or "image/png")
+            except Exception as e:
+                logger.error("Carousel slide %d generation failed: %s", slide_num, e)
+            return None
 
     results = await asyncio.gather(
         *[_gen_one(text, i + start + 1) for i, text in enumerate(slides_to_generate)]
@@ -1007,7 +1161,7 @@ async def generate_post(
         "- VALUE FIRST: The caption must TEACH — a specific tip, fact, insight, "
         "or perspective the reader didn't know. The brand is the NARRATOR, not the subject.\n"
         "  BAD: 'At [Brand], we partner with [audience] to provide [service].' (brand-as-subject paragraph)\n"
-        "  GOOD: '[Specific insight]. We spotted this for a client last quarter.' (brand woven into the story)\n"
+        "  GOOD: '[Specific insight]. We noticed this pattern last quarter.' (brand woven into the story)\n"
         "- NO BRAND PARAGRAPHS: Never dedicate a full paragraph to describing the brand's services, "
         "history, or value proposition. The brand name should appear at most ONCE, "
         "embedded naturally in a sentence that's primarily about the reader's problem or the insight.\n"
@@ -1040,14 +1194,27 @@ async def generate_post(
         "1. SPECIFICITY: Include a number, timeframe, or concrete detail from the brand's real experience.\n"
         "   BAD: \"Growing your business is hard\"\n"
         "   GOOD: \"After 20 years in this industry, here's the one mistake we still see every quarter\"\n"
-        "2. PATTERN INTERRUPT — use one of these structures (rotate across the week, never repeat):\n"
-        "   - Contrarian: \"Stop [common advice]. Here's what actually works.\"\n"
+        "2. PATTERN INTERRUPT — use one of these structures (rotate, NEVER repeat same pattern in a week):\n"
+        "   - Contrarian flip: \"[Common belief] is actually costing you [specific consequence].\"\n"
+        "   - Data-driven: \"[X]% of [audience] make this mistake. Here's the pattern.\"\n"
         "   - Story opener: \"A client came to us last [season] because...\"\n"
         "   - Number: \"[X] mistakes we see every [timeframe] in [industry]\"\n"
         "   - Question: \"What would change if you [specific outcome]?\"\n"
         "   - Confession: \"We almost made this mistake ourselves.\"\n"
+        "   - Observation: \"I've reviewed [X] [items] this year. Here's the pattern.\"\n"
+        "   - Comparison: \"[Thing A] vs [Thing B] — and why most people pick wrong.\"\n"
+        "   BANNED HOOK FORMATS (overused — except TikTok/Reels where imperatives are native):\n"
+        "   - \"Stop [verb]-ing...\" (the 'Stop doing X' formula)\n"
+        "   - \"Most people don't realize...\"\n"
+        "   - \"Here's the truth about...\"\n"
+        "   - \"Nobody is talking about...\"\n"
         "3. NEVER start with: \"Are you...?\", \"Did you know...?\", \"What if...?\", \"In today's...\", \"As a...\", \"When it comes to...\"\n"
-        "4. The hook from the brief is a STARTING POINT — rewrite it to be specific and surprising."
+        "4. The hook from the brief is a STARTING POINT — rewrite it to be specific and surprising.\n"
+        "5. PLATFORM FOLD: Your hook MUST land BEFORE the fold (Instagram: 125 chars, "
+        "LinkedIn: 140 chars, Facebook: ~140 chars). Everything after the fold requires "
+        "a tap to reveal — if the hook isn't above the fold, nobody reads the rest.\n"
+        "6. HOOK TEST: Read just the first line. Would a stranger in your target audience "
+        "stop scrolling? If not, rewrite it."
     )
 
     # Pinterest: SEO-driven titles, not social hook patterns
@@ -1371,63 +1538,147 @@ async def generate_post(
         f"do NOT just cut off mid-sentence. The caption must be a complete thought.\n"
     ) if _deriv_char_limit else ""
 
+    # Pillar-get helper: returns pillar-specific guidance or default
+    def _pg(m: dict[str, str], d: str) -> str:
+        return m.get(_pillar, d)
+
     # Format-specific instructions for derivative post types
     _DERIVATIVE_INSTRUCTIONS: dict[str, str] = {
         "carousel": (
-            "FORMAT: Instagram/LinkedIn CAROUSEL (3 slides)\n"
+            f"FORMAT: {platform.upper()} CAROUSEL ({_spec.carousel_slide_count} slides)\n"
             "Structure the caption as slide-by-slide copy:\n"
-            "  Slide 1: Hook (compelling, ≤10 words — this becomes the cover). "
-            "ALL hook rules above apply here — no 'Are you...?', 'Did you know...?', etc.\n"
-            "  Slide 2: Start with a SHORT HEADLINE (≤50 chars, ≤8 words) that summarizes the insight. "
-            "Then teach ONE specific insight — name a real technique, rule, or method. "
-            "Then give a CONCRETE EXAMPLE showing it in practice (a scenario, a number, a before/after). "
-            "NOT a platitude like 'plan proactively.' GIVE the actual insight AND show what it looks like.\n"
-            "  Slide 3: Start with a SHORT HEADLINE (≤50 chars, ≤8 words) summarizing the takeaway. "
-            "Then give the actionable step the reader can do TODAY + call to action. "
-            "Be specific: 'Compare X to Y this week' not 'Improve your operations.'\n"
-            "Label each slide clearly: 'Slide 1:', 'Slide 2:', 'Slide 3:'.\n"
-            "SUBSTANCE CHECK: If any slide could apply to every business in the industry, "
-            "it's too generic. Rewrite it."
+            "  Slide 1: Hook (compelling, 8-12 words — this becomes the cover). "
+            "ALL hook rules above apply.\n"
+            + {
+                "education": (
+                    "  Slide 2: Stakes — WHY this topic matters. What the reader gains or loses.\n"
+                    f"  Slides 3-{_spec.carousel_slide_count - 2}: Each slide starts with a SHORT HEADLINE "
+                    "(≤50 chars, ≤8 words). Teach ONE specific insight per slide — name a real "
+                    "technique, rule, or method. Give a CONCRETE EXAMPLE showing it in practice. "
+                    "NAMING TEST: You should be able to say 'This slide teaches [technique name]'.\n"
+                ),
+                "promotion": (
+                    "  Slide 2: The problem/need — what pain point does this product solve?\n"
+                    f"  Slides 3-{_spec.carousel_slide_count - 2}: Each slide starts with a SHORT HEADLINE "
+                    "(≤50 chars, ≤8 words). Showcase ONE specific feature, benefit, or use case "
+                    "per slide. Show the feature IN ACTION — a scenario, a before/after, or a "
+                    "concrete result. NOT generic marketing claims.\n"
+                ),
+                "inspiration": (
+                    "  Slide 2: The starting point — where the story begins (the struggle, "
+                    "the challenge, the 'before').\n"
+                    f"  Slides 3-{_spec.carousel_slide_count - 2}: Each slide starts with a SHORT HEADLINE "
+                    "(≤50 chars, ≤8 words). Advance the transformation story — each slide is a "
+                    "chapter with a specific moment, turning point, or realization. "
+                    "Use concrete details (dates, places, emotions, decisions).\n"
+                ),
+                "behind_the_scenes": (
+                    "  Slide 2: Set the scene — what are we looking at and why it matters.\n"
+                    f"  Slides 3-{_spec.carousel_slide_count - 2}: Each slide starts with a SHORT HEADLINE "
+                    "(≤50 chars, ≤8 words). Show ONE step, detail, or moment from the real process. "
+                    "Be specific: tools used, decisions made, things that went wrong. "
+                    "Authenticity > polish.\n"
+                ),
+                "user_generated": (
+                    "  Slide 2: Introduce the person/customer — who they are and their context.\n"
+                    f"  Slides 3-{_spec.carousel_slide_count - 2}: Each slide starts with a SHORT HEADLINE "
+                    "(≤50 chars, ≤8 words). Tell their specific story — real quotes, real details, "
+                    "real outcomes. Each slide advances the narrative. "
+                    "Write in THEIR voice, not corporate voice.\n"
+                ),
+            }.get(_pillar, (
+                "  Slide 2: Context — WHY this matters to the reader.\n"
+                f"  Slides 3-{_spec.carousel_slide_count - 2}: Each slide starts with a SHORT HEADLINE "
+                "(≤50 chars, ≤8 words). One distinct point per slide with a concrete detail.\n"
+            ))
+            + "  OPEN LOOPS: End each content slide with a teaser that makes the reader swipe. "
+            "Use a DIFFERENT open loop on each slide — never repeat the same phrase. "
+            "Match the brand's tone.\n"
+            + {
+                "education": (
+                    "  Examples: 'Most teams stop here. That's the mistake.', "
+                    "'The data tells a different story.', 'But that's only half of it.'\n"
+                ),
+                "promotion": (
+                    "  Examples: 'But the best part isn't the feature itself.', "
+                    "'Wait until you see what it does with [X].', 'That's just the surface.'\n"
+                ),
+                "inspiration": (
+                    "  Examples: 'Then everything changed.', "
+                    "'That was the moment.', 'But the real test was still ahead.'\n"
+                ),
+                "behind_the_scenes": (
+                    "  Examples: 'Here's what most people don't see.', "
+                    "'This is where it almost fell apart.', 'The final step surprised us too.'\n"
+                ),
+                "user_generated": (
+                    "  Examples: 'In their own words:', "
+                    "'What happened next was unexpected.', 'That's when it clicked for them.'\n"
+                ),
+            }.get(_pillar, "  Examples: 'But that's only half of it.', 'Here's what changed.'\n")
+            + f"  Slide {_spec.carousel_slide_count - 1}: Recap — summarize key points "
+            "in a scannable format (short bullets or numbered list).\n"
+            + f"  Slide {_spec.carousel_slide_count} (final): SHORT HEADLINE (≤50 chars) + "
+            + {
+                "education": "actionable step the reader can do TODAY + CTA (save/bookmark).\n",
+                "promotion": "clear next step to try or buy + CTA (link/shop/try free).\n",
+                "inspiration": "the takeaway lesson + CTA (share/tag someone who needs this).\n",
+                "behind_the_scenes": "what's coming next or invitation to follow the journey + CTA (follow).\n",
+                "user_generated": "the customer's recommendation in their voice + CTA (share your story).\n",
+            }.get(_pillar, "clear takeaway + CTA.\n")
+            + f"Label each slide clearly: 'Slide 1:', 'Slide 2:', ... 'Slide {_spec.carousel_slide_count}:'.\n"
+            f"Write EXACTLY {_spec.carousel_slide_count} slides — each must carry a DISTINCT point.\n"
+            "DATA & PROOF: Include at least one specific number, data point, or concrete example "
+            "across the carousel. Use ONLY data from the brand profile or well-known facts. "
+            "NEVER fabricate statistics.\n"
+            "SUBSTANCE CHECK: If any slide could apply to every business in any industry, "
+            "it's too generic. Rewrite with a specific detail, technique, or example.\n"
+            "  BAD: 'Follow up with your leads consistently.'\n"
+            "  GOOD: 'The 3-touch follow-up: Day 1 email, Day 3 value-add, Day 7 direct ask.'\n"
+            "SLIDE HEADLINES — generic labels get zero engagement. Forbidden headline words:\n"
+            "  Education: No 'Technique', 'Method', 'Concept', 'Strategy', 'Step N' as headline. "
+            "Instead NAME the technique ('The 80/20 Rule', 'SCAMPER Method', 'Eisenhower Matrix').\n"
+            "  Promotion: No 'Feature', 'Benefit', 'How It Works', 'Use Case'. "
+            "Instead NAME the feature + benefit ('Offline Sync So You Never Lose Work').\n"
+            "  Inspiration: No 'The Struggle', 'The Journey', 'The Breakthrough'. "
+            "Instead NAME the specific moment ('The Pivot That Saved Everything').\n"
+            "  Behind the scenes: No 'The Setup', 'The Process', 'The Result'. "
+            "Instead NAME the actual task ('Building Our New Studio').\n"
+            "  User generated: No 'The Customer', 'The Problem', 'The Solution'. "
+            "Instead USE their name and context ('How Sarah Doubled Her Grant Success Rate')."
         ),
         "thread_hook": (
             "FORMAT: THREAD\n"
-            "Write 3-7 posts (use as many as the content requires — every post must carry a specific insight).\n"
-            "  1/ Hook that stops the scroll. "
-            "ALL hook rules above apply — no 'Are you...?', 'Did you know...?', etc.\n"
-            "  Middle posts: One key insight per post, concise and punchy. "
-            "No filler — if a post doesn't add a new fact or angle, cut it.\n"
-            "  Last post: A final INSIGHT or actionable takeaway — NOT a brand pitch. "
-            "Every post in the thread (including the last) must teach something. "
-            "If a CTA is assigned, weave it into the insight naturally. "
-            "BAD last post: 'Growing your business requires expert guidance. Contact us.' "
-            "GOOD last post: 'tl;dr — Track the 3 metrics that matter. Review them weekly. "
-            "Adjust before problems compound. Most issues are fixable when caught early.'\n"
+            "Write 3-7 posts (use as many as the content requires — every post must earn its place).\n"
+            "  1/ Hook that stops the scroll. ALL hook rules above apply.\n"
+            f"  Middle posts: One key point per post, concise and punchy. "
+            f"Each post should {_pg({'education': 'teach a specific technique or principle', 'inspiration': 'advance a transformation narrative or motivational arc', 'promotion': 'showcase a distinct feature, benefit, or use case', 'behind_the_scenes': 'reveal a process step, team moment, or behind-the-curtain detail', 'user_generated': 'highlight a customer experience, community moment, or real result'}, 'deliver a specific insight or story beat')}. "
+            "No filler — if a post doesn't add something new, cut it.\n"
+            f"  Last post: A strong closing that {_pg({'education': 'gives an actionable takeaway the reader can use today', 'inspiration': 'lands the emotional payoff or transformation moment', 'promotion': 'makes the value proposition undeniable without a hard sell', 'behind_the_scenes': 'connects the process back to the audience or invites them in', 'user_generated': 'celebrates the community or invites others to share'}, 'delivers a final insight')} — NOT a brand pitch.\n"
             "Per-post limit: X = 280 chars, Bluesky = 300 chars.\n"
-            "Separate each post with a blank line. Each must stand alone AND deliver standalone value.\n"
-            "Note: Bluesky threads don't need 1/2/3/ numbering (the UI handles threading). "
-            "X threads use 1/ 2/ 3/ numbering."
+            "Separate each post with a blank line. Each must stand alone.\n"
+            "Note: Bluesky threads don't need 1/2/3/ numbering. X threads use 1/ 2/ 3/."
         ),
         "blog_snippet": (
             "FORMAT: LinkedIn THOUGHT LEADERSHIP excerpt\n"
-            "Write 150–200 words total:\n"
-            "  - Bold opening: opinion-forward statement OR a specific, contrarian question "
-            "(NOT a generic 'Are you...?' question)\n"
-            "  - 2–3 short paragraphs expanding the idea with a real insight or example\n"
+            "Write 150-200 words total:\n"
+            f"  - Bold opening: {_pg({'education': 'opinion-forward statement or contrarian take on a common practice', 'inspiration': 'vivid transformation moment or aspirational statement', 'promotion': 'bold product/service claim or problem-solution hook', 'behind_the_scenes': 'candid reveal about how something actually works internally', 'user_generated': 'spotlight on a real customer moment or community insight'}, 'opinion-forward statement or contrarian question')}\n"
+            "  - 2-3 short paragraphs expanding the idea with a real insight or example\n"
             "  - Closing question to spark discussion in the comments\n"
             "Professional but conversational tone."
         ),
         "story": (
             "FORMAT: Instagram/Facebook STORY\n"
             "Write ≤50 words total — short, punchy, immediate:\n"
-            "  - First line: big emotion, bold question, or surprising statement\n"
+            f"  - First line: {_pg({'education': 'surprising fact or quick tip hook', 'inspiration': 'big emotion or transformation moment', 'promotion': 'bold product claim or irresistible offer', 'behind_the_scenes': 'candid peek or you-were-not-supposed-to-see-this energy', 'user_generated': 'customer shoutout or community highlight'}, 'bold question or surprising statement')}\n"
             "  - One clear call to action (swipe up / reply / DM us)\n"
             "No hashtags in the body — add them in the HASHTAGS section only."
         ),
         "pin": (
             "FORMAT: Pinterest PIN\n"
             "Write as two clearly labeled parts:\n"
-            "  PIN TITLE: ≤100 chars, keyword-rich, compelling headline\n"
-            "  PIN DESCRIPTION: 200-250 chars, SEO-optimized with natural keywords\n"
+            f"  PIN TITLE: ≤100 chars, keyword-rich — {_pg({'education': 'lead with the technique or framework name', 'inspiration': 'lead with the transformation or aspirational outcome', 'promotion': 'lead with the product/service benefit', 'behind_the_scenes': 'lead with the process or behind-the-curtain angle', 'user_generated': 'lead with the customer story or community angle'}, 'compelling headline')}\n"
+            f"  PIN DESCRIPTION: 200-250 chars, SEO-optimized — {_pg({'education': 'describe what the reader will learn and why it matters', 'inspiration': 'paint the before/after or aspirational vision', 'promotion': 'highlight key features and the problem they solve', 'behind_the_scenes': 'tease the process or reveal that makes people curious', 'user_generated': 'share the customer perspective and invite community'}, 'natural keywords describing the content')}\n"
             "No hashtags — use searchable keywords naturally."
         ),
         "video_first": (
@@ -1435,9 +1686,9 @@ async def generate_post(
             "The VIDEO is the content. Your caption is a teaser, not an article.\n"
             "LENGTH: 1-3 sentences MAX.\n"
             "- Instagram/TikTok Reels/YouTube Shorts: 50-150 chars ideal, 200 max. "
-            "Your caption appears ON TOP of the video — shorter is better.\n"
-            "- LinkedIn/Facebook video: under 500 chars. Give the reader a reason to press play.\n"
-            "Write a hook that makes people want to WATCH, not read.\n"
+            "Caption appears ON TOP of the video — shorter is better.\n"
+            "- LinkedIn/Facebook video: under 500 chars. Give a reason to press play.\n"
+            f"Hook angle: {_pg({'education': 'tease the technique or the I-wish-I-knew-this-sooner moment', 'inspiration': 'tease the emotional payoff or transformation', 'promotion': 'tease the product reveal or result', 'behind_the_scenes': 'tease the behind-the-curtain moment people rarely see', 'user_generated': 'tease the customer reaction or real-world result'}, 'create curiosity about what happens in the video')}.\n"
             "Do NOT describe what happens in the video — create curiosity.\n"
             "Do NOT include a brand paragraph — the video speaks for the brand."
         ),
@@ -1446,9 +1697,11 @@ async def generate_post(
             "Structure:\n"
             "  - Hook: 1 sentence that stops the scroll — specific, mid-story, or contrarian. "
             "Must land BEFORE the platform fold. ALL hook rules above apply.\n"
-            "  - Body: 2-4 short paragraphs (1-2 sentences each for mobile readability). "
-            "Teach something, share an insight, or tell a micro-story.\n"
-            "  - Close: CTA or takeaway matching the assigned cta_type.\n"
+            f"  - Body: 2-4 short paragraphs (1-2 sentences each for mobile readability). "
+            f"{_pg({'education': 'Teach a specific technique, framework, or actionable method', 'inspiration': 'Tell a transformation story or paint an aspirational vision', 'promotion': 'Showcase features, benefits, or a compelling use case', 'behind_the_scenes': 'Reveal a real process, team moment, or workflow detail', 'user_generated': 'Highlight a customer experience, review, or community moment'}, 'Share a specific insight or tell a micro-story')}. "
+            "Include at least one concrete detail (number, example, or named method).\n"
+            "  - Close: CTA or takeaway matching the assigned cta_type. "
+            "Make the CTA specific to the content topic — not generic.\n"
             "LENGTH: Instagram 150-300 words (hook ≤125 chars), "
             "LinkedIn 150-300 words (hook ≤140 chars), "
             "Facebook 100-250 words (hook ≤140 chars), "
@@ -1466,24 +1719,64 @@ async def generate_post(
         _THIN_PROFILE_OVERRIDES: dict[str, str] = {
             "carousel": (
                 "\nTHIN-PROFILE OVERRIDE (this brand has NO client data):\n"
-                "  Slide 2: Teach a CONCRETE TECHNIQUE — a step-by-step method, "
-                "a specific rule of thumb, or a named framework. "
-                "Do NOT invent client stories, dollar amounts, or case studies.\n"
-                "  Slide 3: Give the reader ONE thing they can do TODAY. "
-                "Do NOT say 'Book a consultation' unless the CTA type is 'conversion'.\n"
-                "  SUBSTANCE means TEACHING DEPTH, not brand-specific claims."
+                + {
+                    "education": (
+                        "  Content slides: Teach CONCRETE TECHNIQUES — step-by-step methods, "
+                        "specific rules of thumb, or named frameworks. "
+                        "Do NOT invent client stories, dollar amounts, or case studies.\n"
+                        "  DATA OVERRIDE: Data points are OPTIONAL. Teaching depth IS your proof.\n"
+                        "  Final slide: ONE thing they can do TODAY. "
+                        "Do NOT say 'Book a consultation' unless CTA type is 'conversion'.\n"
+                        "  SUBSTANCE means TEACHING DEPTH, not brand-specific claims."
+                    ),
+                    "promotion": (
+                        "  Content slides: Focus on FEATURES and USE CASES — what the product does "
+                        "and how it works. Do NOT invent customer testimonials or sales figures.\n"
+                        "  Final slide: Direct the reader to try, explore, or learn more.\n"
+                        "  SUBSTANCE means FEATURE SPECIFICITY, not social proof."
+                    ),
+                    "inspiration": (
+                        "  Content slides: Tell a PLAUSIBLE transformation story grounded in the "
+                        "brand's mission/values. Do NOT fabricate specific people or outcomes.\n"
+                        "  Use the brand's own journey or industry-wide patterns as the story.\n"
+                        "  SUBSTANCE means EMOTIONAL SPECIFICITY, not invented case studies."
+                    ),
+                    "behind_the_scenes": (
+                        "  Content slides: Describe REALISTIC process details — tools, workflows, "
+                        "decisions. You MAY say 'our team' and 'we' for BTS content.\n"
+                        "  Do NOT claim client counts or revenue figures.\n"
+                        "  SUBSTANCE means PROCESS DETAIL, not volume claims."
+                    ),
+                    "user_generated": (
+                        "  Content slides: Frame as a TEMPLATE for customer stories without "
+                        "fabricating specific customers. Use 'Imagine a customer who...' framing "
+                        "or focus on the product experience.\n"
+                        "  SUBSTANCE means AUTHENTIC VOICE, not invented testimonials."
+                    ),
+                }.get(_pillar, (
+                    "  Do NOT invent client stories, dollar amounts, or case studies.\n"
+                    "  SUBSTANCE means SPECIFICITY appropriate to the content type."
+                ))
             ),
             "blog_snippet": (
                 "\nTHIN-PROFILE OVERRIDE (this brand has NO client data):\n"
-                "  Your 'real insight or example' must be a TECHNIQUE or INDUSTRY FACT — "
-                "not a client story. Teach something the reader can apply immediately.\n"
+                f"  {_pg({'education': 'Your insight must be a TECHNIQUE or INDUSTRY FACT the reader can apply', 'inspiration': 'Ground your story in universal experiences — no fabricated transformations', 'promotion': 'Focus on the product/service itself — features, design, how it works. No invented testimonials', 'behind_the_scenes': 'Show real process and workflow — no claims about client volume or business scale', 'user_generated': 'Use hypothetical framing or invite stories — do not fabricate customer quotes'}, 'Lead with teaching depth — not brand-specific claims')}.\n"
                 "  Do NOT reference clients, outcomes, or volume in any form."
             ),
             "thread_hook": (
                 "\nTHIN-PROFILE OVERRIDE (this brand has NO client data):\n"
-                "  Each post's 'key insight' must be a TECHNIQUE, FACT, or FRAMEWORK — "
-                "not a client story or outcome. Teach something concrete per post.\n"
+                f"  Each post must stand on {_pg({'education': 'a TECHNIQUE, FACT, or FRAMEWORK', 'inspiration': 'a universal truth or relatable moment', 'promotion': 'a product feature, benefit, or design detail', 'behind_the_scenes': 'a real process step or team workflow', 'user_generated': 'a community-focused prompt or hypothetical scenario'}, 'concrete substance')} — not a client story.\n"
                 "  Do NOT reference clients, outcomes, or volume in any form."
+            ),
+            "original": (
+                "\nTHIN-PROFILE OVERRIDE (this brand has NO client data):\n"
+                f"  Body content must be grounded in {_pg({'education': 'specific techniques and actionable methods', 'inspiration': 'universal experiences and relatable moments', 'promotion': 'product/service features and how they work', 'behind_the_scenes': 'real process details and team workflows', 'user_generated': 'community prompts or hypothetical scenarios'}, 'concrete, verifiable substance')}.\n"
+                "  Do NOT reference clients, outcomes, or volume in any form."
+            ),
+            "video_first": (
+                "\nTHIN-PROFILE OVERRIDE (this brand has NO client data):\n"
+                "  Do NOT reference client results or testimonials in the caption.\n"
+                "  Let the video content speak — caption should only create curiosity."
             ),
         }
         _override = _THIN_PROFILE_OVERRIDES.get(derivative_type, "")
@@ -1509,6 +1802,7 @@ async def generate_post(
     # Platform-specific standard post aspect overrides
     _STANDARD_POST_ASPECTS: dict[str, str] = {
         "instagram": "4:5",
+        "linkedin": "1:1",
         "x": "16:9",
     }
     if derivative_type == "carousel":
@@ -1667,7 +1961,9 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                     _cta_type_r = day_brief.get("cta_type")
                     regen_review = await review_post(
                         {"caption": regen_caption, "hashtags": regen_hashtags,
-                         "platform": platform, "derivative_type": derivative_type},
+                         "platform": platform, "derivative_type": derivative_type,
+                         "pillar": day_brief.get("pillar", "education"),
+                         "content_theme": day_brief.get("content_theme", "")},
                         brand_profile,
                         social_proof_tier=_proof_tier_r, cta_type=_cta_type_r,
                     )
@@ -1804,7 +2100,9 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                     _cta_type_r = day_brief.get("cta_type")
                     regen_review = await review_post(
                         {"caption": regen_caption, "hashtags": regen_hashtags,
-                         "platform": platform, "derivative_type": derivative_type},
+                         "platform": platform, "derivative_type": derivative_type,
+                         "pillar": day_brief.get("pillar", "education"),
+                         "content_theme": day_brief.get("content_theme", "")},
                         brand_profile,
                         social_proof_tier=_proof_tier_r, cta_type=_cta_type_r,
                     )
@@ -1889,6 +2187,7 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
     image_mime = "image/png"
     image_url = None
     image_gcs_uri = None
+    cover_raw_bytes = None
     parsed_hashtags = None
 
     # Build multimodal contents: text prompt + brand reference images
@@ -1947,8 +2246,9 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                 f"Rewrite following the format rules. Same message, tone, and hook — fix the STRUCTURE ONLY.\n"
             )
             if derivative_type == "carousel":
+                _slide_labels = ", ".join(f"'Slide {i+1}:'" for i in range(_spec.carousel_slide_count))
                 retry_prompt += (
-                    "You MUST include 'Slide 1:', 'Slide 2:', 'Slide 3:' labels. "
+                    f"You MUST include {_slide_labels} labels. "
                     "Each slide MUST start on its own line with that exact label.\n"
                 )
             elif derivative_type == "thread_hook":
@@ -2026,6 +2326,7 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                 regen_for_review = {
                     "caption": regen_caption, "hashtags": regen_hashtags,
                     "platform": platform, "derivative_type": derivative_type,
+                    "pillar": day_brief.get("pillar", "education"),
                 }
                 regen_review = await review_post(
                     regen_for_review, brand_profile,
@@ -2087,6 +2388,7 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                 # Post-processing: resize + platform-specific text overlay
                 try:
                     image_bytes = resize_to_aspect(image_bytes, _aspect)
+                    cover_raw_bytes = image_bytes  # preserve pre-overlay copy for slide style reference
                     if derivative_type == "carousel":
                         image_bytes = create_carousel_cover(
                             image_bytes, content_theme or caption_hook, colors, _aspect)
@@ -2140,7 +2442,7 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
 
         # ── Carousel: generate additional slide images ──
         if derivative_type == "carousel" and final_caption:
-            slide_descriptions = _parse_slide_descriptions(final_caption)
+            slide_descriptions = _parse_slide_descriptions(final_caption, max_slides=_spec.carousel_slide_count)
             if len(slide_descriptions) > 1:
                 yield {"event": "status", "data": {"message": "Generating carousel slides..."}}
                 extra_slides = await _generate_carousel_images(
@@ -2152,7 +2454,7 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                     style_ref_block=style_ref_block,
                     platform=platform,
                     post_id=post_id,
-                    cover_image_bytes=image_bytes,
+                    cover_image_bytes=cover_raw_bytes,
                     image_style=_image_style,
                 )
                 for slide_idx, (slide_bytes, slide_mime) in enumerate(extra_slides):
@@ -2160,8 +2462,11 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                     try:
                         slide_bytes = resize_to_aspect(slide_bytes, _aspect)
                         _slide_title = _extract_slide_headline(slide_descriptions[slide_idx + 1]) if slide_idx + 1 < len(slide_descriptions) else ""
+                        # Final slide: if headline was truncated with ellipsis, use clean fallback
+                        if slide_idx + 2 == len(slide_descriptions) and _slide_title.endswith('…'):
+                            _slide_title = "Your Next Step"
                         slide_bytes = create_carousel_slide(
-                            slide_bytes, slide_idx + 2, _slide_title, colors, _aspect)
+                            slide_bytes, _slide_title, colors, _aspect)
                         slide_mime = "image/png"
                     except Exception as pp_err:
                         logger.warning("Carousel slide post-processing failed: %s", pp_err)
@@ -2176,6 +2481,23 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                         }
                     except Exception as upload_err:
                         logger.error("Carousel slide upload failed: %s", upload_err)
+
+                # Re-render cover with actual Slide 1 hook text (fixes cover/caption mismatch)
+                if slide_descriptions and cover_raw_bytes:
+                    try:
+                        _cover_hook = _extract_slide_headline(slide_descriptions[0])
+                        if _cover_hook and _cover_hook != (content_theme or caption_hook):
+                            _new_cover = create_carousel_cover(cover_raw_bytes, _cover_hook, colors, _aspect)
+                            _cover_url, _cover_gcs = await upload_image_to_gcs(_new_cover, "image/png", post_id)
+                            if all_image_urls:
+                                all_image_urls[0] = _cover_url
+                            if all_image_gcs_uris:
+                                all_image_gcs_uris[0] = _cover_gcs
+                            image_url = _cover_url
+                            image_gcs_uri = _cover_gcs
+                            yield {"event": "image_update", "data": {"index": 0, "url": _cover_url, "mime_type": "image/png", "gcs_uri": _cover_gcs}}
+                    except Exception as cover_err:
+                        logger.warning("Cover re-render failed (non-fatal): %s", cover_err)
 
         yield {
             "event": "complete",

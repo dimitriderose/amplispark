@@ -33,6 +33,9 @@ class PlatformSpec:
     # Video
     is_portrait_video: bool = False
 
+    # Carousel
+    carousel_slide_count: int = 5  # platform-specific default for number of carousel slides
+
     # Derivative types this platform supports
     derivative_types: list[str] = field(default_factory=lambda: ["original"])
 
@@ -201,10 +204,11 @@ REGISTRY: dict[str, PlatformSpec] = {
         ),
         hashtag_limit=5,
         caption_max=2200,
-        char_limits={"default": 1200, "video_first": 200, "story": 150},
+        char_limits={"default": 1200, "video_first": 200, "story": 150, "carousel": 2200},
         fold_at=125,
         image_aspect="1:1",
         is_portrait_video=True,
+        carousel_slide_count=8,
         derivative_types=["original", "carousel", "story", "video_first"],
         voice=(
             "Visual-first. Short, punchy sentences. Line breaks for rhythm. "
@@ -228,9 +232,10 @@ REGISTRY: dict[str, PlatformSpec] = {
         ),
         hashtag_limit=5,
         caption_max=3000,
-        char_limits={"default": 1800, "video_first": 500, "blog_snippet": 1200},
+        char_limits={"default": 1800, "carousel": 3000, "video_first": 500, "blog_snippet": 1200},
         fold_at=140,
         image_aspect="1.91:1",
+        carousel_slide_count=7,
         derivative_types=["original", "carousel", "blog_snippet", "video_first"],
         voice=(
             "Thought leadership. Open with a bold opinion or insight. Use 'I' and "
@@ -241,12 +246,13 @@ REGISTRY: dict[str, PlatformSpec] = {
         composition="Professional editorial framing. People in work context preferred. Shallow DOF.",
         lighting="Even, professional lighting. Clean backgrounds. Neutral to warm tones.",
         mood="Authoritative, trustworthy. Professional but human.",
-        carousel_notes="B2B: framework/methodology visuals. Each slide = one clear concept. Cover = problem statement visual.",
+        carousel_notes="B2B: framework/methodology visuals. Each slide = one clear concept. Cover = problem statement visual. LinkedIn slides are text-dense (40-80 words per slide body) — enough to teach a complete micro-concept. Don't be too sparse (this isn't Instagram) or too dense (this is mobile-first).",
         people="People in professional settings strongly outperform product-only. Headshots, candids at work.",
     ),
     "x": PlatformSpec(
         key="x",
         display_name="X",
+        carousel_slide_count=4,
         content_prompt=_X_PROMPT,
         review_guidelines=(
             "≤280 chars hard limit, aim 100-200 chars, 0-1 hashtags woven in text, "
@@ -278,9 +284,10 @@ REGISTRY: dict[str, PlatformSpec] = {
         ),
         hashtag_limit=6,
         caption_max=2200,
-        char_limits={"default": 500, "video_first": 200, "carousel": 800},
+        char_limits={"default": 500, "video_first": 200, "carousel": 4000},
         image_aspect="9:16",
         is_portrait_video=True,
+        carousel_slide_count=6,
         derivative_types=["original", "carousel", "video_first"],
         voice=(
             "Casual, direct, slightly irreverent. Caption is secondary to video "
@@ -311,6 +318,7 @@ REGISTRY: dict[str, PlatformSpec] = {
         caption_max=63206,
         char_limits={"default": 1500, "video_first": 500, "story": 150},
         image_aspect="1.91:1",
+        carousel_slide_count=4,
         derivative_types=["original", "carousel", "story", "video_first"],
         voice=(
             "Community-first. Warm, conversational, like talking to a neighbor. "

@@ -5,7 +5,7 @@ import type { GenerationState } from '../hooks/usePostGeneration'
 import { useVideoGeneration } from '../hooks/useVideoGeneration'
 import PlatformPreview from './PlatformPreview'
 import { api } from '../api/client'
-import { getPlatform, getVideoSupport } from '../platformRegistry'
+import { getPlatform, getVideoSupport, getMediaAspectRatio } from '../platformRegistry'
 
 interface Props {
   state: GenerationState
@@ -255,13 +255,8 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
   const videoSupport = getVideoSupport(platform, derivativeType)
   const isVideoFirst = derivativeType === 'video_first'
 
-  const IMAGE_ASPECTS: Record<string, string> = {
-    story: '9 / 16',
-    pin: '2 / 3',
-    blog_snippet: '1.91 / 1',
-  }
-  const imageAspect = IMAGE_ASPECTS[derivativeType] || '1 / 1'
-  const videoAspect = platformSpec.isPortraitVideo ? '9 / 16' : '16 / 9'
+  const imageAspect = getMediaAspectRatio(platform, derivativeType)
+  const videoAspect = getMediaAspectRatio(platform, 'video_first')
 
   const DERIVATIVE_LABELS: Record<string, string> = {
     carousel: 'Carousel', thread_hook: 'Thread', blog_snippet: 'Blog',
@@ -473,6 +468,7 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
                 imageUrls={imageUrls.length > 1 ? imageUrls : undefined}
                 videoUrl={isVideoFirst ? (videoUrl ?? undefined) : undefined}
                 hashtagCount={hashtags.length}
+                derivativeType={derivativeType}
               />
             </div>
           )}

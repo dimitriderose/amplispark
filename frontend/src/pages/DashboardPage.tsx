@@ -131,7 +131,7 @@ export default function DashboardPage() {
   if (!brand) return null
 
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 24px' }}>
+    <div style={{ maxWidth: 1400, margin: '0 auto', padding: '32px 24px' }}>
       {/* Notion connected banner */}
       {notionParam === 'connected' && (
         <div style={{

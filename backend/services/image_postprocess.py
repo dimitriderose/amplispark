@@ -85,8 +85,8 @@ def _gradient_color(brand_colors: list[str]) -> tuple[int, int, int]:
     """Get gradient base color from brand colors, default to dark."""
     if brand_colors:
         rgb = _hex_to_rgb(brand_colors[0])
-        # Darken the brand color for gradient
-        return (max(0, rgb[0] // 3), max(0, rgb[1] // 3), max(0, rgb[2] // 3))
+        # Subtle brand tint instead of pure dark
+        return (max(0, rgb[0] // 4), max(0, rgb[1] // 4), max(0, rgb[2] // 4))
     return (20, 20, 20)
 
 
@@ -221,12 +221,11 @@ def create_carousel_cover(
 
 def create_carousel_slide(
     image_bytes: bytes,
-    slide_num: int,
     title: str,
     brand_colors: list[str],
     aspect_ratio: str = "4:5",
 ) -> bytes:
-    """Add number badge + title to carousel slide."""
+    """Add title overlay to carousel slide (no badge — Instagram shows native counter)."""
     img = Image.open(io.BytesIO(image_bytes))
     w, h = img.size
     grad_color = _gradient_color(brand_colors)
@@ -235,44 +234,28 @@ def create_carousel_slide(
     draw = ImageDraw.Draw(img)
     text_fill = _text_color_for_bg(brand_colors)
 
-    # Number badge (top-left)
-    badge_size = _scale_font_size(48, w)
-    badge_font = _get_font(bold=True, size=badge_size)
-    badge_text = str(slide_num)
-    badge_margin = int(w * 0.05)
-
-    # Circle badge background
-    badge_r = badge_size + 8
-    badge_cx, badge_cy = badge_margin + badge_r, badge_margin + badge_r
-    if brand_colors:
-        badge_bg = _hex_to_rgb(brand_colors[0])
-    else:
-        badge_bg = (255, 255, 255)
-    draw.ellipse(
-        [badge_cx - badge_r, badge_cy - badge_r, badge_cx + badge_r, badge_cy + badge_r],
-        fill=badge_bg,
-    )
-    bbox = badge_font.getbbox(badge_text)
-    tw = bbox[2] - bbox[0]
-    th = bbox[3] - bbox[1]
-    draw.text((badge_cx - tw // 2, badge_cy - th // 2 - 4), badge_text, font=badge_font,
-              fill=_text_color_for_bg(brand_colors))
-
-    # Title at bottom
+    # Title at bottom — max 2 lines to keep overlay clean
     font_size = _scale_font_size(48, w)
     font = _get_font(bold=True, size=font_size)
     max_text_w = int(w * 0.85)
     lines = _wrap_text(title[:80], font, max_text_w)
-    line_height = font_size + 6
+    if len(lines) > 2:
+        # Re-wrap with a shorter title to fit in 2 lines
+        shorter = title[:50]
+        last_space = shorter.rfind(' ')
+        if last_space > 0:
+            shorter = shorter[:last_space] + '…'
+        lines = _wrap_text(shorter, font, max_text_w)[:2]
+    line_height = int(font_size * 1.3)  # 130% leading for readability
     total_h = len(lines) * line_height
-    start_y = h - int(h * 0.12) - total_h
+    start_y = h - int(h * 0.18) - total_h
 
     for i, line in enumerate(lines):
         bbox = font.getbbox(line)
         text_w = bbox[2] - bbox[0]
         x = (w - text_w) // 2
         y = start_y + i * line_height
-        _draw_text_with_shadow(draw, (x, y), line, font, text_fill)
+        _draw_text_with_shadow(draw, (x, y), line, font, text_fill, shadow_offset=3)
 
     buf = io.BytesIO()
     img.save(buf, format="PNG", optimize=True)

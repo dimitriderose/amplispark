@@ -137,24 +137,26 @@ export function usePostGeneration() {
       es.close()
     })
 
+    // Named 'error' SSE event from our server (e.g., generation logic failed)
     es.addEventListener('error', (e: MessageEvent) => {
-      // Check if this is a named 'error' SSE event (from our server) or a connection error
       if (e.data) {
         const data = JSON.parse(e.data)
         setState(prev => ({ ...prev, status: 'error', error: data.message }))
-      } else {
-        // Natural connection close after stream ends — not an error if generation completed
-        setState(prev => {
-          if (prev.status === 'complete') {
-            // Connection dropped after completion — if video was generating, clear the
-            // flag so the manual button shows. Backend still runs; video saves to Firestore.
-            return prev.videoGenerating ? { ...prev, videoGenerating: false } : prev
-          }
-          return { ...prev, status: 'error', error: 'Connection lost' }
-        })
+        es.close()
       }
-      es.close()
     })
+
+    // Browser-level connection error (backend down, network drop, proxy timeout)
+    es.onerror = () => {
+      setState(prev => {
+        if (prev.status === 'complete') {
+          // Connection dropped after completion — clear video flag so manual button shows
+          return prev.videoGenerating ? { ...prev, videoGenerating: false } : prev
+        }
+        return { ...prev, status: 'error', error: 'Connection lost — the server may have restarted. Click "Regenerate" to try again.' }
+      })
+      es.close()
+    }
 
     return () => es.close()
   }, [])

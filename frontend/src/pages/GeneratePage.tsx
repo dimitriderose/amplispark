@@ -62,6 +62,11 @@ export default function GeneratePage() {
       // View an existing post
       ;(api.getPost(brandId, viewPostId) as Promise<any>)
         .then(post => {
+          // If post is stuck/failed, show error with retry option instead of blank screen
+          if (post.status === 'failed' || post.status === 'generating') {
+            reset()
+            return
+          }
           loadExisting({
             postId: post.post_id,
             caption: post.caption || '',

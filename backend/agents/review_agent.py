@@ -4,7 +4,7 @@ import logging
 from google import genai
 from google.genai import types
 from backend.config import GOOGLE_API_KEY, GEMINI_MODEL
-from backend.platforms import get_review_guidelines_block
+from backend.platforms import get_review_guidelines_block, get as get_platform
 
 logger = logging.getLogger(__name__)
 client = genai.Client(api_key=GOOGLE_API_KEY)
@@ -104,58 +104,140 @@ _PLATFORM_REVIEW_CHECKS = {
     ),
 }
 
-# --- Derivative-specific format checks (Fix 11e) ---
+# --- Pillar-specific depth checks for ALL derivatives ---
+
+_PILLAR_DEPTH_CHECKS = {
+    "carousel": {
+        "education": "Each middle slide must teach a SPECIFIC named technique/framework/method with concrete example/number/scenario",
+        "promotion": "Each middle slide must highlight a SPECIFIC feature/benefit with concrete use case/outcome/comparison",
+        "inspiration": "Each middle slide must advance a SPECIFIC transformation story with concrete details",
+        "behind_the_scenes": "Each middle slide must reveal a REAL process step/tool/decision/mistake with specific details",
+        "user_generated": "Each middle slide must feature AUTHENTIC specifics — real quotes, specific results, named situations",
+    },
+    "video_first": {
+        "education": "Teaser should hint at the technique or I-wish-I-knew-this-sooner moment",
+        "promotion": "Teaser should hint at the product reveal or result without describing it",
+        "inspiration": "Teaser should hint at the emotional payoff or transformation",
+        "behind_the_scenes": "Teaser should hint at the behind-the-curtain moment people rarely see",
+        "user_generated": "Teaser should hint at the customer reaction or real-world result",
+    },
+    "thread_hook": {
+        "education": "Each post must teach a specific technique or principle — not generic advice",
+        "promotion": "Each post must showcase a distinct feature, benefit, or use case",
+        "inspiration": "Each post must advance a transformation narrative or motivational arc",
+        "behind_the_scenes": "Each post must reveal a process step, team moment, or behind-the-curtain detail",
+        "user_generated": "Each post must highlight a customer experience, community moment, or real result",
+    },
+    "story": {
+        "education": "Lead with a surprising fact or quick-tip hook",
+        "promotion": "Lead with a bold product claim or irresistible offer",
+        "inspiration": "Lead with a big emotion or transformation moment",
+        "behind_the_scenes": "Lead with a candid peek or you-were-not-supposed-to-see-this energy",
+        "user_generated": "Lead with a customer shoutout or community highlight",
+    },
+    "blog_snippet": {
+        "education": "Open with an opinion-forward statement or contrarian take on a common practice",
+        "promotion": "Open with a bold product/service claim or problem-solution hook",
+        "inspiration": "Open with a vivid transformation moment or aspirational statement",
+        "behind_the_scenes": "Open with a candid reveal about how something actually works internally",
+        "user_generated": "Open with a spotlight on a real customer moment or community insight",
+    },
+    "pin": {
+        "education": "Title must lead with the technique or framework name",
+        "promotion": "Title must lead with the product/service benefit",
+        "inspiration": "Title must lead with the transformation or aspirational outcome",
+        "behind_the_scenes": "Title must lead with the process or behind-the-curtain angle",
+        "user_generated": "Title must lead with the customer story or community angle",
+    },
+    "original": {
+        "education": "Body must teach a specific technique, framework, or actionable method — not general advice",
+        "promotion": "Body must showcase specific features, benefits, or a compelling use case — not generic marketing",
+        "inspiration": "Body must tell a concrete transformation story with real details — not vague motivation",
+        "behind_the_scenes": "Body must reveal real process details, tools, or decisions — not surface-level",
+        "user_generated": "Body must feature authentic quotes, specific results, or named situations",
+    },
+}
+
+# --- Derivative-specific format checks ---
 
 _DERIVATIVE_CHECKS = {
     "video_first": (
         "VIDEO-FIRST FORMAT CHECK:\n"
-        "- Caption should be 1-3 sentences MAX (teaser, not article)\n"
-        "- Instagram/TikTok/YouTube Shorts: flag if >200 chars\n"
-        "- LinkedIn/Facebook: flag if >500 chars\n"
-        "- Should create curiosity about the video, not describe it\n"
-        "- If caption reads like a standalone post (not a video teaser), deduct 2 points\n"
-        "- CTA is optional for video teasers — a cliffhanger works better"
+        "- Caption = 1-3 sentences MAX (teaser, not article)\n"
+        "- Char limit: {char_limit} chars. Flag if exceeded.\n"
+        "- Must create curiosity, not describe the video. Reads like standalone post = deduct 2 pts\n"
+        "- CTA rules apply but relaxed — cliffhanger works as implied CTA\n"
+        "- No brand paragraph — video speaks for brand\n"
+        "- PILLAR ({content_pillar}): {pillar_depth_check}\n"
+        "- REVISION SCOPE: target teaser angle or length — do NOT restructure into full post"
     ),
     "carousel": (
         "CAROUSEL FORMAT CHECK:\n"
-        "- Must have Slide 1/2/3 labels\n"
-        "- Slide 1 must be a hook (<=10 words), not a banned hook pattern\n"
-        "- Slide 2 must teach a SPECIFIC insight (not a platitude like 'plan proactively')\n"
-        "- Slide 3 must have a clear takeaway + CTA\n"
-        "- If any slide is generic enough for any business, deduct 1 point\n"
-        "- Slides that just chop a paragraph into pieces (no progression) — deduct 1 point"
+        "- Must have EXACTLY {expected_slide_count} slides: Slide 1: through Slide {expected_slide_count}:\n"
+        "- 'Slide N:' labels are MACHINE-PARSED to generate slide images — "
+        "revision_notes must NEVER remove, merge, or renumber them\n"
+        "- Slide 1 = hook (<=10 words), no banned hooks\n"
+        "- Slide headlines <=50 chars, <=8 words. Generic labels (Technique, Method, Step N, "
+        "Feature, Benefit) = deduct 1 pt. Must NAME the specific technique/feature/moment.\n"
+        "- Middle slides: clear PROGRESSION. Chopped paragraphs = deduct 1 pt. "
+        "Repeated ideas = deduct 1 pt.\n"
+        "- Each content slide ends with a different open loop driving swipe\n"
+        "- Final slide: clear takeaway + CTA specific to content topic\n"
+        "- Char limit: {char_limit} chars total. Flag if exceeded.\n"
+        "- PILLAR ({content_pillar}): {pillar_depth_check}\n"
+        "- Generic content (any brand could use it) = deduct 2 pts\n"
+        "- Caption vs slides: caption must NOT duplicate slide text. >50% verbatim = deduct 2 pts\n"
+        "- REVISION SCOPE: target SPECIFIC slides by number (e.g., 'Slide 3: replace generic "
+        "headline'). Do NOT suggest removing/merging/renumbering slides."
     ),
     "thread_hook": (
         "THREAD FORMAT CHECK:\n"
-        "- 3-7 posts total\n"
-        "- Per-post limit: X = 280 chars, Bluesky = 300 chars. Flag any post exceeding its platform limit.\n"
-        "- 1/ must be a hook, not a banned pattern\n"
-        "- Each post must contain a COMPLETE thought with standalone value — "
-        "not just a transition ('Here's what happened next...')\n"
-        "- Posts that repeat the same idea in different words — deduct 1 point\n"
-        "- Posts that only make sense in sequence without saying anything standalone — deduct 1 point"
+        "- 3-7 posts total. Flag if <3 or >7\n"
+        "- X threads use 1/, 2/, 3/. Bluesky threads do NOT need numbering.\n"
+        "- Per-post limit: X = 280 chars, Bluesky = 300 chars. Flag any post exceeding limit.\n"
+        "- 1/ must be a hook, no banned patterns\n"
+        "- Each post = COMPLETE standalone thought. Transition-only posts = deduct 1 pt.\n"
+        "- Repeated ideas = deduct 1 pt\n"
+        "- PILLAR ({content_pillar}): {pillar_depth_check}\n"
+        "- REVISION SCOPE: target SPECIFIC post numbers (e.g., '3/: add concrete example'). "
+        "Do NOT remove/merge/renumber posts."
     ),
     "story": (
         "STORY FORMAT CHECK:\n"
-        "- <=50 words total\n"
-        "- Must be punchy and immediate\n"
-        "- One clear CTA (swipe up / reply / DM)"
+        "- <=50 words total. Char limit: {char_limit} chars. Flag if exceeded.\n"
+        "- Must be punchy and immediate — no preamble\n"
+        "- CTA REQUIRED (swipe up / reply / DM). Missing CTA = deduct 2 pts\n"
+        "- No hashtags in body text\n"
+        "- PILLAR ({content_pillar}): {pillar_depth_check}\n"
+        "- REVISION SCOPE: surgical edits only (e.g., 'replace opening with punchier hook')"
     ),
     "blog_snippet": (
         "BLOG SNIPPET FORMAT CHECK:\n"
-        "- 150-200 words total\n"
-        "- Opens with a bold opinion OR a specific, contrarian question "
-        "(not a generic 'Are you...?' question)\n"
-        "- 2-3 short paragraphs with real insight\n"
-        "- Closing question must be specific to the content, not generic "
-        "('What do you think?' = bad, 'What's your threshold for following up on late invoices?' = good)"
+        "- 150-200 words total. Char limit: {char_limit} chars. Flag if exceeded.\n"
+        "- Opens with bold opinion or specific contrarian question (not generic 'Are you...?')\n"
+        "- 2-3 short paragraphs with real insight — not padding\n"
+        "- Closing question specific to content topic (not generic 'What do you think?')\n"
+        "- PILLAR ({content_pillar}): {pillar_depth_check}\n"
+        "- REVISION SCOPE: target opening, body insight, or closing question"
     ),
     "pin": (
         "PIN FORMAT CHECK:\n"
-        "- Must have PIN TITLE (<=100 chars) and PIN DESCRIPTION (200-250 chars)\n"
-        "- Title is keyword-rich and benefit-driven\n"
-        "- Description uses natural SEO keywords\n"
-        "- No emoji, no hashtags"
+        "- Must have PIN TITLE: and PIN DESCRIPTION: labels (machine-parsed downstream)\n"
+        "- PIN TITLE <=100 chars, keyword-rich, action verb, benefit-driven\n"
+        "- PIN DESCRIPTION 200-250 chars, natural SEO keywords\n"
+        "- No emoji, no hashtags, no first-person\n"
+        "- PILLAR ({content_pillar}): {pillar_depth_check}\n"
+        "- REVISION SCOPE: specify which part (e.g., 'PIN TITLE: add action verb'). "
+        "Do NOT remove PIN TITLE:/PIN DESCRIPTION: labels."
+    ),
+    "original": (
+        "STANDARD POST FORMAT CHECK:\n"
+        "- Hook before platform fold (IG <=125, LinkedIn <=140, X <=280 total, Bluesky <=300)\n"
+        "- Body: 1-2 sentence paragraphs for mobile readability. >2 sentences = deduct 1 pt\n"
+        "- Char limit: {char_limit} chars. Flag if exceeded.\n"
+        "- PILLAR ({content_pillar}): {pillar_depth_check}\n"
+        "- Close must match assigned CTA type\n"
+        "- REVISION SCOPE: target hook, body content, or CTA"
     ),
 }
 
@@ -175,6 +257,12 @@ async def review_post(
     platform = post.get("platform", "instagram")
     caption = post.get("caption", "")
     hashtags = post.get("hashtags", [])
+    content_theme = post.get("content_theme", "")
+    content_pillar = post.get("pillar", "education")
+
+    # Platform spec lookups for char limits and slide counts
+    _spec = get_platform(platform)
+    _char_limit = (_spec.char_limits or {}).get(derivative_type) or (_spec.char_limits or {}).get("default", 0)
 
     business_name = brand_profile.get("business_name", "Brand")
     tone = brand_profile.get("tone", "professional")
@@ -192,6 +280,17 @@ async def review_post(
     # Build platform-specific and derivative-specific check blocks
     platform_checks = _PLATFORM_REVIEW_CHECKS.get(platform, "")
     derivative_checks = _DERIVATIVE_CHECKS.get(derivative_type, "")
+
+    # Resolve pillar-adaptive depth check and platform data for all derivatives
+    if derivative_checks:
+        _depth_map = _PILLAR_DEPTH_CHECKS.get(derivative_type, {})
+        _depth = _depth_map.get(content_pillar, _depth_map.get("education", ""))
+        derivative_checks = derivative_checks.format(
+            content_pillar=content_pillar,
+            pillar_depth_check=_depth,
+            expected_slide_count=_spec.carousel_slide_count,
+            char_limit=_char_limit or "no hard limit",
+        )
 
     # Conditional social proof check for thin-profile brands
     social_proof_check = ""
@@ -275,6 +374,7 @@ Target audience: {target_audience}
 {caption_style_directive}
 
 Review this {platform} post (derivative type: {derivative_type}):
+Content topic: {content_theme}
 Caption: "{caption}"
 Hashtags: {hashtags}
 
@@ -300,7 +400,10 @@ MANDATORY CHECKS (flag these and reduce score accordingly):
 - Caption contains markdown formatting (**bold**, *italic*, [links]()) — instant fail
 - BANNED HOOKS: Opens with "Are you...?", "Did you know...?", "What if...?",
   "In today's...", "As a...", "When it comes to...", "Here's the thing:",
-  "The truth is:", "Let me tell you something:" — deduct 2 points
+  "The truth is:", "Let me tell you something:", "Stop [verb]-ing...",
+  "Most people don't realize...", "Here's the truth about...",
+  "Nobody is talking about..." — deduct 2 points.
+  EXCEPTION: "Stop [verb]-ing" is acceptable on TikTok/Reels where imperatives are native.
 - BRAND PARAGRAPH: A full paragraph dedicated to describing the brand's services,
   history, or value proposition (brand-as-subject, not narrator) — deduct 2 points
 - CTA CONFLICT: Both an engagement question AND a conversion CTA in the same post — deduct 1 point
@@ -327,7 +430,13 @@ MANDATORY CHECKS (flag these and reduce score accordingly):
 
 {derivative_checks}
 
-{social_proof_check}{cta_check}Flag captions that are too long for their platform. Check hashtags for junk (sentence fragments, common words like #the, #for, #your).
+{social_proof_check}{cta_check}CAPTION QUALITY CHECK (carousel and thread posts):
+- Caption must NOT duplicate slide/post text — it should add context, a personal angle, or a hook
+- Mobile readability: insert line breaks every 2-3 sentences. Wall of text — deduct 1 point
+- Must end with an engagement prompt or CTA appropriate to the assigned cta_type
+- Caption that reads like a summary of the slides/posts — deduct 1 point
+
+Flag captions that are too long for their platform. Check hashtags for junk (sentence fragments, common words like #the, #for, #your).
 
 Evaluate and respond with JSON only:
 {{
@@ -336,18 +445,24 @@ Evaluate and respond with JSON only:
   "strengths": [<list of 2-3 strength strings>],
   "improvements": [<list of 1-3 improvement suggestions — be specific, not vague>],
   "approved": <true if score >= 8, false otherwise>,
-  "revision_notes": <if score < 8, provide 1-3 SPECIFIC edit instructions (e.g., "Replace the opening with a contrarian statement about a specific industry trend", "Remove the brand paragraph in the second section", "Change the dual CTA to a single engagement question"). If score >= 8, null.>,
-  "revised_hashtags": <always return a cleaned/validated hashtag array — even if unchanged>,
+  "revision_notes": <if score < 8: 1-3 SPECIFIC, SCOPED edit instructions. For structured formats (carousel, thread, pin), target individual sections by label (e.g., "Slide 3: replace generic headline with named technique", "3/: add a concrete example", "PIN TITLE: add action verb and primary keyword"). Do NOT suggest removing, merging, or renumbering structural labels (Slide N:, 1/, PIN TITLE:, PIN DESCRIPTION:). If score >= 8, null.>,
+  "revised_hashtags": <cleaned/validated hashtag array. RULES: (1) every hashtag must match
+    a topic ACTUALLY discussed in the caption — remove mismatches (e.g., #SOPs when SOPs
+    aren't mentioned), (2) no sentence fragments or common words, (3) respect platform limits:
+    IG 3-5, LinkedIn 3-5, TikTok 4-6, X 0-1, Pinterest 0, YT Shorts 3-5, Threads 0-3,
+    Mastodon 3-5 CamelCase, Bluesky 1-3>,
   "engagement_scores": {{
     "hook_strength": <integer 1-10: how compelling the opening line is — will people stop scrolling?>,
     "relevance": <integer 1-10: how on-brand and relevant to target audience>,
     "cta_effectiveness": <integer 1-10: how clear and motivating the call-to-action is>,
     "platform_fit": <integer 1-10: how well the format, length, and hashtag use fits {platform}>,
-    "teaching_depth": <integer 1-10: does the post teach something SPECIFIC and ACTIONABLE?
-      8-10: names a concrete technique, rule, framework, or step-by-step method.
-      5-7: gives general advice but no specific method.
-      1-4: purely promotional or no educational value.
-      Score 0 for non-education posts (promotion, BTS).>
+    "teaching_depth": <integer 1-10: pillar-specific depth score.
+      education: 8-10 = named technique/framework + example, 5-7 = general advice, 1-4 = platitudes.
+      promotion: 8-10 = specific feature + use case, 5-7 = benefits without proof, 1-4 = generic claims.
+      inspiration: 8-10 = concrete transformation with details, 5-7 = relatable but vague, 1-4 = generic.
+      behind_the_scenes: 8-10 = real process detail + specifics, 5-7 = surface peek, 1-4 = staged.
+      user_generated: 8-10 = authentic quotes/results, 5-7 = paraphrased, 1-4 = fabricated.
+      This post's pillar: {content_pillar}. Score accordingly.>
   }},
   "engagement_prediction": <"low"|"medium"|"high"|"viral" — predicted relative engagement vs average for {platform}>
 }}"""

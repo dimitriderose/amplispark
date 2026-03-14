@@ -323,7 +323,7 @@ function DayCard({ day, dayName, brandId, planId, arrayIndex, seriesColor, post,
         background: A.surface,
         border: `1px solid ${isGenerated ? A.emerald + '44' : A.border}`,
         boxShadow: seriesColor ? `inset 3px 0 0 0 ${seriesColor}` : undefined,
-        overflow: 'hidden',
+        overflow: 'visible',
         transition: 'transform 0.15s, box-shadow 0.15s',
       }}
       onMouseEnter={e => {
@@ -338,7 +338,7 @@ function DayCard({ day, dayName, brandId, planId, arrayIndex, seriesColor, post,
       }}
     >
       {/* Pillar color bar */}
-      <div style={{ height: 3, background: pillarColor }} />
+      <div style={{ height: 3, background: pillarColor, borderRadius: '10px 10px 0 0' }} />
 
       {/* Generated post thumbnail + status bar */}
       {isGenerated && (post?.image_url || post?.video?.url) ? (
@@ -428,7 +428,7 @@ function DayCard({ day, dayName, brandId, planId, arrayIndex, seriesColor, post,
         </div>
       ) : null}
 
-      <div style={{ padding: '10px 10px 12px' }}>
+      <div style={{ padding: '10px 12px 14px' }}>
         {/* Day + platform */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -501,106 +501,123 @@ function DayCard({ day, dayName, brandId, planId, arrayIndex, seriesColor, post,
 
         {/* Primary action: Generate (ungenerated) or View Post (generated) */}
         {!isGenerated && !isGenerating && (
-          <div ref={styleMenuRef} style={{ position: 'relative' }}>
-            {/* Style label — separate from Generate */}
-            <button
-              onClick={() => setShowStyleMenu(prev => !prev)}
-              aria-haspopup="listbox"
-              aria-expanded={showStyleMenu}
-              style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                fontSize: 11, padding: '6px 0', marginBottom: 8,
-                display: 'flex', alignItems: 'center', gap: 4,
-                color: selectedStyle ? A.indigo : A.textSoft,
-                opacity: selectedStyle ? 1 : 0.75,
-              }}
-            >
-              Style: {selectedStyle ? styleLabel(selectedStyle) : 'Auto'} ▾
-            </button>
-
-            {/* Style dropdown menu */}
-            {showStyleMenu && (
-              <div role="listbox" aria-label="Image style" style={{
-                position: 'absolute', bottom: '100%', left: 0,
-                marginBottom: 4, borderRadius: 8, width: 220,
-                background: A.surface, border: `1px solid ${A.border}`,
-                boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 20,
-                maxHeight: 300, overflowY: 'auto',
-              }}>
-                {/* Auto option */}
-                <div
-                  role="option"
-                  aria-selected={!selectedStyle}
-                  tabIndex={0}
-                  onClick={() => { setSelectedStyle(''); setShowStyleMenu(false) }}
-                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { setSelectedStyle(''); setShowStyleMenu(false) } }}
-                  style={{
-                    padding: '8px 12px', cursor: 'pointer', fontSize: 12,
-                    color: !selectedStyle ? A.indigo : A.text,
-                    fontWeight: !selectedStyle ? 600 : 400,
-                    background: !selectedStyle ? `${A.indigo}10` : 'transparent',
-                  }}
-                >
-                  {!selectedStyle ? '✓ ' : '  '}Auto (AI chooses)
-                </div>
-                <div style={{ height: 1, background: A.border, margin: '2px 0' }} />
-
-                {/* Grouped styles */}
-                {IMAGE_STYLE_GROUPS.map(g => (
-                  <div key={g.label} role="group" aria-label={g.label}>
-                    <div style={{
-                      padding: '6px 12px 2px', fontSize: 10, fontWeight: 700,
-                      color: A.textMuted, textTransform: 'uppercase', letterSpacing: 0.5,
-                    }}>
-                      {g.label}
-                    </div>
-                    {g.options.map(o => (
-                      <div
-                        key={o.value}
-                        role="option"
-                        aria-selected={selectedStyle === o.value}
-                        tabIndex={0}
-                        onClick={() => { setSelectedStyle(o.value); setShowStyleMenu(false) }}
-                        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { setSelectedStyle(o.value); setShowStyleMenu(false) } }}
-                        style={{
-                          padding: '5px 12px 5px 20px', cursor: 'pointer',
-                          color: selectedStyle === o.value ? A.indigo : A.text,
-                          fontWeight: selectedStyle === o.value ? 600 : 400,
-                          background: selectedStyle === o.value ? `${A.indigo}10` : 'transparent',
-                          borderLeft: selectedStyle === o.value ? `2px solid ${A.indigo}` : '2px solid transparent',
-                        }}
-                      >
-                        <div style={{ fontSize: 12 }}>
-                          {selectedStyle === o.value ? '✓ ' : ''}{o.label}
-                        </div>
-                        <div style={{ fontSize: 10, color: A.textMuted, marginTop: 1 }}>
-                          {o.desc}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            )}
-
+          <div>
             {/* Generate button — always one-click */}
             <button
               onClick={() => onGenerate(selectedStyle || undefined)}
               style={{
                 width: '100%',
-                padding: '6px 0',
+                padding: '7px 0',
                 borderRadius: 6,
                 border: 'none',
                 background: `linear-gradient(135deg, ${A.indigo}, ${A.violet})`,
                 color: 'white',
-                fontSize: 11,
+                fontSize: 12,
                 fontWeight: 600,
                 cursor: 'pointer',
-                marginBottom: brandId && !day.custom_photo_url ? 6 : 0,
+                marginBottom: 6,
               }}
             >
               {day.custom_photo_url ? 'Generate with photo' : 'Generate'}
             </button>
+
+            {/* Visual Style button — opens dropdown */}
+            <div ref={styleMenuRef} style={{ position: 'relative' }}>
+              <button
+                onClick={() => setShowStyleMenu(prev => !prev)}
+                aria-haspopup="listbox"
+                aria-expanded={showStyleMenu}
+                style={{
+                  width: '100%',
+                  padding: '6px 10px',
+                  borderRadius: 6,
+                  border: `1px solid ${selectedStyle ? A.indigo + '40' : A.border}`,
+                  background: selectedStyle ? `${A.indigo}08` : A.surface,
+                  color: selectedStyle ? A.indigo : A.textSoft,
+                  fontSize: 11,
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginBottom: brandId && !day.custom_photo_url ? 6 : 0,
+                }}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <span style={{ fontSize: 12 }}>✦</span>
+                  Visual Style: {selectedStyle ? styleLabel(selectedStyle) : 'Auto'}
+                </span>
+                <span style={{ fontSize: 9, opacity: 0.6 }}>▾</span>
+              </button>
+
+              {/* Visual Style dropdown menu */}
+              {showStyleMenu && (
+                <div role="listbox" aria-label="Visual style" style={{
+                  position: 'absolute', top: '100%', left: 0, right: 0,
+                  marginTop: 4, borderRadius: 8,
+                  background: A.surface, border: `1px solid ${A.border}`,
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.14)', zIndex: 50,
+                  maxHeight: 320, overflowY: 'auto', padding: '4px 0',
+                }}>
+                  {/* Auto option */}
+                  <div
+                    role="option"
+                    aria-selected={!selectedStyle}
+                    onClick={() => { setSelectedStyle(''); setShowStyleMenu(false) }}
+                    style={{
+                      padding: '7px 12px', cursor: 'pointer', fontSize: 12,
+                      color: !selectedStyle ? A.indigo : A.text,
+                      fontWeight: !selectedStyle ? 600 : 400,
+                      background: !selectedStyle ? `${A.indigo}08` : 'transparent',
+                      display: 'flex', alignItems: 'center', gap: 6,
+                    }}
+                    onMouseEnter={e => { if (selectedStyle) e.currentTarget.style.background = '#f5f5ff' }}
+                    onMouseLeave={e => { if (selectedStyle) e.currentTarget.style.background = 'transparent' }}
+                  >
+                    <span style={{ width: 16, fontSize: 11, color: A.indigo }}>{!selectedStyle ? '✓' : ''}</span>
+                    Auto (AI chooses)
+                  </div>
+                  <div style={{ height: 1, background: A.border, margin: '2px 8px' }} />
+
+                  {/* Grouped styles */}
+                  {IMAGE_STYLE_GROUPS.map(g => (
+                    <div key={g.label} role="group" aria-label={g.label}>
+                      <div style={{
+                        padding: '8px 12px 3px', fontSize: 9, fontWeight: 700,
+                        color: A.textMuted, textTransform: 'uppercase', letterSpacing: 0.6,
+                      }}>
+                        {g.label}
+                      </div>
+                      {g.options.map(o => {
+                        const isSelected = selectedStyle === o.value
+                        return (
+                          <div
+                            key={o.value}
+                            role="option"
+                            aria-selected={isSelected}
+                            onClick={() => { setSelectedStyle(o.value); setShowStyleMenu(false) }}
+                            title={o.desc}
+                            style={{
+                              padding: '5px 12px', cursor: 'pointer',
+                              display: 'flex', alignItems: 'center', gap: 6,
+                              color: isSelected ? A.indigo : A.text,
+                              fontWeight: isSelected ? 600 : 400,
+                              background: isSelected ? `${A.indigo}08` : 'transparent',
+                              fontSize: 12,
+                            }}
+                            onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = '#f5f5ff' }}
+                            onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent' }}
+                          >
+                            <span style={{ width: 16, fontSize: 11, color: A.indigo }}>{isSelected ? '✓' : ''}</span>
+                            {o.label}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -638,16 +655,24 @@ function DayCard({ day, dayName, brandId, planId, arrayIndex, seriesColor, post,
               disabled={uploading}
               style={{
                 width: '100%',
-                padding: '5px 0',
+                padding: '6px 0',
+                background: uploading ? A.surfaceAlt : 'transparent',
+                border: `1px dashed ${A.border}`,
                 borderRadius: 6,
-                border: `1px solid ${A.border}`,
-                background: 'transparent',
                 color: uploading ? A.textMuted : A.textSoft,
-                fontSize: 10,
+                fontSize: 11,
                 cursor: uploading ? 'not-allowed' : 'pointer',
+                textAlign: 'center',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 4,
               }}
+              onMouseEnter={e => { if (!uploading) { e.currentTarget.style.borderColor = A.indigo; e.currentTarget.style.color = A.indigo } }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = A.border; e.currentTarget.style.color = A.textSoft }}
             >
-              {uploading ? 'Uploading...' : 'Add photo'}
+              <span style={{ fontSize: 13 }}>📷</span>
+              {uploading ? 'Uploading...' : 'Add your photo'}
             </button>
           </>
         )}

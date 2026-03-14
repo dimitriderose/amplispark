@@ -29,6 +29,7 @@ export interface PlatformSpec {
   foldAt: number | null
   isVideoFirst: boolean
   isPortraitVideo: boolean
+  imageAspect: string  // default image aspect ratio (CSS format e.g. "1 / 1")
 }
 
 export const PLATFORMS: Record<string, PlatformSpec> = {
@@ -42,6 +43,7 @@ export const PLATFORMS: Record<string, PlatformSpec> = {
     foldAt: 125,
     isVideoFirst: false,
     isPortraitVideo: true,
+    imageAspect: '1 / 1',
   },
   linkedin: {
     key: 'linkedin',
@@ -53,6 +55,7 @@ export const PLATFORMS: Record<string, PlatformSpec> = {
     foldAt: 140,
     isVideoFirst: false,
     isPortraitVideo: false,
+    imageAspect: '1.91 / 1',
   },
   x: {
     key: 'x',
@@ -64,6 +67,7 @@ export const PLATFORMS: Record<string, PlatformSpec> = {
     foldAt: null,
     isVideoFirst: false,
     isPortraitVideo: false,
+    imageAspect: '16 / 9',
   },
   tiktok: {
     key: 'tiktok',
@@ -75,6 +79,7 @@ export const PLATFORMS: Record<string, PlatformSpec> = {
     foldAt: null,
     isVideoFirst: true,
     isPortraitVideo: true,
+    imageAspect: '9 / 16',
   },
   facebook: {
     key: 'facebook',
@@ -86,6 +91,7 @@ export const PLATFORMS: Record<string, PlatformSpec> = {
     foldAt: null,
     isVideoFirst: false,
     isPortraitVideo: false,
+    imageAspect: '1.91 / 1',
   },
   threads: {
     key: 'threads',
@@ -97,6 +103,7 @@ export const PLATFORMS: Record<string, PlatformSpec> = {
     foldAt: null,
     isVideoFirst: false,
     isPortraitVideo: true,
+    imageAspect: '1 / 1',
   },
   pinterest: {
     key: 'pinterest',
@@ -108,6 +115,7 @@ export const PLATFORMS: Record<string, PlatformSpec> = {
     foldAt: null,
     isVideoFirst: false,
     isPortraitVideo: true,
+    imageAspect: '2 / 3',
   },
   youtube_shorts: {
     key: 'youtube_shorts',
@@ -119,6 +127,7 @@ export const PLATFORMS: Record<string, PlatformSpec> = {
     foldAt: null,
     isVideoFirst: true,
     isPortraitVideo: true,
+    imageAspect: '9 / 16',
   },
   mastodon: {
     key: 'mastodon',
@@ -130,6 +139,7 @@ export const PLATFORMS: Record<string, PlatformSpec> = {
     foldAt: null,
     isVideoFirst: false,
     isPortraitVideo: false,
+    imageAspect: '16 / 9',
   },
   bluesky: {
     key: 'bluesky',
@@ -141,6 +151,7 @@ export const PLATFORMS: Record<string, PlatformSpec> = {
     foldAt: null,
     isVideoFirst: false,
     isPortraitVideo: false,
+    imageAspect: '16 / 9',
   },
 }
 
@@ -153,6 +164,51 @@ export function getPlatform(key: string): PlatformSpec {
 
 export function allPlatformKeys(): string[] {
   return Object.keys(PLATFORMS)
+}
+
+/* ── Media aspect ratio by platform + derivative type ── */
+// Mirrors backend logic in content_creator.py lines 1496-1519
+
+const _DERIVATIVE_ASPECTS: Record<string, string> = {
+  story: '9 / 16',
+  pin: '2 / 3',
+  blog_snippet: '1.91 / 1',
+  video_first: '9 / 16',  // portrait video default
+}
+
+const _CAROUSEL_ASPECTS: Record<string, string> = {
+  instagram: '4 / 5',
+  linkedin: '1 / 1',
+  tiktok: '9 / 16',
+  facebook: '1 / 1',
+  x: '1 / 1',
+}
+
+const _STANDARD_POST_ASPECTS: Record<string, string> = {
+  instagram: '4 / 5',
+  linkedin: '1 / 1',
+  x: '16 / 9',
+}
+
+/** Get the correct CSS aspect-ratio for media given platform + derivative type.
+ *  Mirrors the backend's aspect ratio selection logic exactly. */
+export function getMediaAspectRatio(
+  platform: string,
+  derivativeType?: string,
+): string {
+  const key = (_ALIASES[platform.toLowerCase()] ?? platform.toLowerCase())
+  const spec = PLATFORMS[key] ?? PLATFORMS.instagram
+
+  if (derivativeType === 'video_first') {
+    return spec.isPortraitVideo ? '9 / 16' : '16 / 9'
+  }
+  if (derivativeType === 'carousel') {
+    return _CAROUSEL_ASPECTS[key] ?? spec.imageAspect
+  }
+  if (derivativeType && _DERIVATIVE_ASPECTS[derivativeType]) {
+    return _DERIVATIVE_ASPECTS[derivativeType]
+  }
+  return _STANDARD_POST_ASPECTS[key] ?? spec.imageAspect
 }
 
 /* ── Video support by platform + derivative type ── */

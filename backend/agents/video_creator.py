@@ -42,7 +42,8 @@ _DEFAULT_VIDEO_STYLE = (
 
 
 def _build_prompt(caption: str, brand_profile: dict, platform: str,
-                   has_brand_refs: bool = False, edit_prompt: str | None = None) -> str:
+                   has_brand_refs: bool = False, edit_prompt: str | None = None,
+                   content_theme: str = "", pillar: str = "") -> str:
     _spec = get_platform(platform)
     brand_name = brand_profile.get("business_name", "")
     tone = brand_profile.get("tone", "professional and engaging")
@@ -91,6 +92,50 @@ def _build_prompt(caption: str, brand_profile: dict, platform: str,
         short_caption = caption[:200] + "..." if len(caption) > 200 else caption
         parts.append(f"Post context: {short_caption}")
 
+    # Content topic connection
+    if content_theme:
+        parts.append(
+            f"CONTENT TOPIC: {content_theme}. The video MUST visually represent this specific topic — "
+            "show environments, activities, objects, or people directly related to it. "
+            "Do NOT default to generic office or corporate footage."
+        )
+
+    # Pillar-aware narrative arc
+    _pillar_arc = {
+        "education": (
+            "NARRATIVE: Show a technique or process IN ACTION. The viewer should learn "
+            "something by watching — hands working through steps, a before/after transformation, "
+            "or a tool being used with visible results."
+        ),
+        "promotion": (
+            "NARRATIVE: Show the product/service in a real customer scenario. Not a glamour shot — "
+            "a real person benefiting in a real context. Open with the problem, end with the solution."
+        ),
+        "inspiration": (
+            "NARRATIVE: Show a transformation journey. Open with struggle or challenge, "
+            "close with breakthrough or insight. Emotional arc matters more than technical detail."
+        ),
+        "behind_the_scenes": (
+            "NARRATIVE: Show the real process — tools, workspace, decision moments. "
+            "Authenticity over polish. The viewer should feel they're seeing something normally hidden."
+        ),
+        "user_generated": (
+            "NARRATIVE: Tell a customer's story in 8 seconds. Open with them in their context, "
+            "show their challenge, close with their outcome or satisfaction."
+        ),
+    }.get(pillar, (
+        "NARRATIVE: Structure with a clear beginning (hook moment), middle (key visual), "
+        "and end (resolution). Show meaningful visual progression."
+    ))
+    parts.append(_pillar_arc)
+
+    # Scene relevance
+    parts.append(
+        "SCENE RELEVANCE: The video setting, props, and activities MUST visually connect "
+        "to the post topic. Show environments the target audience recognizes. "
+        "Do NOT default to generic office or conference room scenes."
+    )
+
     # Prohibitions
     parts.append(
         "CRITICAL RULES: "
@@ -100,7 +145,11 @@ def _build_prompt(caption: str, brand_profile: dict, platform: str,
         "Consistent lighting throughout. "
         "NO distorted faces or anatomy. "
         "NO text, words, or numbers on digital screens, monitors, laptops, or whiteboards — "
-        "show abstract data visualizations or color patterns instead."
+        "show abstract data visualizations or color patterns instead. "
+        "NO stock-video cliches: person pointing at screen or whiteboard, "
+        "woman at laptop in modern office, magnifying glass inspection, "
+        "generic conference room, blue holographic data dashboard, "
+        "person in suit with arms crossed."
     )
 
     if has_brand_refs:
@@ -128,6 +177,8 @@ async def generate_video_clip(
     post_id: str,
     tier: str = "fast",
     edit_prompt: str | None = None,
+    content_theme: str = "",
+    pillar: str = "",
 ) -> dict:
     """Generate a video clip using Veo 3.1, upload to GCS, and return metadata.
 
@@ -153,7 +204,8 @@ async def generate_video_clip(
         mime = "image/png" if hero_image_bytes[:4] == b'\x89PNG' else "image/jpeg"
         hero_image = types.Image(image_bytes=hero_image_bytes, mime_type=mime)
 
-    prompt = _build_prompt(caption, brand_profile, platform, has_brand_refs=False, edit_prompt=edit_prompt)
+    prompt = _build_prompt(caption, brand_profile, platform, has_brand_refs=False,
+                           edit_prompt=edit_prompt, content_theme=content_theme, pillar=pillar)
 
     logger.info(
         "Starting Veo video generation: model=%s aspect=%s has_image=%s post_id=%s",

@@ -2,6 +2,7 @@ import { useState, useRef } from 'react'
 import { A } from '../theme'
 import { api } from '../api/client'
 import type { Post } from '../hooks/usePostLibrary'
+import { getMediaAspectRatio } from '../platformRegistry'
 
 const STATUS_COLORS: Record<string, string> = {
   approved: A.emerald,
@@ -77,11 +78,13 @@ export default function PostCard({ post, brandId, onApproved, onDismiss, onView 
       borderRadius: 10, background: A.surface, border: `1px solid ${A.border}`,
       overflow: 'hidden', display: 'flex', flexDirection: 'column',
     }}>
-      {/* Image or placeholder */}
+      {/* Image or placeholder — aspect ratio matches platform + derivative type */}
       <div
         onClick={isFinal && onView ? onView : undefined}
         style={{
-          width: '100%', aspectRatio: '1', background: A.surfaceAlt,
+          width: '100%',
+          aspectRatio: getMediaAspectRatio(post.platform || 'instagram', post.derivative_type),
+          background: A.surfaceAlt,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           overflow: 'hidden', position: 'relative',
           cursor: isFinal && onView ? 'pointer' : 'default',

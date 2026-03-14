@@ -315,6 +315,22 @@ async def _refresh_signed_urls(post: dict) -> dict:
     return post
 
 
+async def _auto_fail_stale_generating(post: dict, brand_id: str) -> None:
+    """If a post has been stuck at 'generating' for >10 min, mark it as failed."""
+    if post.get("status") != "generating":
+        return
+    from datetime import datetime, timezone, timedelta
+    created = post.get("created_at")
+    if created and (datetime.now(timezone.utc) - created) > timedelta(minutes=10):
+        post["status"] = "failed"
+        post_id = post.get("post_id")
+        if post_id:
+            try:
+                await firestore_client.update_post(brand_id, post_id, {"status": "failed"})
+            except Exception:
+                pass
+
+
 @app.get("/api/posts")
 async def list_posts_endpoint(
     brand_id: str = Query(...),
@@ -322,7 +338,10 @@ async def list_posts_endpoint(
 ):
     """List all posts for a brand, optionally filtered by plan."""
     posts = await firestore_client.list_posts(brand_id, plan_id)
-    await asyncio.gather(*[_refresh_signed_urls(p) for p in posts])
+    await asyncio.gather(
+        *[_auto_fail_stale_generating(p, brand_id) for p in posts],
+        *[_refresh_signed_urls(p) for p in posts],
+    )
     return {"posts": posts}
 
 
@@ -335,6 +354,7 @@ async def get_post_endpoint(
     post = await firestore_client.get_post(brand_id, post_id)
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
+    await _auto_fail_stale_generating(post, brand_id)
     await _refresh_signed_urls(post)
     return post
 
@@ -831,7 +851,8 @@ async def stream_generate(
         "day_index": day_brief.get("day_index", day_index),
         "brief_index": day_index,
         "platform": day_brief.get("platform", "instagram"),
-        "pillar": day_brief.get("pillar"),
+        "pillar": day_brief.get("pillar", ""),
+        "content_theme": day_brief.get("content_theme", ""),
         "format": day_brief.get("format"),
         "cta_type": day_brief.get("cta_type"),
         "derivative_type": day_brief.get("derivative_type", "original"),
@@ -901,6 +922,8 @@ async def stream_generate(
                             "caption": final_caption,
                             "hashtags": final_hashtags,
                             "image_url": final_image_url,
+                            "content_theme": day_brief.get("content_theme", ""),
+                            "pillar": day_brief.get("pillar", ""),
                         }
                         if final_image_gcs_uri:
                             update_data["image_gcs_uri"] = final_image_gcs_uri
@@ -959,6 +982,8 @@ async def stream_generate(
                             platform=day_brief.get("platform", "instagram"),
                             post_id=post_id,
                             tier="fast",
+                            content_theme=day_brief.get("content_theme", ""),
+                            pillar=day_brief.get("pillar", ""),
                         )
                         # Update Firestore with video metadata
                         await firestore_client.update_post(brand_id, post_id, {
@@ -1161,6 +1186,8 @@ async def edit_post_media(brand_id: str, post_id: str, body: EditMediaBody):
                 post_id=post_id,
                 tier=tier,
                 edit_prompt=body.edit_prompt,
+                content_theme=post.get("content_theme", ""),
+                pillar=post.get("pillar", ""),
             )
         except Exception as e:
             import traceback
@@ -1297,6 +1324,8 @@ async def _run_video_generation(
             platform=post.get("platform", "instagram"),
             post_id=post_id,
             tier=tier,
+            content_theme=post.get("content_theme", ""),
+            pillar=post.get("pillar", ""),
         )
         bt.budget_tracker.record_video(tier)
         await firestore_client.update_video_job(job_id, "complete", result)
