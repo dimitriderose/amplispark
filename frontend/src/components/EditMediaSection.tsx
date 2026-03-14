@@ -154,7 +154,7 @@ export default function EditMediaSection({
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                   <span style={{ fontSize: 10, color: A.indigo, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1 }}>Edited</span>
                   {isAccepted
-                    ? <span style={{ fontSize: 10, color: A.green || '#22c55e', fontWeight: 600 }}>✓ Accepted</span>
+                    ? <span style={{ fontSize: 10, color: '#22c55e', fontWeight: 600 }}>✓ Accepted</span>
                     : <button
                         onClick={handleAccept}
                         style={{
