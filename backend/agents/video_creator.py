@@ -98,7 +98,9 @@ def _build_prompt(caption: str, brand_profile: dict, platform: str,
         "NO UI elements, buttons, or overlays. "
         "NO stock-footage look — original authentic cinematography. "
         "Consistent lighting throughout. "
-        "NO distorted faces or anatomy."
+        "NO distorted faces or anatomy. "
+        "NO text, words, or numbers on digital screens, monitors, laptops, or whiteboards — "
+        "show abstract data visualizations or color patterns instead."
     )
 
     if has_brand_refs:

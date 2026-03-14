@@ -240,6 +240,19 @@ def _parse_slide_descriptions(caption: str, max_slides: int = 3) -> list[str]:
     return slides[:max_slides]
 
 
+def _extract_slide_headline(slide_text: str) -> str:
+    """Extract the first sentence (short headline) from a slide's text for overlay."""
+    for sep in ['. ', '! ', '? ', '.\n', '!\n', '?\n']:
+        idx = slide_text.find(sep)
+        if idx != -1 and idx <= 60:
+            return slide_text[:idx + 1].strip()
+    if len(slide_text) <= 60:
+        return slide_text
+    truncated = slide_text[:60]
+    last_space = truncated.rfind(' ')
+    return truncated[:last_space] if last_space > 0 else truncated
+
+
 def _strip_markdown(text: str) -> str:
     """Remove markdown formatting that social platforms can't render."""
     text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
@@ -680,6 +693,7 @@ def _build_image_prompt(
     prompt += (
         "ABSOLUTE PROHIBITIONS:\n"
         "- No AI-generated text, letters, numbers, words, labels, or typography\n"
+        "- No text, words, numbers, or typography on digital screens, monitors, TV displays, whiteboards, or software interfaces — show abstract data visualizations, graphs, or color patterns instead\n"
         "- No watermarks, logos, brand marks, or signatures\n"
         "- No UI elements, buttons, frames, borders, or overlays\n"
         "- No fake screenshots, browser windows, or device mockups\n"
@@ -694,6 +708,44 @@ def _build_image_prompt(
     return prompt
 
 
+_MOOD_KEYWORDS: dict[str, list[str]] = {
+    "positive and empowering — people should look engaged, confident, and motivated": [
+        "master", "success", "achieve", "grow", "win", "boost", "improve", "reclaim",
+        "transform", "unlock", "elevate", "thrive", "excel", "empower",
+    ],
+    "urgent and cautionary — convey alertness and focus, not panic": [
+        "avoid", "stop", "don't", "mistake", "pitfall", "risk", "danger", "warning", "fail",
+    ],
+    "curious and exploratory — convey wonder and openness": [
+        "discover", "explore", "learn", "research", "investigate", "wonder", "uncover", "reveal",
+    ],
+    "action-oriented and determined — convey forward momentum": [
+        "start", "launch", "build", "create", "execute", "implement", "ship", "deploy",
+    ],
+    "warm and communal — convey togetherness and support": [
+        "community", "together", "support", "gratitude", "grateful", "team", "celebrate",
+        "share", "connect", "belong", "welcome", "help",
+    ],
+    "fun and energetic — convey excitement and spontaneity": [
+        "fun", "exciting", "amazing", "wow", "love", "hack", "trick", "trend",
+        "viral", "challenge", "try", "watch",
+    ],
+    "authoritative and data-driven — convey expertise and strategic insight": [
+        "strategy", "roi", "metrics", "pipeline", "framework", "methodology",
+        "benchmark", "optimize", "scale", "revenue", "performance", "leverage",
+    ],
+}
+
+
+def _infer_slide_mood(slide_text: str) -> str:
+    """Infer mood from slide text using word-boundary keyword matching."""
+    words = set(re.findall(r'\b\w+\b', slide_text.lower()))
+    for mood, keywords in _MOOD_KEYWORDS.items():
+        if words & set(keywords):
+            return mood
+    return "professional and approachable"
+
+
 def _build_carousel_slide_prompt(
     platform: str,
     style: dict[str, str],
@@ -701,15 +753,18 @@ def _build_carousel_slide_prompt(
     slide_visual_hint: str,
     color_hint: str,
     style_ref_block: str,
+    slide_text: str = "",
 ) -> str:
     """Build prompt for a carousel slide image — visual hint only, no text content."""
     _spec = get_platform(platform)
     carousel_notes = _spec.carousel_notes or ""
+    mood = _infer_slide_mood(slide_text) if slide_text else (_spec.mood or "professional")
 
     prompt = (
         f"Create carousel slide {slide_num} image as a {style['keyword']}.\n"
         f"Visual direction: {style['directives']}.\n"
         f"Scene: {slide_visual_hint}\n"
+        f"MOOD: {mood}\n"
         f"{color_hint}\n"
     )
     if _spec.composition:
@@ -722,6 +777,7 @@ def _build_carousel_slide_prompt(
         "Match the cover image's color grading and visual style exactly.\n"
         "ABSOLUTE PROHIBITIONS:\n"
         "- No AI-generated text, letters, numbers, words, labels, or typography\n"
+        "- No text, words, numbers, or typography on digital screens, monitors, TV displays, whiteboards, or software interfaces — show abstract data visualizations, graphs, or color patterns instead\n"
         "- No watermarks, logos, brand marks, or signatures\n"
         "- No UI elements, buttons, frames, borders, or overlays\n"
         "- No distorted anatomy, extra limbs, or wrong finger counts\n"
@@ -762,6 +818,7 @@ async def _generate_carousel_images(
             slide_visual_hint=slide_text[:200],
             color_hint=color_hint,
             style_ref_block=style_ref_block,
+            slide_text=slide_text,
         )
         try:
             resp = await asyncio.to_thread(
@@ -1321,10 +1378,12 @@ async def generate_post(
             "Structure the caption as slide-by-slide copy:\n"
             "  Slide 1: Hook (compelling, ≤10 words — this becomes the cover). "
             "ALL hook rules above apply here — no 'Are you...?', 'Did you know...?', etc.\n"
-            "  Slide 2: Teach ONE specific insight — name a real technique, rule, or method. "
+            "  Slide 2: Start with a SHORT HEADLINE (≤50 chars, ≤8 words) that summarizes the insight. "
+            "Then teach ONE specific insight — name a real technique, rule, or method. "
             "Then give a CONCRETE EXAMPLE showing it in practice (a scenario, a number, a before/after). "
             "NOT a platitude like 'plan proactively.' GIVE the actual insight AND show what it looks like.\n"
-            "  Slide 3: Actionable takeaway the reader can do TODAY + call to action. "
+            "  Slide 3: Start with a SHORT HEADLINE (≤50 chars, ≤8 words) summarizing the takeaway. "
+            "Then give the actionable step the reader can do TODAY + call to action. "
             "Be specific: 'Compare X to Y this week' not 'Improve your operations.'\n"
             "Label each slide clearly: 'Slide 1:', 'Slide 2:', 'Slide 3:'.\n"
             "SUBSTANCE CHECK: If any slide could apply to every business in the industry, "
@@ -2100,7 +2159,7 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                     # Post-process each slide: resize + number badge + title
                     try:
                         slide_bytes = resize_to_aspect(slide_bytes, _aspect)
-                        _slide_title = slide_descriptions[slide_idx + 1][:60] if slide_idx + 1 < len(slide_descriptions) else ""
+                        _slide_title = _extract_slide_headline(slide_descriptions[slide_idx + 1]) if slide_idx + 1 < len(slide_descriptions) else ""
                         slide_bytes = create_carousel_slide(
                             slide_bytes, slide_idx + 2, _slide_title, colors, _aspect)
                         slide_mime = "image/png"

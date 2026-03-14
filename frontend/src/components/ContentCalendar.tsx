@@ -1,8 +1,8 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { A } from '../theme'
 import { getPlatform } from '../platformRegistry'
 import { api } from '../api/client'
-import { IMAGE_STYLE_GROUPS } from '../imageStyleOptions'
+import { IMAGE_STYLE_GROUPS, styleLabel } from '../imageStyleOptions'
 import type { Post } from '../hooks/usePostLibrary'
 
 const PILLAR_COLORS: Record<string, string> = {
@@ -258,21 +258,21 @@ function DayCard({ day, dayName, brandId, planId, arrayIndex, seriesColor, post,
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [photoError, setPhotoError] = useState('')
-  const [showStylePicker, setShowStylePicker] = useState(false)
+  const [showStyleMenu, setShowStyleMenu] = useState(false)
   const [selectedStyle, setSelectedStyle] = useState(defaultImageStyle || '')
-  const stylePickerRef = useRef<HTMLDivElement>(null)
+  const styleMenuRef = useRef<HTMLDivElement>(null)
   useEffect(() => { setSelectedStyle(defaultImageStyle || '') }, [defaultImageStyle])
-  // Close style picker on click outside
+  // Close style menu on click outside
   useEffect(() => {
-    if (!showStylePicker) return
+    if (!showStyleMenu) return
     const handler = (e: MouseEvent) => {
-      if (stylePickerRef.current && !stylePickerRef.current.contains(e.target as Node)) {
-        setShowStylePicker(false)
+      if (styleMenuRef.current && !styleMenuRef.current.contains(e.target as Node)) {
+        setShowStyleMenu(false)
       }
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [showStylePicker])
+  }, [showStyleMenu])
 
   const dayIndex = arrayIndex
   const isGenerated = post && (post.status === 'complete' || post.status === 'approved')
@@ -501,9 +501,91 @@ function DayCard({ day, dayName, brandId, planId, arrayIndex, seriesColor, post,
 
         {/* Primary action: Generate (ungenerated) or View Post (generated) */}
         {!isGenerated && !isGenerating && (
-          <div ref={stylePickerRef} style={{ position: 'relative' }}>
+          <div ref={styleMenuRef} style={{ position: 'relative' }}>
+            {/* Style label — separate from Generate */}
             <button
-              onClick={() => setShowStylePicker(prev => !prev)}
+              onClick={() => setShowStyleMenu(prev => !prev)}
+              aria-haspopup="listbox"
+              aria-expanded={showStyleMenu}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: 11, padding: '6px 0', marginBottom: 8,
+                display: 'flex', alignItems: 'center', gap: 4,
+                color: selectedStyle ? A.indigo : A.textSoft,
+                opacity: selectedStyle ? 1 : 0.75,
+              }}
+            >
+              Style: {selectedStyle ? styleLabel(selectedStyle) : 'Auto'} ▾
+            </button>
+
+            {/* Style dropdown menu */}
+            {showStyleMenu && (
+              <div role="listbox" aria-label="Image style" style={{
+                position: 'absolute', bottom: '100%', left: 0,
+                marginBottom: 4, borderRadius: 8, width: 220,
+                background: A.surface, border: `1px solid ${A.border}`,
+                boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 20,
+                maxHeight: 300, overflowY: 'auto',
+              }}>
+                {/* Auto option */}
+                <div
+                  role="option"
+                  aria-selected={!selectedStyle}
+                  tabIndex={0}
+                  onClick={() => { setSelectedStyle(''); setShowStyleMenu(false) }}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { setSelectedStyle(''); setShowStyleMenu(false) } }}
+                  style={{
+                    padding: '8px 12px', cursor: 'pointer', fontSize: 12,
+                    color: !selectedStyle ? A.indigo : A.text,
+                    fontWeight: !selectedStyle ? 600 : 400,
+                    background: !selectedStyle ? `${A.indigo}10` : 'transparent',
+                  }}
+                >
+                  {!selectedStyle ? '✓ ' : '  '}Auto (AI chooses)
+                </div>
+                <div style={{ height: 1, background: A.border, margin: '2px 0' }} />
+
+                {/* Grouped styles */}
+                {IMAGE_STYLE_GROUPS.map(g => (
+                  <div key={g.label} role="group" aria-label={g.label}>
+                    <div style={{
+                      padding: '6px 12px 2px', fontSize: 10, fontWeight: 700,
+                      color: A.textMuted, textTransform: 'uppercase', letterSpacing: 0.5,
+                    }}>
+                      {g.label}
+                    </div>
+                    {g.options.map(o => (
+                      <div
+                        key={o.value}
+                        role="option"
+                        aria-selected={selectedStyle === o.value}
+                        tabIndex={0}
+                        onClick={() => { setSelectedStyle(o.value); setShowStyleMenu(false) }}
+                        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { setSelectedStyle(o.value); setShowStyleMenu(false) } }}
+                        style={{
+                          padding: '5px 12px 5px 20px', cursor: 'pointer',
+                          color: selectedStyle === o.value ? A.indigo : A.text,
+                          fontWeight: selectedStyle === o.value ? 600 : 400,
+                          background: selectedStyle === o.value ? `${A.indigo}10` : 'transparent',
+                          borderLeft: selectedStyle === o.value ? `2px solid ${A.indigo}` : '2px solid transparent',
+                        }}
+                      >
+                        <div style={{ fontSize: 12 }}>
+                          {selectedStyle === o.value ? '✓ ' : ''}{o.label}
+                        </div>
+                        <div style={{ fontSize: 10, color: A.textMuted, marginTop: 1 }}>
+                          {o.desc}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Generate button — always one-click */}
+            <button
+              onClick={() => onGenerate(selectedStyle || undefined)}
               style={{
                 width: '100%',
                 padding: '6px 0',
@@ -519,50 +601,6 @@ function DayCard({ day, dayName, brandId, planId, arrayIndex, seriesColor, post,
             >
               {day.custom_photo_url ? 'Generate with photo' : 'Generate'}
             </button>
-            {showStylePicker && (
-              <div style={{
-                position: 'absolute', bottom: '100%', left: 0, right: 0,
-                marginBottom: 4, padding: 10, borderRadius: 8,
-                background: A.surface, border: `1px solid ${A.border}`,
-                boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 20,
-                minWidth: 180,
-              }}>
-                <label style={{ fontSize: 10, fontWeight: 600, color: A.textSoft, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                  Image Style
-                </label>
-                <select
-                  value={selectedStyle}
-                  onChange={e => setSelectedStyle(e.target.value)}
-                  style={{
-                    width: '100%', padding: '5px 8px', borderRadius: 6,
-                    border: `1px solid ${A.border}`, fontSize: 11, color: A.text,
-                    background: A.surface, outline: 'none', marginBottom: 8,
-                  }}
-                >
-                  <option value="">Auto (AI chooses)</option>
-                  {IMAGE_STYLE_GROUPS.map(g => (
-                    <optgroup key={g.label} label={g.label}>
-                      {g.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </optgroup>
-                  ))}
-                </select>
-                <button
-                  onClick={() => {
-                    setShowStylePicker(false)
-                    onGenerate(selectedStyle || undefined)
-                  }}
-                  style={{
-                    width: '100%', padding: '6px 0', borderRadius: 6,
-                    border: 'none',
-                    background: `linear-gradient(135deg, ${A.indigo}, ${A.violet})`,
-                    color: 'white', fontSize: 11, fontWeight: 600,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Generate
-                </button>
-              </div>
-            )}
           </div>
         )}
 
