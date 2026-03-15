@@ -1,6 +1,9 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { A } from '../theme'
 import { useIsMobile } from '../hooks/useIsMobile'
+import { computePlacement, getTooltipStyle, getArrowStyle } from '../hooks/useTooltipPlacement'
+import type { Placement, Cutout } from '../hooks/useTooltipPlacement'
+import TourOverlay from './TourOverlay'
 
 export interface TourStep {
   targetSelector: string
@@ -19,12 +22,7 @@ interface Props {
   onSkip: () => void
 }
 
-type Placement = 'top' | 'bottom' | 'left' | 'right'
-
 const PADDING = 8
-const ARROW_SIZE = 8
-const TOOLTIP_GAP = 12
-const OVERLAY_Z = 10000
 
 let _maskIdCounter = 0
 
@@ -46,22 +44,8 @@ export default function GuidedTour({ steps, isActive, currentStep, onNext, onPre
     return document.querySelector(`[data-tour-id="${step.targetSelector}"]`)
   }, [step])
 
-  const computePlacement = useCallback((rect: DOMRect): Placement => {
-    if (isMobile) {
-      // On mobile, prefer bottom unless near the bottom of the viewport
-      return rect.bottom + 200 > window.innerHeight ? 'top' : 'bottom'
-    }
-    const spaceBelow = window.innerHeight - rect.bottom
-    const spaceAbove = rect.top
-    const spaceRight = window.innerWidth - rect.right
-    const spaceLeft = rect.left
-
-    // Prefer bottom, then top, then right, then left
-    if (spaceBelow >= 180) return 'bottom'
-    if (spaceAbove >= 180) return 'top'
-    if (spaceRight >= 280) return 'right'
-    if (spaceLeft >= 280) return 'left'
-    return 'bottom'
+  const computePlacementCb = useCallback((rect: DOMRect): Placement => {
+    return computePlacement(rect, isMobile)
   }, [isMobile])
 
   const skipPendingRef = useRef(false)
@@ -95,7 +79,7 @@ export default function GuidedTour({ steps, isActive, currentStep, onNext, onPre
     }
     const rect = el.getBoundingClientRect()
     setTargetRect(rect)
-    setPlacement(computePlacement(rect))
+    setPlacement(computePlacementCb(rect))
 
     // Scroll target into view if needed
     const inViewport = rect.top >= 0 && rect.bottom <= window.innerHeight
@@ -105,10 +89,10 @@ export default function GuidedTour({ steps, isActive, currentStep, onNext, onPre
       requestAnimationFrame(() => {
         const newRect = el.getBoundingClientRect()
         setTargetRect(newRect)
-        setPlacement(computePlacement(newRect))
+        setPlacement(computePlacementCb(newRect))
       })
     }
-  }, [findTarget, computePlacement])
+  }, [findTarget, computePlacementCb])
 
   // Update position when step changes
   useEffect(() => {
@@ -187,7 +171,7 @@ export default function GuidedTour({ steps, isActive, currentStep, onNext, onPre
   if (!isActive || !targetRect || !step || !visible) return null
 
   // Spotlight cutout dimensions
-  const cutout = {
+  const cutout: Cutout = {
     x: targetRect.left - PADDING,
     y: targetRect.top - PADDING,
     w: targetRect.width + PADDING * 2,
@@ -195,142 +179,17 @@ export default function GuidedTour({ steps, isActive, currentStep, onNext, onPre
     r: 8,
   }
 
-  // Tooltip positioning
-  const tooltipStyle: React.CSSProperties = {
-    position: 'fixed',
-    zIndex: OVERLAY_Z + 2,
-    width: isMobile ? 'calc(100vw - 32px)' : 320,
-    maxWidth: isMobile ? 'calc(100vw - 32px)' : 360,
-    opacity: transitioning ? 0 : 1,
-    transition: 'opacity 0.2s ease',
-  }
-
-  if (isMobile) {
-    // Center horizontally on mobile
-    tooltipStyle.left = 16
-    if (placement === 'top') {
-      tooltipStyle.bottom = window.innerHeight - cutout.y + TOOLTIP_GAP
-    } else {
-      tooltipStyle.top = cutout.y + cutout.h + TOOLTIP_GAP
-    }
-  } else {
-    switch (placement) {
-      case 'bottom':
-        tooltipStyle.top = cutout.y + cutout.h + TOOLTIP_GAP
-        tooltipStyle.left = Math.max(16, Math.min(cutout.x, window.innerWidth - 340))
-        break
-      case 'top':
-        tooltipStyle.bottom = window.innerHeight - cutout.y + TOOLTIP_GAP
-        tooltipStyle.left = Math.max(16, Math.min(cutout.x, window.innerWidth - 340))
-        break
-      case 'right':
-        tooltipStyle.top = Math.max(16, cutout.y)
-        tooltipStyle.left = cutout.x + cutout.w + TOOLTIP_GAP
-        break
-      case 'left':
-        tooltipStyle.top = Math.max(16, cutout.y)
-        tooltipStyle.right = window.innerWidth - cutout.x + TOOLTIP_GAP
-        break
-    }
-  }
-
-  // Arrow positioning
-  const arrowStyle: React.CSSProperties = {
-    position: 'absolute',
-    width: 0,
-    height: 0,
-    border: `${ARROW_SIZE}px solid transparent`,
-  }
-
-  switch (placement) {
-    case 'bottom':
-      arrowStyle.top = -ARROW_SIZE * 2
-      arrowStyle.left = Math.min(32, cutout.w / 2)
-      arrowStyle.borderBottomColor = A.surface
-      break
-    case 'top':
-      arrowStyle.bottom = -ARROW_SIZE * 2
-      arrowStyle.left = Math.min(32, cutout.w / 2)
-      arrowStyle.borderTopColor = A.surface
-      break
-    case 'right':
-      arrowStyle.top = 20
-      arrowStyle.left = -ARROW_SIZE * 2
-      arrowStyle.borderRightColor = A.surface
-      break
-    case 'left':
-      arrowStyle.top = 20
-      arrowStyle.right = -ARROW_SIZE * 2
-      arrowStyle.borderLeftColor = A.surface
-      break
-  }
+  const tooltipStyle = getTooltipStyle(placement, cutout, isMobile, transitioning)
+  const arrowStyle = getArrowStyle(placement, cutout)
 
   return (
     <>
-      {/* Dark overlay with spotlight cutout */}
-      <svg
-        style={{
-          position: 'fixed',
-          inset: 0,
-          width: '100vw',
-          height: '100vh',
-          zIndex: OVERLAY_Z,
-          pointerEvents: 'none',
-          transition: 'opacity 0.2s ease',
-          opacity: transitioning ? 0 : 1,
-        }}
-      >
-        <defs>
-          <mask id={maskId}>
-            <rect x="0" y="0" width="100%" height="100%" fill="white" />
-            <rect
-              x={cutout.x}
-              y={cutout.y}
-              width={cutout.w}
-              height={cutout.h}
-              rx={cutout.r}
-              ry={cutout.r}
-              fill="black"
-            />
-          </mask>
-        </defs>
-        <rect
-          x="0"
-          y="0"
-          width="100%"
-          height="100%"
-          fill="rgba(0,0,0,0.5)"
-          mask={`url(#${maskId})`}
-        />
-      </svg>
-
-      {/* Click blocker on overlay area (but not on cutout) */}
-      <div
-        style={{
-          position: 'fixed',
-          inset: 0,
-          zIndex: OVERLAY_Z + 1,
-          cursor: 'default',
-        }}
+      <TourOverlay
+        cutout={cutout}
+        maskId={maskId}
+        visible={visible}
+        transitioning={transitioning}
         onClick={onSkip}
-      />
-
-      {/* Spotlight border ring */}
-      <div
-        style={{
-          position: 'fixed',
-          left: cutout.x,
-          top: cutout.y,
-          width: cutout.w,
-          height: cutout.h,
-          borderRadius: cutout.r,
-          border: `2px solid ${A.indigo}`,
-          boxShadow: `0 0 0 4px ${A.indigo}22`,
-          zIndex: OVERLAY_Z + 1,
-          pointerEvents: 'none',
-          transition: 'all 0.3s ease',
-          opacity: transitioning ? 0 : 1,
-        }}
       />
 
       {/* Tooltip */}
