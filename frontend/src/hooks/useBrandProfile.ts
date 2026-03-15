@@ -1,44 +1,25 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useCallback } from 'react'
 import { api } from '../api/client'
 import type { BrandProfile } from '../types'
+import { useFetch } from './useFetch'
 
 export type { BrandProfile, SocialVoiceAnalysis } from '../types'
 
 export function useBrandProfile(brandId: string | undefined) {
-  const [brand, setBrand] = useState<BrandProfile | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const fetchBrand = useCallback(async () => {
-    if (!brandId) return
-    setLoading(true)
-    setError(null)
-    try {
-      const res = await api.getBrand(brandId) as { brand_profile: BrandProfile }
-      setBrand(res.brand_profile)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load brand')
-    } finally {
-      setLoading(false)
+  const { data: brand, loading, error, refresh: refetch } = useFetch<BrandProfile>(
+    brandId ? () => api.getBrand(brandId).then(res => res.brand_profile) : null,
+    [brandId],
+    {
+      pollMs: 3000,
+      pollWhen: (data) => data?.analysis_status === 'analyzing',
     }
-  }, [brandId])
-
-  useEffect(() => {
-    fetchBrand()
-  }, [fetchBrand])
-
-  // Poll while analyzing
-  useEffect(() => {
-    if (!brand || brand.analysis_status !== 'analyzing') return
-    const interval = setInterval(fetchBrand, 3000)
-    return () => clearInterval(interval)
-  }, [brand, fetchBrand])
+  )
 
   const updateBrand = useCallback(async (data: Partial<BrandProfile>) => {
     if (!brandId) return
     await api.updateBrand(brandId, data)
-    await fetchBrand()
-  }, [brandId, fetchBrand])
+    refetch()
+  }, [brandId, refetch])
 
-  return { brand, loading, error, refetch: fetchBrand, updateBrand }
+  return { brand, loading, error: error || null, refetch, updateBrand }
 }

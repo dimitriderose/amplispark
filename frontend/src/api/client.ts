@@ -1,40 +1,86 @@
 import { downloadBlob } from '../utils/downloads'
+import type {
+  BrandResponse,
+  CreateBrandResponse,
+  BrandsListResponse,
+  PostsListResponse,
+  PlansListResponse,
+  PlanResponse,
+  CreatePlanResponse,
+  PostResponse,
+  UpdatePostResponse,
+  ReviewPostResponse,
+  ApprovePostResponse,
+  RegenerateResponse,
+  UploadAssetResponse,
+  DayPhotoResponse,
+  VideoJobResponse,
+  EditMediaResponse,
+  ResetMediaResponse,
+  RefreshResearchResponse,
+} from '../types/api'
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    ...options,
-  })
+async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }))
+    const err = await res.json().catch(async () => {
+      const text = await res.text().catch(() => '')
+      return { error: text.slice(0, 200) || res.statusText }
+    })
     throw new Error(err.detail || err.error || `HTTP ${res.status}`)
+  }
+  // Handle empty responses (204 No Content, empty body)
+  if (res.status === 204 || res.headers.get('content-length') === '0') {
+    return undefined as T
   }
   return res.json()
 }
 
+async function handleBlobResponse(res: Response): Promise<Blob> {
+  if (!res.ok) {
+    const err = await res.json().catch(async () => {
+      const text = await res.text().catch(() => '')
+      return { error: text.slice(0, 200) || res.statusText }
+    })
+    throw new Error(err.detail || err.error || `HTTP ${res.status}`)
+  }
+  return res.blob()
+}
+
+async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(path, {
+    headers: {
+      ...(options?.body ? { 'Content-Type': 'application/json' } : {}),
+      ...options?.headers,
+    },
+    ...options,
+  })
+  return handleResponse<T>(res)
+}
+
 export const api = {
   listBrands: (ownerUid: string) =>
-    request<{ brands: Record<string, unknown>[] }>(`/api/brands?owner_uid=${encodeURIComponent(ownerUid)}`),
+    request<BrandsListResponse>(`/api/brands?owner_uid=${encodeURIComponent(ownerUid)}`),
   createBrand: (data: object) =>
-    request('/api/brands', { method: 'POST', body: JSON.stringify(data) }),
+    request<CreateBrandResponse>('/api/brands', { method: 'POST', body: JSON.stringify(data) }),
   analyzeBrand: (brandId: string, data: object) =>
-    request(`/api/brands/${brandId}/analyze`, { method: 'POST', body: JSON.stringify(data) }),
-  getBrand: (brandId: string) => request(`/api/brands/${brandId}`),
+    request<BrandResponse>(`/api/brands/${brandId}/analyze`, { method: 'POST', body: JSON.stringify(data) }),
+  getBrand: (brandId: string) => request<BrandResponse>(`/api/brands/${brandId}`),
   updateBrand: (brandId: string, data: object) =>
-    request(`/api/brands/${brandId}`, { method: 'PUT', body: JSON.stringify(data) }),
+    request<BrandResponse>(`/api/brands/${brandId}`, { method: 'PUT', body: JSON.stringify(data) }),
   uploadBrandAsset: (brandId: string, formData: FormData) =>
-    fetch(`/api/brands/${brandId}/upload`, { method: 'POST', body: formData }).then(r => r.json()),
+    fetch(`/api/brands/${brandId}/upload`, { method: 'POST', body: formData })
+      .then(r => handleResponse<UploadAssetResponse>(r)),
   deleteBrandAsset: (brandId: string, assetIndex: number) =>
-    request(`/api/brands/${brandId}/assets/${assetIndex}`, { method: 'DELETE' }),
+    request<void>(`/api/brands/${brandId}/assets/${assetIndex}`, { method: 'DELETE' }),
   setBrandLogo: (brandId: string, logoUrl: string | null) =>
-    request(`/api/brands/${brandId}/logo`, {
+    request<BrandResponse>(`/api/brands/${brandId}/logo`, {
       method: 'PATCH',
       body: JSON.stringify({ logo_url: logoUrl }),
     }),
 
-  listPlans: (brandId: string) => request(`/api/brands/${brandId}/plans`),
+  listPlans: (brandId: string) => request<PlansListResponse>(`/api/brands/${brandId}/plans`),
   createPlan: (brandId: string, numDays = 7, businessEvents?: string, platforms?: string[]) =>
-    request(`/api/brands/${brandId}/plans`, {
+    request<CreatePlanResponse>(`/api/brands/${brandId}/plans`, {
       method: 'POST',
       body: JSON.stringify({
         num_days: numDays,
@@ -42,62 +88,43 @@ export const api = {
         ...(platforms && platforms.length > 0 ? { platforms } : {}),
       }),
     }),
-  getPlan: (brandId: string, planId: string) => request(`/api/brands/${brandId}/plans/${planId}`),
+  getPlan: (brandId: string, planId: string) => request<PlanResponse>(`/api/brands/${brandId}/plans/${planId}`),
   updateDay: (brandId: string, planId: string, dayIndex: number, data: object) =>
-    request(`/api/brands/${brandId}/plans/${planId}/days/${dayIndex}`, { method: 'PUT', body: JSON.stringify(data) }),
+    request<PlanResponse>(`/api/brands/${brandId}/plans/${planId}/days/${dayIndex}`, { method: 'PUT', body: JSON.stringify(data) }),
 
   listPosts: (brandId: string, planId?: string) =>
-    request(`/api/posts?brand_id=${brandId}${planId ? `&plan_id=${planId}` : ''}`),
+    request<PostsListResponse>(`/api/posts?brand_id=${brandId}${planId ? `&plan_id=${planId}` : ''}`),
   getPost: (brandId: string, postId: string) =>
-    request(`/api/posts/${postId}?brand_id=${brandId}`),
+    request<PostResponse>(`/api/posts/${postId}?brand_id=${brandId}`),
   updatePost: (brandId: string, postId: string, data: { caption?: string; hashtags?: string[] }) =>
-    request(`/api/brands/${brandId}/posts/${postId}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    request<UpdatePostResponse>(`/api/brands/${brandId}/posts/${postId}`, { method: 'PATCH', body: JSON.stringify(data) }),
   reviewPost: (brandId: string, postId: string, force = false) =>
-    request(`/api/brands/${brandId}/posts/${postId}/review${force ? '?force=true' : ''}`, { method: 'POST' }),
+    request<ReviewPostResponse>(`/api/brands/${brandId}/posts/${postId}/review${force ? '?force=true' : ''}`, { method: 'POST' }),
   approvePost: (brandId: string, postId: string) =>
-    request(`/api/brands/${brandId}/posts/${postId}/approve`, { method: 'POST' }),
+    request<ApprovePostResponse>(`/api/brands/${brandId}/posts/${postId}/approve`, { method: 'POST' }),
   exportPost: (postId: string, brandId: string) =>
     fetch(`/api/posts/${postId}/export?brand_id=${encodeURIComponent(brandId)}`)
-      .then(async r => {
-        if (!r.ok) {
-          const err = await r.json().catch(() => ({ error: r.statusText }))
-          throw new Error(err.detail || err.error || `HTTP ${r.status}`)
-        }
-        const blob = await r.blob()
-        const disposition = r.headers.get('Content-Disposition') || ''
-        const match = disposition.match(/filename=(.+)/)
-        const filename = match ? match[1] : `amplifi_post_${postId}.zip`
-        downloadBlob(blob, filename)
+      .then(r => handleBlobResponse(r))
+      .then(async blob => {
+        downloadBlob(blob, `amplifi_post_${postId}.zip`)
       }),
   exportPlan: (planId: string, brandId: string) =>
     fetch(`/api/export/${planId}?brand_id=${encodeURIComponent(brandId)}`, { method: 'POST' })
-      .then(async r => {
-        if (!r.ok) {
-          const err = await r.json().catch(() => ({ error: r.statusText }))
-          throw new Error(err.error || `HTTP ${r.status}`)
-        }
-        const blob = await r.blob()
-        downloadBlob(blob, `amplifi_export_${planId}.zip`)
-      }),
+      .then(r => handleBlobResponse(r))
+      .then(blob => downloadBlob(blob, `amplifi_export_${planId}.zip`)),
 
   uploadDayPhoto: (brandId: string, planId: string, dayIndex: number, formData: FormData) =>
     fetch(`/api/brands/${brandId}/plans/${planId}/days/${dayIndex}/photo`, {
       method: 'POST',
       body: formData,
-    }).then(async r => {
-      if (!r.ok) {
-        const err = await r.json().catch(() => ({ detail: r.statusText }))
-        throw new Error(err.detail || `HTTP ${r.status}`)
-      }
-      return r.json()
-    }),
+    }).then(r => handleResponse<DayPhotoResponse>(r)),
 
   deleteDayPhoto: (brandId: string, planId: string, dayIndex: number) =>
-    request(`/api/brands/${brandId}/plans/${planId}/days/${dayIndex}/photo`, { method: 'DELETE' }),
+    request<void>(`/api/brands/${brandId}/plans/${planId}/days/${dayIndex}/photo`, { method: 'DELETE' }),
 
   generateVideo: (postId: string, tier = 'fast', brandId = '') =>
-    request(`/api/posts/${postId}/generate-video?tier=${tier}&brand_id=${brandId}`, { method: 'POST' }),
-  getVideoJob: (jobId: string) => request(`/api/video-jobs/${jobId}`),
+    request<VideoJobResponse>(`/api/posts/${postId}/generate-video?tier=${tier}&brand_id=${brandId}`, { method: 'POST' }),
+  getVideoJob: (jobId: string) => request<VideoJobResponse>(`/api/video-jobs/${jobId}`),
 
   connectSocial: (brandId: string, platform: string, oauthToken: string) =>
     request<{ platform: string; voice_analysis: Record<string, unknown> }>(
@@ -106,15 +133,8 @@ export const api = {
     ),
 
   uploadVideoForRepurpose: (brandId: string, formData: FormData) =>
-    fetch(`/api/brands/${brandId}/video-repurpose`, { method: 'POST', body: formData }).then(
-      async r => {
-        if (!r.ok) {
-          const err = await r.json().catch(() => ({ detail: r.statusText }))
-          throw new Error(err.detail || `HTTP ${r.status}`)
-        }
-        return r.json()
-      }
-    ),
+    fetch(`/api/brands/${brandId}/video-repurpose`, { method: 'POST', body: formData })
+      .then(r => handleResponse<{ job_id: string }>(r)),
 
   getVideoRepurposeJob: (jobId: string, brandId: string) =>
     request<{
@@ -126,17 +146,11 @@ export const api = {
 
   downloadCalendar: (brandId: string, planId: string) =>
     fetch(`/api/brands/${brandId}/plans/${planId}/calendar.ics`)
-      .then(async r => {
-        if (!r.ok) {
-          const err = await r.json().catch(() => ({ detail: r.statusText }))
-          throw new Error(err.detail || `HTTP ${r.status}`)
-        }
-        const blob = await r.blob()
-        downloadBlob(blob, 'amplifi_content_plan.ics')
-      }),
+      .then(r => handleBlobResponse(r))
+      .then(blob => downloadBlob(blob, 'amplifi_content_plan.ics')),
 
   emailCalendar: (brandId: string, planId: string, email: string) =>
-    request(`/api/brands/${brandId}/plans/${planId}/calendar/email`, {
+    request<void>(`/api/brands/${brandId}/plans/${planId}/calendar/email`, {
       method: 'POST',
       body: JSON.stringify({ email }),
     }),
@@ -145,13 +159,13 @@ export const api = {
   getNotionAuthUrl: (brandId: string) =>
     request<{ auth_url: string }>(`/api/brands/${brandId}/integrations/notion/auth-url`),
   disconnectNotion: (brandId: string) =>
-    request(`/api/brands/${brandId}/integrations/notion/disconnect`, { method: 'POST' }),
+    request<void>(`/api/brands/${brandId}/integrations/notion/disconnect`, { method: 'POST' }),
   getNotionDatabases: (brandId: string) =>
     request<{ databases: { id: string; title: string }[] }>(
       `/api/brands/${brandId}/integrations/notion/databases`,
     ),
   selectNotionDatabase: (brandId: string, databaseId: string, databaseName: string) =>
-    request(`/api/brands/${brandId}/integrations/notion/select-database`, {
+    request<void>(`/api/brands/${brandId}/integrations/notion/select-database`, {
       method: 'POST',
       body: JSON.stringify({ database_id: databaseId, database_name: databaseName }),
     }),
@@ -166,25 +180,17 @@ export const api = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-    }).then(r => {
-      if (!r.ok) return r.json().then(e => Promise.reject(new Error(e?.detail || 'Edit failed')))
-      return r.json()
-    }),
+    }).then(r => handleResponse<EditMediaResponse>(r)),
 
   resetPostMedia: (brandId: string, postId: string, target?: string) =>
     fetch(`/api/brands/${brandId}/posts/${postId}/edit-media/reset${target ? `?target=${target}` : ''}`, {
       method: 'POST',
-    }).then(r => {
-      if (!r.ok) return r.json().then(e => Promise.reject(new Error(e?.detail || 'Reset failed')))
-      return r.json()
-    }),
+    }).then(r => handleResponse<ResetMediaResponse>(r)),
 
   regeneratePost: (brandId: string, postId: string) =>
-    request<{ generate_url: string }>(`/api/brands/${brandId}/posts/${postId}/regenerate`, { method: 'POST' }),
+    request<RegenerateResponse>(`/api/brands/${brandId}/posts/${postId}/regenerate`, { method: 'POST' }),
 
   refreshPlanResearch: (brandId: string, planId: string) =>
-    fetch(`/api/brands/${brandId}/plans/${planId}/refresh-research`, { method: 'POST' }).then(r => {
-      if (!r.ok) return r.json().then(e => Promise.reject(new Error(e?.detail || 'Refresh failed')))
-      return r.json()
-    }),
+    fetch(`/api/brands/${brandId}/plans/${planId}/refresh-research`, { method: 'POST' })
+      .then(r => handleResponse<RefreshResearchResponse>(r)),
 }

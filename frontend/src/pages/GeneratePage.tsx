@@ -31,9 +31,9 @@ export default function GeneratePage() {
   // Load the day brief so PostGenerator knows the platform (needed for video button eligibility)
   useEffect(() => {
     if (!planId || dayIndex === undefined || !brandId) return
-    ;(api.getPlan(brandId, planId) as Promise<any>)
+    api.getPlan(brandId, planId)
       .then(res => {
-        const days: any[] = res.plan_profile?.days || []
+        const days = res.plan_profile?.days || []
         setPlanDayCount(days.length)
         const idx = parseInt(dayIndex, 10)
         if (days[idx]) setDayBrief(days[idx])
@@ -44,9 +44,9 @@ export default function GeneratePage() {
   // Fetch brand to get image quality risk recommendation
   useEffect(() => {
     if (!brandId) return
-    ;(api.getBrand(brandId) as Promise<any>)
+    api.getBrand(brandId)
       .then(res => {
-        const brand = (res as any).brand_profile || res
+        const brand = res.brand_profile as Record<string, unknown>
         if (brand.image_generation_risk === 'high') {
           const rec = brand.byop_recommendation
           setByopRecommendation(
@@ -61,7 +61,7 @@ export default function GeneratePage() {
   useEffect(() => {
     if (viewPostId && brandId) {
       // View an existing post
-      ;(api.getPost(brandId, viewPostId) as Promise<any>)
+      api.getPost(brandId, viewPostId)
         .then(post => {
           // If post is stuck/failed, show error with retry option instead of blank screen
           if (post.status === 'failed' || post.status === 'generating') {
@@ -73,7 +73,7 @@ export default function GeneratePage() {
             caption: post.caption || '',
             hashtags: post.hashtags || [],
             imageUrl: post.image_url || null,
-            imageUrls: post.image_urls || [],
+            imageUrls: (post as unknown as Record<string, unknown>).image_urls as string[] || [],
             videoUrl: post.video?.url || null,
           })
         })

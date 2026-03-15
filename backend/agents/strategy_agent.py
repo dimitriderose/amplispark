@@ -1085,3 +1085,47 @@ def _fallback_plan(
     """Generate a complete fallback plan when AI strategy fails."""
     logger.warning("Using fallback content plan generation.")
     return [_fallback_day(i, brand_profile, platforms) for i in range(num_days)]
+
+
+async def refresh_research(
+    platforms: list[str], industry: str, primary_platform: str,
+) -> dict:
+    """Re-run all trend research tracks in parallel.
+
+    Public API for routers — avoids importing private _research_* functions.
+    Returns a trend_summary dict.
+    """
+    # Clear cache so research is truly fresh
+    for p in platforms[:5]:
+        try:
+            await firestore_client.save_platform_trends(p, industry, {})
+        except Exception as e:
+            logger.warning("Failed to clear trend cache for %s: %s", p, e)
+    try:
+        await firestore_client.save_platform_trends(f"visual_{primary_platform}", industry, {})
+        await firestore_client.save_platform_trends(f"video_{primary_platform}", industry, {})
+    except Exception as e:
+        logger.warning("Failed to clear visual/video trend cache: %s", e)
+
+    platform_trends_results, visual_result, video_result = await asyncio.gather(
+        asyncio.gather(
+            *[_research_platform_trends(p, industry) for p in platforms[:5]],
+            return_exceptions=True,
+        ),
+        _research_visual_trends(primary_platform, industry),
+        _research_video_trends(primary_platform, industry),
+        return_exceptions=True,
+    )
+
+    platform_trends_map = {}
+    if isinstance(platform_trends_results, (list, tuple)):
+        for p, r in zip(platforms[:5], platform_trends_results):
+            if isinstance(r, dict):
+                platform_trends_map[p] = r
+
+    return {
+        "researched_at": datetime.now().isoformat(),
+        "platform_trends": platform_trends_map,
+        "visual_trends": visual_result if isinstance(visual_result, dict) else None,
+        "video_trends": video_result if isinstance(video_result, dict) else None,
+    }
