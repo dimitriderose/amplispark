@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { A } from '../theme'
-import { useIsMobile } from '../hooks/useIsMobile'
+import { useIsSmallScreen } from '../hooks/useIsMobile'
 import { computePlacement, getTooltipStyle, getArrowStyle } from '../hooks/useTooltipPlacement'
 import type { Placement, Cutout } from '../hooks/useTooltipPlacement'
 import TourOverlay from './TourOverlay'
@@ -26,15 +26,42 @@ const PADDING = 8
 
 let _maskIdCounter = 0
 
+/**
+ * Waits for a smooth scroll to finish by polling `scrollY` until it stabilises.
+ * Resolves immediately when no scroll is needed.
+ */
+function waitForScrollEnd(): Promise<void> {
+  return new Promise((resolve) => {
+    let lastY = window.scrollY
+    let sameCount = 0
+    const check = () => {
+      if (window.scrollY === lastY) {
+        sameCount++
+        // 3 consecutive unchanged frames (~50ms) = scroll done
+        if (sameCount >= 3) { resolve(); return }
+      } else {
+        sameCount = 0
+        lastY = window.scrollY
+      }
+      requestAnimationFrame(check)
+    }
+    requestAnimationFrame(check)
+  })
+}
+
+/** Phases for smooth step transitions */
+type TransitionPhase = 'idle' | 'fade-out' | 'scrolling' | 'fade-in'
+
 export default function GuidedTour({ steps, isActive, currentStep, onNext, onPrev, onSkip }: Props) {
-  const isMobile = useIsMobile()
+  const isSmallScreen = useIsSmallScreen()
   const [maskId] = useState(() => `tour-mask-${++_maskIdCounter}`)
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null)
   const [placement, setPlacement] = useState<Placement>('bottom')
   const [visible, setVisible] = useState(false)
-  const [transitioning, setTransitioning] = useState(false)
+  const [phase, setPhase] = useState<TransitionPhase>('idle')
   const tooltipRef = useRef<HTMLDivElement>(null)
   const prevStep = useRef(currentStep)
+  const phaseAbort = useRef<AbortController | null>(null)
 
   const step = steps[currentStep]
   const isLastStep = currentStep === steps.length - 1
@@ -45,8 +72,8 @@ export default function GuidedTour({ steps, isActive, currentStep, onNext, onPre
   }, [step])
 
   const computePlacementCb = useCallback((rect: DOMRect): Placement => {
-    return computePlacement(rect, isMobile)
-  }, [isMobile])
+    return computePlacement(rect, isSmallScreen)
+  }, [isSmallScreen])
 
   const skipPendingRef = useRef(false)
   const isActiveRef = useRef(isActive)
@@ -57,108 +84,181 @@ export default function GuidedTour({ steps, isActive, currentStep, onNext, onPre
   onSkipRef.current = onSkip
   const skipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const updatePosition = useCallback(() => {
+  /** Measure target and update spotlight + tooltip position (no scrolling) */
+  const measureAndUpdate = useCallback(() => {
     const el = findTarget()
+    if (!el) return false
+    const rect = el.getBoundingClientRect()
+    setTargetRect(rect)
+    setPlacement(computePlacementCb(rect))
+    return true
+  }, [findTarget, computePlacementCb])
+
+  /** Scroll the target into view with smooth behaviour, then re-measure */
+  const scrollToTarget = useCallback(async (signal: AbortSignal): Promise<boolean> => {
+    const el = findTarget()
+    if (!el) return false
+
+    const rect = el.getBoundingClientRect()
+    const margin = 120 // px above element to scroll to
+    const inViewport = rect.top >= margin && rect.bottom <= window.innerHeight - 80
+
+    if (!inViewport) {
+      window.scrollTo({
+        top: rect.top + window.scrollY - margin,
+        behavior: 'smooth',
+      })
+      await waitForScrollEnd()
+      if (signal.aborted) return false
+    }
+
+    // Final measurement after scroll
+    const newRect = el.getBoundingClientRect()
+    setTargetRect(newRect)
+    setPlacement(computePlacementCb(newRect))
+    return true
+  }, [findTarget, computePlacementCb])
+
+  /**
+   * Orchestrate the full step transition:
+   * 1. Fade out current spotlight + tooltip
+   * 2. Smooth-scroll to new target
+   * 3. Fade in new spotlight + tooltip
+   */
+  const transitionToStep = useCallback(async (signal: AbortSignal) => {
+    // Phase 1: Fade out (200ms matches CSS transition)
+    setPhase('fade-out')
+    await new Promise((r) => setTimeout(r, 220))
+    if (signal.aborted) return
+
+    // Phase 2: Scroll to target
+    setPhase('scrolling')
+
+    // Poll for target element (may need time after tab switch)
+    let el: Element | null = null
+    for (let i = 0; i < 20; i++) {
+      el = document.querySelector(`[data-tour-id="${steps[currentStep]?.targetSelector}"]`)
+      if (el) break
+      await new Promise((r) => setTimeout(r, 50))
+      if (signal.aborted) return
+    }
+
     if (!el) {
-      // Target not in DOM — skip to next step (async to prevent cascade)
+      // Target not in DOM — skip to next step
       if (isActiveRef.current && !skipPendingRef.current) {
         skipPendingRef.current = true
-        // If last step target is missing, end the tour instead of looping
         const isLast = currentStep >= steps.length - 1
-        skipTimerRef.current = setTimeout(() => {
+        setTimeout(() => {
           skipPendingRef.current = false
-          if (!isActiveRef.current) return // tour was dismissed during timeout
-          if (isLast) {
-            onSkipRef.current()
-          } else {
-            onNextRef.current()
-          }
+          if (!isActiveRef.current) return
+          if (isLast) onSkipRef.current()
+          else onNextRef.current()
         }, 50)
       }
       return
     }
-    const rect = el.getBoundingClientRect()
-    setTargetRect(rect)
-    setPlacement(computePlacementCb(rect))
 
-    // Scroll target into view if needed
-    const inViewport = rect.top >= 0 && rect.bottom <= window.innerHeight
-    if (!inViewport) {
-      el.scrollIntoView({ behavior: 'instant', block: 'center' })
-      // Re-measure after scroll
-      requestAnimationFrame(() => {
-        const newRect = el.getBoundingClientRect()
-        setTargetRect(newRect)
-        setPlacement(computePlacementCb(newRect))
-      })
-    }
-  }, [findTarget, computePlacementCb])
+    const scrolled = await scrollToTarget(signal)
+    if (signal.aborted || !scrolled) return
 
-  // Update position when step changes
+    // Phase 3: Fade in
+    setPhase('fade-in')
+    setVisible(true)
+
+    // Let the fade-in transition play, then go idle
+    await new Promise((r) => setTimeout(r, 250))
+    if (signal.aborted) return
+    setPhase('idle')
+  }, [currentStep, steps, scrollToTarget])
+
+  // Handle step changes with smooth transition
   useEffect(() => {
-    // Clean up skip timer from previous step
     if (skipTimerRef.current) { clearTimeout(skipTimerRef.current); skipTimerRef.current = null }
 
     if (!isActive) {
       setVisible(false)
+      setPhase('idle')
       return
     }
 
-    // Switch to the right tab/view immediately (before transition)
+    // Switch to the right tab/view immediately
     const step = steps[currentStep]
     if (step?.onBeforeShow) step.onBeforeShow()
 
-    // Transition effect — hide during step change to avoid stale spotlight position
+    // Abort any in-progress transition
+    if (phaseAbort.current) phaseAbort.current.abort()
+    const controller = new AbortController()
+    phaseAbort.current = controller
+
     if (prevStep.current !== currentStep) {
-      setVisible(false)
-      setTransitioning(true)
-      const timer = setTimeout(() => {
-        setTransitioning(false)
-        prevStep.current = currentStep
-      }, 200)
-      return () => clearTimeout(timer)
+      // Step changed — run full transition
+      prevStep.current = currentStep
+      transitionToStep(controller.signal)
+    } else {
+      // First mount or same step — just show immediately
+      // Poll for target then show
+      let pollCount = 0
+      const maxPolls = 20
+      const showTimer = setInterval(() => {
+        pollCount++
+        const el = findTarget()
+        if (el || pollCount >= maxPolls) {
+          clearInterval(showTimer)
+          if (el) {
+            const rect = el.getBoundingClientRect()
+            const margin = 120
+            const inViewport = rect.top >= margin && rect.bottom <= window.innerHeight - 80
+            if (!inViewport) {
+              window.scrollTo({
+                top: rect.top + window.scrollY - margin,
+                behavior: 'smooth',
+              })
+              waitForScrollEnd().then(() => {
+                if (controller.signal.aborted) return
+                measureAndUpdate()
+                setVisible(true)
+                setPhase('idle')
+              })
+            } else {
+              measureAndUpdate()
+              setVisible(true)
+              setPhase('idle')
+            }
+          }
+        }
+      }, 50)
+
+      return () => {
+        clearInterval(showTimer)
+        controller.abort()
+      }
     }
 
-    // Poll for target element after tab switch (replaces fixed 50ms race)
-    let pollCount = 0
-    const maxPolls = 20 // 20 × 50ms = 1 second max wait
-    const showTimer = setInterval(() => {
-      pollCount++
-      const el = findTarget()
-      if (el || pollCount >= maxPolls) {
-        clearInterval(showTimer)
-        updatePosition()
-        setVisible(true)
-      }
-    }, 50)
+    return () => { controller.abort() }
+  }, [isActive, currentStep, steps, findTarget, measureAndUpdate, transitionToStep])
 
-    // Throttled resize/scroll listener to avoid layout thrashing
+  // Live-track element position during scroll/resize (smooth follow)
+  useEffect(() => {
+    if (!isActive || !visible) return
+
     let rafId: number | null = null
     const handleUpdate = () => {
       if (rafId !== null) return
       rafId = requestAnimationFrame(() => {
-        updatePosition()
+        measureAndUpdate()
         rafId = null
       })
     }
     window.addEventListener('resize', handleUpdate)
     window.addEventListener('scroll', handleUpdate, true)
     return () => {
-      clearInterval(showTimer)
       window.removeEventListener('resize', handleUpdate)
       window.removeEventListener('scroll', handleUpdate, true)
       if (rafId !== null) cancelAnimationFrame(rafId)
     }
-  }, [isActive, currentStep, steps, updatePosition, transitioning])
+  }, [isActive, visible, measureAndUpdate])
 
-  // Re-measure after transitioning
-  useEffect(() => {
-    if (isActive && !transitioning) {
-      updatePosition()
-    }
-  }, [isActive, transitioning, updatePosition])
-
-  // Handle Escape key (uses ref to avoid stale closure)
+  // Handle Escape key
   useEffect(() => {
     if (!isActive) return
     const handleKey = (e: KeyboardEvent) => {
@@ -179,8 +279,9 @@ export default function GuidedTour({ steps, isActive, currentStep, onNext, onPre
     r: 8,
   }
 
-  const tooltipStyle = getTooltipStyle(placement, cutout, isMobile, transitioning)
-  const arrowStyle = getArrowStyle(placement, cutout)
+  const isFadedOut = phase === 'fade-out' || phase === 'scrolling'
+  const tooltipStyle = getTooltipStyle(placement, cutout, isSmallScreen, isFadedOut)
+  const arrowStyle = getArrowStyle(placement, cutout, isSmallScreen)
 
   return (
     <>
@@ -188,7 +289,7 @@ export default function GuidedTour({ steps, isActive, currentStep, onNext, onPre
         cutout={cutout}
         maskId={maskId}
         visible={visible}
-        transitioning={transitioning}
+        transitioning={isFadedOut}
         onClick={onSkip}
       />
 
@@ -279,7 +380,7 @@ export default function GuidedTour({ steps, isActive, currentStep, onNext, onPre
             {currentStep > 0 && (
               <button
                 onClick={onPrev}
-                disabled={transitioning}
+                disabled={phase !== 'idle'}
                 style={{
                   padding: '6px 14px',
                   borderRadius: 7,
@@ -288,8 +389,8 @@ export default function GuidedTour({ steps, isActive, currentStep, onNext, onPre
                   color: A.textSoft,
                   fontSize: 12,
                   fontWeight: 500,
-                  cursor: transitioning ? 'not-allowed' : 'pointer',
-                  opacity: transitioning ? 0.5 : 1,
+                  cursor: phase !== 'idle' ? 'not-allowed' : 'pointer',
+                  opacity: phase !== 'idle' ? 0.5 : 1,
                 }}
               >
                 Back
@@ -297,7 +398,7 @@ export default function GuidedTour({ steps, isActive, currentStep, onNext, onPre
             )}
             <button
               onClick={onNext}
-              disabled={transitioning}
+              disabled={phase !== 'idle'}
               style={{
                 padding: '6px 18px',
                 borderRadius: 7,

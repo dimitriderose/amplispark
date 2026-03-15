@@ -25,7 +25,7 @@ export default function TourOverlay({ cutout, maskId, visible, transitioning, on
           height: '100vh',
           zIndex: OVERLAY_Z,
           pointerEvents: 'none',
-          transition: 'opacity 0.2s ease',
+          transition: 'opacity 0.25s ease',
           opacity: transitioning ? 0 : 1,
         }}
       >
@@ -40,6 +40,9 @@ export default function TourOverlay({ cutout, maskId, visible, transitioning, on
               rx={cutout.r}
               ry={cutout.r}
               fill="black"
+              style={{
+                transition: 'x 0.3s ease, y 0.3s ease, width 0.3s ease, height 0.3s ease',
+              }}
             />
           </mask>
         </defs>
@@ -53,16 +56,8 @@ export default function TourOverlay({ cutout, maskId, visible, transitioning, on
         />
       </svg>
 
-      {/* Click blocker on overlay area (but not on cutout) */}
-      <div
-        style={{
-          position: 'fixed',
-          inset: 0,
-          zIndex: OVERLAY_Z + 1,
-          cursor: 'default',
-        }}
-        onClick={onClick}
-      />
+      {/* Click blocker — pointer-events:none lets touch/scroll through,
+          SVG overlay handles the visual dimming */}
 
       {/* Spotlight border ring */}
       <div
@@ -77,7 +72,8 @@ export default function TourOverlay({ cutout, maskId, visible, transitioning, on
           boxShadow: `0 0 0 4px ${A.indigo}22`,
           zIndex: OVERLAY_Z + 1,
           pointerEvents: 'none',
-          transition: 'all 0.3s ease',
+          willChange: 'left, top, width, height, opacity',
+          transition: 'left 0.3s ease, top 0.3s ease, width 0.3s ease, height 0.3s ease, opacity 0.25s ease',
           opacity: transitioning ? 0 : 1,
         }}
       />
