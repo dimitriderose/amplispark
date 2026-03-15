@@ -24,7 +24,7 @@ export default function Spinner({ size = 20, color = A.indigo, style }: Props) {
         width: size,
         height: size,
         borderRadius: '50%',
-        border: `${Math.max(2, Math.round(size / 8))}px solid ${color}33`,
+        border: `${Math.max(2, Math.round(size / 7))}px solid ${color}44`,
         borderTopColor: color,
         animation: 'amp-spin 0.8s linear infinite',
         flexShrink: 0,

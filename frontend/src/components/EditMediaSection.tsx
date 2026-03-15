@@ -292,9 +292,19 @@ export default function EditMediaSection({
                 cursor: !editPrompt.trim() || atLimit || isLoading ? 'not-allowed' : 'pointer',
                 opacity: !editPrompt.trim() || atLimit || isLoading ? 0.6 : 1,
                 whiteSpace: 'nowrap',
+                minWidth: 60,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
               }}
             >
-              {isLoading ? <Spinner size={14} color="#fff" /> : 'Send'}
+              {isLoading ? (
+                <>
+                  <Spinner size={12} color="#fff" />
+                  <span style={{ fontSize: 12, fontWeight: 500 }}>Editing...</span>
+                </>
+              ) : 'Send'}
             </button>
           </div>
 
