@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from backend.config import CORS_ORIGINS, GCS_BUCKET_NAME
+from backend.gcs_utils import parse_gcs_uri
 from backend.models.brand import BrandProfileCreate, BrandProfile, BrandProfileUpdate
 from backend.services import firestore_client
 from backend.services.storage_client import (
@@ -298,20 +299,20 @@ async def _refresh_signed_urls(post: dict) -> dict:
     if gcs_uri:
         try:
             post["image_url"] = await get_signed_url(gcs_uri)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to re-sign image URL for %s: %s", post.get("post_id"), e)
     for i, uri in enumerate(post.get("image_gcs_uris") or []):
         try:
             urls = post.setdefault("image_urls", [])
             if i < len(urls):
                 urls[i] = await get_signed_url(uri)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to re-sign image URL index %d for %s: %s", i, post.get("post_id"), e)
     if post.get("thumbnail_gcs_uri"):
         try:
             post["thumbnail_url"] = await get_signed_url(post["thumbnail_gcs_uri"])
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to re-sign thumbnail URL for %s: %s", post.get("post_id"), e)
     return post
 
 
@@ -327,8 +328,8 @@ async def _auto_fail_stale_generating(post: dict, brand_id: str) -> None:
         if post_id:
             try:
                 await firestore_client.update_post(brand_id, post_id, {"status": "failed"})
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Failed to auto-fail stale post %s: %s", post_id, e)
 
 
 @app.get("/api/posts")
@@ -381,11 +382,12 @@ async def export_post(
     async def _dl(uri: str | None) -> bytes | None:
         if not uri:
             return None
-        prefix = f"gs://{GCS_BUCKET_NAME}/"
-        if not uri.startswith(prefix):
+        try:
+            blob_path = parse_gcs_uri(uri)
+        except ValueError:
             return None
         try:
-            blob = get_bucket().blob(uri[len(prefix):])
+            blob = get_bucket().blob(blob_path)
             loop = asyncio.get_running_loop()
             return await loop.run_in_executor(None, blob.download_as_bytes)
         except Exception as exc:
@@ -457,10 +459,10 @@ async def export_plan_zip(
         gcs_uri: str | None = post.get("image_gcs_uri")
         if not gcs_uri:
             return None
-        prefix = f"gs://{GCS_BUCKET_NAME}/"
-        if not gcs_uri.startswith(prefix):
+        try:
+            blob_path = parse_gcs_uri(gcs_uri)
+        except ValueError:
             return None
-        blob_path = gcs_uri[len(prefix):]
         try:
             bucket = get_bucket()
             blob = bucket.blob(blob_path)
@@ -478,10 +480,10 @@ async def export_plan_zip(
         gcs_uri: str | None = video.get("video_gcs_uri")
         if not gcs_uri:
             return None
-        prefix = f"gs://{GCS_BUCKET_NAME}/"
-        if not gcs_uri.startswith(prefix):
+        try:
+            blob_path = parse_gcs_uri(gcs_uri)
+        except ValueError:
             return None
-        blob_path = gcs_uri[len(prefix):]
         try:
             bucket = get_bucket()
             blob = bucket.blob(blob_path)
@@ -645,13 +647,13 @@ async def refresh_plan_research(brand_id: str, plan_id: str):
     for p in platforms[:5]:
         try:
             await firestore_client.save_platform_trends(p, industry, {})
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to clear trend cache for platform %s: %s", p, e)
     try:
         await firestore_client.save_platform_trends(f"visual_{primary_platform}", industry, {})
         await firestore_client.save_platform_trends(f"video_{primary_platform}", industry, {})
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Failed to clear visual/video trend cache for %s: %s", primary_platform, e)
 
     platform_trends_results, visual_result, video_result = await asyncio.gather(
         asyncio.gather(*[_research_platform_trends(p, industry) for p in platforms[:5]], return_exceptions=True),
@@ -834,8 +836,8 @@ async def stream_generate(
         if ep.get("brief_index") == day_index and ep.get("platform", "") == brief_platform:
             try:
                 await firestore_client.delete_post(brand_id, ep["post_id"])
-            except Exception:
-                pass  # best-effort cleanup
+            except Exception as e:
+                logger.warning("Best-effort cleanup failed for post %s: %s", ep.get("post_id"), e)
 
     # Extract prior hooks from already-generated posts for deduplication
     prior_hooks = [
@@ -1016,8 +1018,8 @@ async def stream_generate(
             logger.error("Generation task error for post %s: %s", post_id, exc)
             try:
                 await firestore_client.update_post(brand_id, post_id, {"status": "failed"})
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Failed to mark post %s as failed: %s", post_id, e)
             await event_queue.put({"event": "error", "data": {"message": str(exc)}})
         finally:
             await event_queue.put(None)  # sentinel: end of stream
@@ -1572,7 +1574,8 @@ async def get_video_repurpose_job(job_id: str, brand_id: str = Query(...)):
             if gcs_uri:
                 try:
                     clip_out["clip_url"] = await get_signed_url(gcs_uri)
-                except Exception:
+                except Exception as e:
+                    logger.warning("Failed to sign clip URL %s: %s", gcs_uri, e)
                     clip_out["clip_url"] = None
             clips_with_urls.append(clip_out)
         response["clips"] = clips_with_urls
@@ -1697,7 +1700,8 @@ async def voice_coaching_ws(websocket: WebSocket, brand_id: str, context: str = 
                         if getattr(sc, "turn_complete", False):
                             try:
                                 await websocket.send_json({"type": "turn_complete"})
-                            except Exception:
+                            except Exception as e:
+                                logger.debug("WS send turn_complete failed for brand %s: %s", brand_id, e)
                                 return
 
                         model_turn = getattr(sc, "model_turn", None)
@@ -1708,7 +1712,8 @@ async def voice_coaching_ws(websocket: WebSocket, brand_id: str, context: str = 
                             if inline and inline.data:
                                 try:
                                     await websocket.send_bytes(inline.data)
-                                except Exception:
+                                except Exception as e:
+                                    logger.debug("WS send audio failed for brand %s: %s", brand_id, e)
                                     return
                             text = getattr(part, "text", None)
                             if text:
@@ -1726,7 +1731,8 @@ async def voice_coaching_ws(websocket: WebSocket, brand_id: str, context: str = 
                                             "message": "Great chatting with you! Click Voice Coach anytime to pick up where we left off.",
                                         })
                                         return  # exit recv_from_gemini → triggers cleanup
-                                except Exception:
+                                except Exception as e:
+                                    logger.debug("WS send transcript failed for brand %s: %s", brand_id, e)
                                     return
                 except asyncio.CancelledError:
                     raise  # let the task framework handle cancellation
@@ -1736,8 +1742,8 @@ async def voice_coaching_ws(websocket: WebSocket, brand_id: str, context: str = 
                         await websocket.send_json(
                             {"type": "error", "message": "Voice session interrupted"}
                         )
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("WS send error notification failed for brand %s: %s", brand_id, e)
 
             # BUG-1 fix: use asyncio.wait(FIRST_COMPLETED) so that when either task
             # finishes (frontend disconnect or Gemini session end), the other is
@@ -1757,8 +1763,8 @@ async def voice_coaching_ws(websocket: WebSocket, brand_id: str, context: str = 
                             "type": "session_ended",
                             "message": "Voice coaching session complete. Click Voice Coach to start a new session.",
                         })
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("WS send session_ended failed for brand %s: %s", brand_id, e)
             finally:
                 for task in (fe_task, gm_task):
                     if not task.done():
@@ -1774,8 +1780,8 @@ async def voice_coaching_ws(websocket: WebSocket, brand_id: str, context: str = 
         logger.error("Voice coaching error for brand %s: %s", brand_id, e)
         try:
             await websocket.send_json({"type": "error", "message": str(e)})
-        except Exception:
-            pass
+        except Exception as e2:
+            logger.debug("WS send voice coaching error failed: %s", e2)
 
 
 # ── Notion Integration ────────────────────────────────────────
@@ -2000,7 +2006,8 @@ def _build_ics(plan: dict, posts: list[dict], brand_name: str) -> str:
     elif isinstance(created, str):
         try:
             base_date = datetime.fromisoformat(created.replace("Z", "+00:00")).date()
-        except Exception:
+        except Exception as e:
+            logger.warning("Failed to parse plan created_at date %r: %s", created, e)
             base_date = datetime.utcnow().date()
     else:
         base_date = datetime.utcnow().date()

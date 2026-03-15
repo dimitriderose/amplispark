@@ -1,19 +1,8 @@
 import { useState, useEffect } from 'react'
 import { api } from '../api/client'
+import type { Plan } from '../types'
 
-interface Plan {
-  plan_id: string
-  days: any[]
-  num_days?: number
-  status?: string
-  created_at?: string
-  trend_summary?: {
-    researched_at: string
-    platform_trends: Record<string, any>
-    visual_trends: Record<string, any> | null
-    video_trends: Record<string, any> | null
-  }
-}
+export type { Plan, TrendSummary } from '../types'
 
 function normalizePlan(raw: any): Plan {
   return {

@@ -1,11 +1,9 @@
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { A } from '../theme'
-import { useIsMobile, useIsTablet } from '../hooks/useIsMobile'
 import PostLibrary from '../components/PostLibrary'
+import PageContainer from '../components/ui/PageContainer'
 
 export default function ExportPage() {
-  const isMobile = useIsMobile()
-  const isTablet = useIsTablet()
   const navigate = useNavigate()
   const { brandId } = useParams<{ brandId: string }>()
   const [searchParams] = useSearchParams()
@@ -20,9 +18,7 @@ export default function ExportPage() {
   }
 
   return (
-    <div style={{
-      maxWidth: 1100, margin: '0 auto', padding: isMobile ? '16px 12px' : isTablet ? '20px 16px' : '32px 24px',
-    }}>
+    <PageContainer maxWidth={1100}>
       <button
         onClick={() => navigate(`/dashboard/${brandId}`)}
         style={{
@@ -69,6 +65,6 @@ export default function ExportPage() {
       }}>
         <PostLibrary brandId={brandId} planId={planId} defaultFilter="approved" />
       </div>
-    </div>
+    </PageContainer>
   )
 }

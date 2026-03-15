@@ -3,9 +3,9 @@ import json
 import logging
 
 import httpx
-from google import genai
 from google.genai import types
-from backend.config import GEMINI_MODEL, GOOGLE_API_KEY
+from backend.clients import get_genai_client
+from backend.config import GEMINI_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -152,7 +152,7 @@ Return ONLY a valid JSON object with these exact keys:
   "tone_adjectives": ["list of 3-5 adjectives like warm, authoritative, playful, direct"]
 }}"""
 
-    client = genai.Client(api_key=GOOGLE_API_KEY)
+    client = get_genai_client()
     response = await asyncio.to_thread(
         client.models.generate_content,
         model=GEMINI_MODEL,

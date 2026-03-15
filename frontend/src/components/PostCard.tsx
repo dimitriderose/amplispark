@@ -5,22 +5,7 @@ import { api } from '../api/client'
 import { useIsMobile } from '../hooks/useIsMobile'
 import type { Post } from '../hooks/usePostLibrary'
 import { getMediaAspectRatio } from '../platformRegistry'
-
-const STATUS_COLORS: Record<string, string> = {
-  approved: A.emerald,
-  complete: A.indigo,
-  generating: A.amber,
-  failed: A.coral,
-  draft: A.textMuted,
-}
-
-const STATUS_LABELS: Record<string, string> = {
-  approved: '✓ Approved',
-  complete: 'Ready',
-  generating: '⟳ Generating',
-  failed: '✗ Failed',
-  draft: 'Draft',
-}
+import { STATUS_COLORS, STATUS_LABELS_DECORATED as STATUS_LABELS } from '../constants/statusMaps'
 
 interface Props {
   post: Post

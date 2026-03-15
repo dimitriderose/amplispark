@@ -6,6 +6,7 @@ import { useBrandProfile } from '../hooks/useBrandProfile'
 import { useIsMobile, useIsTablet } from '../hooks/useIsMobile'
 import { PLATFORMS } from '../platformRegistry'
 import { IMAGE_STYLE_GROUPS } from '../imageStyleOptions'
+import PageContainer from '../components/ui/PageContainer'
 
 /** Convert a gs:// URI to a proxy-servable URL. */
 function gcsToUrl(gcsUri: string): string {
@@ -226,7 +227,7 @@ export default function EditBrandPage() {
   }
 
   return (
-    <div style={{ maxWidth: 720, margin: '0 auto', padding: isMobile ? '20px 12px' : isTablet ? '24px 16px' : '32px 24px' }}>
+    <PageContainer maxWidth={720}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }}>
         <div>
@@ -573,7 +574,7 @@ export default function EditBrandPage() {
           </button>
         </div>
       </div>
-    </div>
+    </PageContainer>
   )
 }
 

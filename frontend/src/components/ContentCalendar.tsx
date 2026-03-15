@@ -5,28 +5,7 @@ import { api } from '../api/client'
 import { IMAGE_STYLE_GROUPS, styleLabel } from '../imageStyleOptions'
 import { useIsMobile, useIsTablet } from '../hooks/useIsMobile'
 import type { Post } from '../hooks/usePostLibrary'
-
-const PILLAR_COLORS: Record<string, string> = {
-  education: A.indigo,
-  inspiration: A.violet,
-  promotion: A.coral,
-  behind_the_scenes: A.emerald,
-  user_generated: A.amber,
-}
-
-const STATUS_COLORS: Record<string, string> = {
-  approved: A.emerald,
-  complete: A.indigo,
-  generating: A.amber,
-  failed: A.coral,
-}
-
-const STATUS_LABELS: Record<string, string> = {
-  approved: 'Approved',
-  complete: 'Ready',
-  generating: 'Generating',
-  failed: 'Failed',
-}
+import { PILLAR_COLORS, STATUS_COLORS, STATUS_LABELS } from '../constants/statusMaps'
 
 // Colors for series groups (distinct from pillar colors)
 const SERIES_PALETTE = ['#f97316', '#06b6d4', '#ec4899', '#a78bfa']
@@ -44,21 +23,8 @@ function parseTime(t?: string): number {
   return h * 60 + min
 }
 
-export interface DayBrief {
-  day_index: number
-  platform: string
-  pillar: string
-  pillar_id?: string
-  content_theme: string
-  caption_hook: string
-  key_message: string
-  image_prompt: string
-  hashtags: string[]
-  derivative_type?: string
-  event_anchor?: string | null
-  custom_photo_url?: string | null
-  suggested_time?: string
-}
+export type { DayBrief } from '../types'
+import type { DayBrief } from '../types'
 
 interface Props {
   plan: { plan_id: string; days: DayBrief[] }

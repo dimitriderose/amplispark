@@ -1,60 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { api } from '../api/client'
+import type { BrandProfile } from '../types'
 
-interface SocialVoiceAnalysis {
-  voice_characteristics: string[]
-  common_phrases: string[]
-  emoji_usage: string
-  average_post_length: string
-  successful_patterns: string[]
-  tone_adjectives: string[]
-}
-
-interface BrandProfile {
-  brand_id: string
-  business_name: string
-  business_type: string
-  description?: string
-  website_url?: string
-  industry: string
-  tone: string
-  colors: string[]
-  target_audience: string
-  visual_style: string
-  image_style_directive: string
-  caption_style_directive: string
-  content_themes: string[]
-  competitors: string[]
-  logo_url?: string | null
-  uploaded_assets?: { filename: string; url: string; type: string }[]
-  analysis_status: string
-  ui_preferences?: { show_competitors?: boolean }
-  // Social voice analysis fields (populated after connecting a social account)
-  connected_platforms?: string[]
-  selected_platforms?: string[]
-  platform_mode?: 'ai' | 'manual'
-  social_voice_analyses?: Record<string, SocialVoiceAnalysis>
-  social_voice_analysis?: SocialVoiceAnalysis
-  social_voice_platform?: string
-  default_image_style?: string
-  // Integrations (Notion, Buffer, etc.)
-  integrations?: {
-    notion?: {
-      access_token?: string
-      workspace_name?: string
-      database_id?: string
-      database_name?: string
-      connected_at?: string
-    }
-    buffer?: {
-      access_token?: string
-      connected_at?: string
-      channels?: { id: string; service: string; name: string }[]
-    }
-  }
-}
-
-export type { BrandProfile, SocialVoiceAnalysis }
+export type { BrandProfile, SocialVoiceAnalysis } from '../types'
 
 export function useBrandProfile(brandId: string | undefined) {
   const [brand, setBrand] = useState<BrandProfile | null>(null)

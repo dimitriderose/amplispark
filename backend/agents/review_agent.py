@@ -4,10 +4,10 @@ import logging
 from google import genai
 from google.genai import types
 from backend.config import GOOGLE_API_KEY, GEMINI_MODEL
+from backend.clients import get_genai_client
 from backend.platforms import get_review_guidelines_block, get as get_platform
 
 logger = logging.getLogger(__name__)
-client = genai.Client(api_key=GOOGLE_API_KEY)
 
 
 # --- Platform-specific review checks (Fix 11d) ---
@@ -469,7 +469,7 @@ Evaluate and respond with JSON only:
 
     try:
         response = await asyncio.to_thread(
-            client.models.generate_content,
+            get_genai_client().models.generate_content,
             model=GEMINI_MODEL,
             contents=prompt,
             config=types.GenerateContentConfig(

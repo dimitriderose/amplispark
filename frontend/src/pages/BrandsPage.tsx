@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { A } from '../theme'
 import { useAuth } from '../hooks/useAuth'
-import { useIsMobile, useIsTablet } from '../hooks/useIsMobile'
 import { api } from '../api/client'
+import PageContainer from '../components/ui/PageContainer'
 
 interface BrandSummary {
   brand_id: string
@@ -16,8 +16,6 @@ interface BrandSummary {
 const PAGE_SIZE = 5
 
 export default function BrandsPage() {
-  const isMobile = useIsMobile()
-  const isTablet = useIsTablet()
   const navigate = useNavigate()
   const { uid, isSignedIn, loading } = useAuth()
   const [brands, setBrands] = useState<BrandSummary[]>([])
@@ -43,7 +41,7 @@ export default function BrandsPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: A.bg }}>
-      <div style={{ maxWidth: 860, margin: '0 auto', padding: isMobile ? '24px 12px' : isTablet ? '32px 16px' : '48px 24px' }}>
+      <PageContainer maxWidth={860} padding="48px 24px">
 
         {/* ── Create Your Brand ── */}
         <section style={{
@@ -212,7 +210,7 @@ export default function BrandsPage() {
             </>
           )}
         </section>
-      </div>
+      </PageContainer>
     </div>
   )
 }

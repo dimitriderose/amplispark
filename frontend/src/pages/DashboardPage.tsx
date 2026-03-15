@@ -7,6 +7,7 @@ import { useContentPlan } from '../hooks/useContentPlan'
 import { usePostLibrary } from '../hooks/usePostLibrary'
 import BrandSummaryBar from '../components/BrandSummaryBar'
 import ContentCalendar from '../components/ContentCalendar'
+import PageContainer from '../components/ui/PageContainer'
 import PostLibrary from '../components/PostLibrary'
 import PostHistory from '../components/PostHistory'
 import EventsInput from '../components/EventsInput'
@@ -15,7 +16,7 @@ import SocialConnect from '../components/SocialConnect'
 import IntegrationConnect from '../components/IntegrationConnect'
 import VideoRepurpose from '../components/VideoRepurpose'
 import Spinner from '../components/Spinner'
-import { useIsMobile, useIsTablet } from '../hooks/useIsMobile'
+import { useIsMobile } from '../hooks/useIsMobile'
 
 type Tab = 'calendar' | 'posts' | 'connections' | 'video'
 
@@ -28,7 +29,6 @@ const TABS: { key: Tab; label: string; icon: string }[] = [
 
 export default function DashboardPage() {
   const isMobile = useIsMobile()
-  const isTablet = useIsTablet()
   const { brandId } = useParams<{ brandId: string }>()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -136,7 +136,7 @@ export default function DashboardPage() {
   if (!brand) return null
 
   return (
-    <div style={{ maxWidth: 1400, margin: '0 auto', padding: isMobile ? '16px 12px' : isTablet ? '20px 16px' : '32px 24px' }}>
+    <PageContainer maxWidth={1400}>
       {/* Notion connected banner */}
       {notionParam === 'connected' && (
         <div style={{
@@ -356,6 +356,6 @@ export default function DashboardPage() {
       {brandId && (
         <VoiceCoach brandId={brandId} brandName={brand.business_name} planId={plan?.plan_id} />
       )}
-    </div>
+    </PageContainer>
   )
 }

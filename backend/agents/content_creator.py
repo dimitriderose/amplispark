@@ -8,6 +8,7 @@ from google import genai
 from google.genai import types
 
 from backend.config import GOOGLE_API_KEY, GEMINI_MODEL
+from backend.clients import get_genai_client
 from backend.constants import get_proof_tier
 from backend.platforms import get as get_platform
 
@@ -23,7 +24,6 @@ from backend.services.image_postprocess import (
 from backend.agents.review_agent import review_post
 
 logger = logging.getLogger(__name__)
-client = genai.Client(api_key=GOOGLE_API_KEY)
 
 # ── Adaptive Image Style System (35 styles, 6 categories) ────────────────────
 
@@ -205,7 +205,7 @@ async def _smart_condense(caption: str, platform: str, derivative_type: str) -> 
     )
     try:
         resp = await asyncio.to_thread(
-            client.models.generate_content,
+            get_genai_client().models.generate_content,
             model=GEMINI_MODEL,
             contents=condense_prompt,
             config=types.GenerateContentConfig(temperature=0.3),
@@ -399,7 +399,7 @@ async def _quality_retry(final_caption: str, platform: str, derivative_type: str
         f"Output the corrected caption only, no hashtags, no explanation."
     )
     resp = await asyncio.to_thread(
-        client.models.generate_content, model=GEMINI_MODEL, contents=retry_prompt,
+        get_genai_client().models.generate_content, model=GEMINI_MODEL, contents=retry_prompt,
         config=types.GenerateContentConfig(temperature=0.3),
     )
     retried = _enforce_char_limit(_strip_markdown(_fix_mojibake(resp.text.strip())), platform, derivative_type)
@@ -561,7 +561,7 @@ async def _review_gate(
             f"Output the corrected caption only. No explanation, no hashtags."
         )
         resp = await asyncio.to_thread(
-            client.models.generate_content,
+            get_genai_client().models.generate_content,
             model=GEMINI_MODEL,
             contents=retry_prompt,
             config=types.GenerateContentConfig(temperature=0.4),
@@ -641,7 +641,7 @@ async def _review_gate(
             f"Write a complete new caption. Output the caption only — no explanation, no hashtags."
         )
         resp2 = await asyncio.to_thread(
-            client.models.generate_content,
+            get_genai_client().models.generate_content,
             model=GEMINI_MODEL,
             contents=strong_prompt,
             config=types.GenerateContentConfig(temperature=0.6),
@@ -977,7 +977,7 @@ async def _generate_carousel_images(
                 ))
             try:
                 resp = await asyncio.to_thread(
-                    client.models.generate_content,
+                    get_genai_client().models.generate_content,
                     model=GEMINI_IMAGE_MODEL,
                     contents=contents,
                     config=types.GenerateContentConfig(
@@ -1006,7 +1006,7 @@ async def _generate_image_with_retry(
     for attempt in range(max_retries + 1):
         try:
             resp = await asyncio.to_thread(
-                client.models.generate_content,
+                get_genai_client().models.generate_content,
                 model=GEMINI_IMAGE_MODEL,
                 contents=img_contents,
                 config=types.GenerateContentConfig(
@@ -1043,7 +1043,7 @@ async def _generate_alt_text(
 
     try:
         result = await asyncio.to_thread(
-            client.models.generate_content,
+            get_genai_client().models.generate_content,
             model="gemini-2.5-flash",
             contents=[
                 types.Part.from_bytes(data=image_bytes, mime_type="image/png"),
@@ -1867,7 +1867,7 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
             text_part = types.Part(text=byop_prompt)
 
             response = await asyncio.to_thread(
-                client.models.generate_content,
+                get_genai_client().models.generate_content,
                 model=GEMINI_MODEL,
                 contents=[image_part, text_part],
                 config=types.GenerateContentConfig(
@@ -1934,7 +1934,7 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                 yield {"event": "status", "data": {"message": "Regenerating content..."}}
                 try:
                     regen_response = await asyncio.to_thread(
-                        client.models.generate_content,
+                        get_genai_client().models.generate_content,
                         model=GEMINI_MODEL,
                         contents=[image_part, text_part],
                         config=types.GenerateContentConfig(temperature=0.8),
@@ -2031,7 +2031,7 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
 
         try:
             response = await asyncio.to_thread(
-                client.models.generate_content,
+                get_genai_client().models.generate_content,
                 model=GEMINI_MODEL,
                 contents=video_prompt,
                 config=types.GenerateContentConfig(
@@ -2073,7 +2073,7 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                 yield {"event": "status", "data": {"message": "Regenerating content..."}}
                 try:
                     regen_response = await asyncio.to_thread(
-                        client.models.generate_content,
+                        get_genai_client().models.generate_content,
                         model=GEMINI_MODEL,
                         contents=video_prompt,
                         config=types.GenerateContentConfig(temperature=0.8),
@@ -2209,7 +2209,7 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
     try:
         # ── Step 1: Text-only caption generation (GEMINI_MODEL — faster, cheaper) ──
         response = await asyncio.to_thread(
-            client.models.generate_content,
+            get_genai_client().models.generate_content,
             model=GEMINI_MODEL,
             contents=prompt,
             config=types.GenerateContentConfig(temperature=0.7),
@@ -2258,7 +2258,7 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
             retry_prompt += "After the caption, add relevant hashtags on a new line starting with HASHTAGS:"
             try:
                 retry_response = await asyncio.to_thread(
-                    client.models.generate_content,
+                    get_genai_client().models.generate_content,
                     model=GEMINI_MODEL,
                     contents=retry_prompt,
                     config=types.GenerateContentConfig(temperature=0.4),
@@ -2300,7 +2300,7 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
             yield {"event": "status", "data": {"message": "Regenerating content..."}}
             try:
                 regen_response = await asyncio.to_thread(
-                    client.models.generate_content,
+                    get_genai_client().models.generate_content,
                     model=GEMINI_MODEL,
                     contents=prompt,
                     config=types.GenerateContentConfig(temperature=0.8),

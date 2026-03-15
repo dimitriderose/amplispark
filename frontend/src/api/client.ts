@@ -1,3 +1,5 @@
+import { downloadBlob } from '../utils/downloads'
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     headers: { 'Content-Type': 'application/json', ...options?.headers },
@@ -65,12 +67,7 @@ export const api = {
         const disposition = r.headers.get('Content-Disposition') || ''
         const match = disposition.match(/filename=(.+)/)
         const filename = match ? match[1] : `amplifi_post_${postId}.zip`
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = filename
-        a.click()
-        URL.revokeObjectURL(url)
+        downloadBlob(blob, filename)
       }),
   exportPlan: (planId: string, brandId: string) =>
     fetch(`/api/export/${planId}?brand_id=${encodeURIComponent(brandId)}`, { method: 'POST' })
@@ -80,12 +77,7 @@ export const api = {
           throw new Error(err.error || `HTTP ${r.status}`)
         }
         const blob = await r.blob()
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `amplifi_export_${planId}.zip`
-        a.click()
-        URL.revokeObjectURL(url)
+        downloadBlob(blob, `amplifi_export_${planId}.zip`)
       }),
 
   uploadDayPhoto: (brandId: string, planId: string, dayIndex: number, formData: FormData) =>
@@ -140,12 +132,7 @@ export const api = {
           throw new Error(err.detail || `HTTP ${r.status}`)
         }
         const blob = await r.blob()
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = 'amplifi_content_plan.ics'
-        a.click()
-        URL.revokeObjectURL(url)
+        downloadBlob(blob, 'amplifi_content_plan.ics')
       }),
 
   emailCalendar: (brandId: string, planId: string, email: string) =>

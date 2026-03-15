@@ -11,7 +11,8 @@ from google import genai
 from google.genai import types
 
 from backend.config import GOOGLE_API_KEY
-from backend.constants import PILLARS
+from backend.clients import get_genai_client
+from backend.constants import PILLARS, PILLAR_NARRATIVES
 from backend.platforms import get as get_platform
 from backend.services.storage_client import upload_video_to_gcs
 
@@ -102,29 +103,7 @@ def _build_prompt(caption: str, brand_profile: dict, platform: str,
         )
 
     # Pillar-aware narrative arc
-    _pillar_arc = {
-        "education": (
-            "NARRATIVE: Show a technique or process IN ACTION. The viewer should learn "
-            "something by watching — hands working through steps, a before/after transformation, "
-            "or a tool being used with visible results."
-        ),
-        "promotion": (
-            "NARRATIVE: Show the product/service in a real customer scenario. Not a glamour shot — "
-            "a real person benefiting in a real context. Open with the problem, end with the solution."
-        ),
-        "inspiration": (
-            "NARRATIVE: Show a transformation journey. Open with struggle or challenge, "
-            "close with breakthrough or insight. Emotional arc matters more than technical detail."
-        ),
-        "behind_the_scenes": (
-            "NARRATIVE: Show the real process — tools, workspace, decision moments. "
-            "Authenticity over polish. The viewer should feel they're seeing something normally hidden."
-        ),
-        "user_generated": (
-            "NARRATIVE: Tell a customer's story concisely. Open with them in their context, "
-            "show their challenge, close with their outcome or satisfaction."
-        ),
-    }.get(pillar, (
+    _pillar_arc = PILLAR_NARRATIVES.get(pillar, (
         "NARRATIVE: Structure with a clear beginning (hook moment), middle (key visual), "
         "and end (resolution). Show meaningful visual progression."
     ))
@@ -198,7 +177,7 @@ async def generate_video_clip(
     has_image = hero_image_bytes is not None
     model_name, aspect_ratio = _get_model_and_aspect(platform, tier, has_image=has_image)
 
-    client = genai.Client(api_key=GOOGLE_API_KEY)
+    client = get_genai_client()
 
     hero_image = None
     if has_image:

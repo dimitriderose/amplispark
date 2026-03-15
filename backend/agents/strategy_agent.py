@@ -5,13 +5,12 @@ from datetime import datetime
 from google import genai
 from google.genai import types
 from backend.config import GOOGLE_API_KEY, GEMINI_MODEL
+from backend.clients import get_genai_client
 from backend.constants import PILLARS, DERIVATIVE_TYPES, get_proof_tier
 from backend.platforms import keys as platform_keys, get as get_platform
 from backend.services import firestore_client
 
 logger = logging.getLogger(__name__)
-
-client = genai.Client(api_key=GOOGLE_API_KEY)
 
 
 # ── Platform intelligence ─────────────────────────────────────────────────────
@@ -61,7 +60,7 @@ async def _research_best_platforms(
 
     try:
         response = await asyncio.to_thread(
-            client.models.generate_content,
+            get_genai_client().models.generate_content,
             model=GEMINI_MODEL,
             contents=prompt,
             config=types.GenerateContentConfig(
@@ -132,7 +131,7 @@ async def _research_posting_frequency(
 
     try:
         response = await asyncio.to_thread(
-            client.models.generate_content,
+            get_genai_client().models.generate_content,
             model=GEMINI_MODEL,
             contents=prompt,
             config=types.GenerateContentConfig(
@@ -206,7 +205,7 @@ async def _research_platform_trends(platform: str, industry: str) -> dict | None
             '"best_content_format": "...", "caption_sweet_spot": "..."}'
         )
         response = await asyncio.to_thread(
-            client.models.generate_content,
+            get_genai_client().models.generate_content,
             model=GEMINI_MODEL,
             contents=prompt,
             config=types.GenerateContentConfig(
@@ -255,7 +254,7 @@ async def _research_industry_hooks(industry: str, platforms: list[str]) -> str:
             "Return a concise summary (under 200 words) of the best hook patterns."
         )
         response = await asyncio.to_thread(
-            client.models.generate_content,
+            get_genai_client().models.generate_content,
             model=GEMINI_MODEL,
             contents=prompt,
             config=types.GenerateContentConfig(
@@ -305,7 +304,7 @@ async def _research_visual_trends(platform: str, industry: str) -> dict | None:
             '{"trending_styles": [...], "format_performance": "...", "composition_tips": [...], "color_trends": "...", "scene_suggestions": [...]}'
         )
         response = await asyncio.to_thread(
-            client.models.generate_content,
+            get_genai_client().models.generate_content,
             model=GEMINI_MODEL,
             contents=prompt,
             config=types.GenerateContentConfig(
@@ -363,7 +362,7 @@ async def _research_video_trends(platform: str, industry: str) -> dict | None:
             '{"trending_formats": [...], "optimal_lengths": "...", "hook_patterns": [...], "audio_notes": "..."}'
         )
         response = await asyncio.to_thread(
-            client.models.generate_content,
+            get_genai_client().models.generate_content,
             model=GEMINI_MODEL,
             contents=prompt,
             config=types.GenerateContentConfig(
@@ -857,7 +856,7 @@ Return ONLY a valid JSON array of {total_briefs} objects. No markdown, no extra 
 
     try:
         response = await asyncio.to_thread(
-            client.models.generate_content,
+            get_genai_client().models.generate_content,
             model=GEMINI_MODEL,
             contents=prompt,
             config=types.GenerateContentConfig(

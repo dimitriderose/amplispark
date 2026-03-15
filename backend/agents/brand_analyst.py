@@ -7,6 +7,7 @@ from google.genai import types
 from backend.tools.web_scraper import fetch_website
 from backend.tools.brand_tools import analyze_brand_colors, extract_brand_voice
 from backend.config import GEMINI_MODEL, GOOGLE_API_KEY
+from backend.clients import get_genai_client
 from backend.services.storage_client import upload_brand_asset
 
 logger = logging.getLogger(__name__)
@@ -18,7 +19,7 @@ async def _generate_style_reference(brand_id: str, profile: dict) -> str | None:
     Returns the gs:// URI on success, None if generation fails.
     This is best-effort — callers must handle None gracefully.
     """
-    client = genai.Client(api_key=GOOGLE_API_KEY)
+    client = get_genai_client()
     colors = ", ".join(profile.get("colors", []))
     tone = profile.get("tone", "professional")
     industry = profile.get("industry", "general")
@@ -82,7 +83,7 @@ async def run_brand_analysis(
 
     Returns: Complete brand profile dict
     """
-    client = genai.Client(api_key=GOOGLE_API_KEY)
+    client = get_genai_client()
 
     # Step 1: Gather website data if URL provided
     website_data = {}

@@ -51,6 +51,55 @@ PILLAR_DESCRIPTIONS = {
     ),
 }
 
+# Pillar-aware video narrative arcs — used by video_creator for Veo prompts.
+PILLAR_NARRATIVES = {
+    "education": (
+        "NARRATIVE: Show a technique or process IN ACTION. The viewer should learn "
+        "something by watching — hands working through steps, a before/after transformation, "
+        "or a tool being used with visible results."
+    ),
+    "promotion": (
+        "NARRATIVE: Show the product/service in a real customer scenario. Not a glamour shot — "
+        "a real person benefiting in a real context. Open with the problem, end with the solution."
+    ),
+    "inspiration": (
+        "NARRATIVE: Show a transformation journey. Open with struggle or challenge, "
+        "close with breakthrough or insight. Emotional arc matters more than technical detail."
+    ),
+    "behind_the_scenes": (
+        "NARRATIVE: Show the real process — tools, workspace, decision moments. "
+        "Authenticity over polish. The viewer should feel they're seeing something normally hidden."
+    ),
+    "user_generated": (
+        "NARRATIVE: Tell a customer's story concisely. Open with them in their context, "
+        "show their challenge, close with their outcome or satisfaction."
+    ),
+}
+
+# Pillar-aware clip selection criteria — used by video_repurpose_agent.
+PILLAR_CLIP_CRITERIA = {
+    "education": (
+        "Prioritize moments where a technique, process, or framework is being "
+        "explained or demonstrated. The viewer should learn something by watching."
+    ),
+    "promotion": (
+        "Prioritize moments showing the product/service in action, results, "
+        "or customer benefit. Open with the problem, end with the solution."
+    ),
+    "inspiration": (
+        "Prioritize transformation moments, emotional peaks, or breakthrough "
+        "insights. Emotional arc matters more than technical detail."
+    ),
+    "behind_the_scenes": (
+        "Prioritize candid process reveals, workspace moments, or unpolished "
+        "authenticity. The viewer should feel they're seeing something normally hidden."
+    ),
+    "user_generated": (
+        "Prioritize customer reactions, real-world usage, or community highlights. "
+        "Authentic moments over produced content."
+    ),
+}
+
 PLATFORM_STRENGTHS = {
     "instagram": (
         "Instagram: Reels get 2x reach; carousels are top for education; "

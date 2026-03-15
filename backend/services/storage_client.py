@@ -6,6 +6,7 @@ from datetime import timedelta
 from typing import Optional
 from google.cloud import storage
 from backend.config import GCS_BUCKET_NAME, GCP_PROJECT_ID
+from backend.gcs_utils import parse_gcs_uri
 
 logger = logging.getLogger(__name__)
 
@@ -90,10 +91,7 @@ async def upload_brand_asset(brand_id: str, file_bytes: bytes,
 
 async def get_signed_url(gcs_uri: str) -> str:
     """Convert a gs:// URI to a serving URL (signed or backend-proxy)."""
-    prefix = f"gs://{GCS_BUCKET_NAME}/"
-    if not gcs_uri.startswith(prefix):
-        raise ValueError(f"Invalid GCS URI for bucket {GCS_BUCKET_NAME!r}: {gcs_uri!r}")
-    blob_path = gcs_uri[len(prefix):]
+    blob_path = parse_gcs_uri(gcs_uri)
     bucket = get_bucket()
     blob = bucket.blob(blob_path)
     return await _get_serving_url(blob, blob_path, expiration=timedelta(hours=1))
@@ -212,7 +210,7 @@ async def upload_repurposed_clip(
 
 async def download_gcs_uri(gcs_uri: str) -> bytes:
     """Download bytes from a gs:// URI directly via the GCS client."""
-    blob_path = gcs_uri.replace(f"gs://{GCS_BUCKET_NAME}/", "")
+    blob_path = parse_gcs_uri(gcs_uri)
     bucket = get_bucket()
     blob = bucket.blob(blob_path)
     loop = asyncio.get_running_loop()

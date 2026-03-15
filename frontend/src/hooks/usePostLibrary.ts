@@ -1,21 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { api } from '../api/client'
+import type { Post } from '../types'
 
-export interface Post {
-  post_id: string
-  plan_id: string
-  day_index: number
-  brief_index?: number
-  status: 'draft' | 'generating' | 'complete' | 'failed' | 'approved'
-  caption?: string
-  hashtags?: string[]
-  image_url?: string
-  video?: { url: string }
-  platform?: string
-  pillar?: string
-  derivative_type?: string
-  created_at?: string
-}
+export type { Post } from '../types'
 
 export function usePostLibrary(brandId: string, planId?: string) {
   const [posts, setPosts] = useState<Post[]>([])

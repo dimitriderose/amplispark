@@ -11,33 +11,13 @@ from google import genai
 from google.genai import types
 
 from backend.config import GEMINI_MODEL, GOOGLE_API_KEY
-from backend.constants import PILLARS
+from backend.clients import get_genai_client
+from backend.constants import PILLARS, PILLAR_CLIP_CRITERIA
 
 logger = logging.getLogger(__name__)
 
-# Pillar-aware clip selection criteria
-_CLIP_PILLAR_CRITERIA = {
-    "education": (
-        "Prioritize moments where a technique, process, or framework is being "
-        "explained or demonstrated. The viewer should learn something by watching."
-    ),
-    "promotion": (
-        "Prioritize moments showing the product/service in action, results, "
-        "or customer benefit. Open with the problem, end with the solution."
-    ),
-    "inspiration": (
-        "Prioritize transformation moments, emotional peaks, or breakthrough "
-        "insights. Emotional arc matters more than technical detail."
-    ),
-    "behind_the_scenes": (
-        "Prioritize candid process reveals, workspace moments, or unpolished "
-        "authenticity. The viewer should feel they're seeing something normally hidden."
-    ),
-    "user_generated": (
-        "Prioritize customer reactions, real-world usage, or community highlights. "
-        "Authentic moments over produced content."
-    ),
-}
+# Alias for backward compat within this module
+_CLIP_PILLAR_CRITERIA = PILLAR_CLIP_CRITERIA
 
 # Platform aspect-ratio configurations
 _PLATFORM_CONFIGS: dict[str, dict] = {
@@ -113,7 +93,7 @@ async def _upload_to_gemini_files(video_path: str, mime_type: str) -> tuple:
         TimeoutError: Gemini did not process the file within _GEMINI_POLL_TIMEOUT_S.
         ValueError: Gemini returned a non-ACTIVE final state.
     """
-    client = genai.Client(api_key=GOOGLE_API_KEY)
+    client = get_genai_client()
 
     video_file = await asyncio.to_thread(
         client.files.upload,
