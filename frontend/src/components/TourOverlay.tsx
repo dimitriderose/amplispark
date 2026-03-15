@@ -8,10 +8,9 @@ interface Props {
   maskId: string
   visible: boolean
   transitioning: boolean
-  onClick: () => void
 }
 
-export default function TourOverlay({ cutout, maskId, visible, transitioning, onClick }: Props) {
+export default function TourOverlay({ cutout, maskId, visible, transitioning }: Props) {
   if (!visible) return null
 
   return (

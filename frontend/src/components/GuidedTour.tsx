@@ -290,7 +290,6 @@ export default function GuidedTour({ steps, isActive, currentStep, onNext, onPre
         maskId={maskId}
         visible={visible}
         transitioning={isFadedOut}
-        onClick={onSkip}
       />
 
       {/* Tooltip */}
