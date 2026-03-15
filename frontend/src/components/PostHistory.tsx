@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { A } from '../theme'
 import { usePostLibrary, type Post } from '../hooks/usePostLibrary'
-import { useIsMobile } from '../hooks/useIsMobile'
+import { useIsMobile, useIsTablet } from '../hooks/useIsMobile'
 import PostCard from './PostCard'
 
 type StatusFilter = 'all' | 'approved' | 'complete'
@@ -43,6 +43,7 @@ function getWeekLabel(dateStr?: string): string {
 
 export default function PostHistory({ brandId }: { brandId: string }) {
   const isMobile = useIsMobile()
+  const isTablet = useIsTablet()
   const navigate = useNavigate()
   const { posts, loading, error, refresh } = usePostLibrary(brandId)
 
@@ -209,7 +210,7 @@ export default function PostHistory({ brandId }: { brandId: string }) {
       {!loading && paginated.length > 0 && (
         <div style={{
           display: 'grid',
-          gridTemplateColumns: isMobile ? 'repeat(auto-fill, minmax(140px, 1fr))' : 'repeat(auto-fill, minmax(200px, 1fr))',
+          gridTemplateColumns: isMobile ? 'repeat(auto-fill, minmax(140px, 1fr))' : isTablet ? 'repeat(auto-fill, minmax(160px, 1fr))' : 'repeat(auto-fill, minmax(200px, 1fr))',
           gap: 16,
         }}>
           {renderItems.map((item, i) =>

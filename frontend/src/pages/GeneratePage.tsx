@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { A } from '../theme'
 import { usePostGeneration } from '../hooks/usePostGeneration'
-import { useIsMobile } from '../hooks/useIsMobile'
+import { useIsMobile, useIsTablet } from '../hooks/useIsMobile'
 import { api } from '../api/client'
 import PostGenerator from '../components/PostGenerator'
 import ReviewPanel from '../components/ReviewPanel'
@@ -10,6 +10,7 @@ import EditMediaSection from '../components/EditMediaSection'
 
 export default function GeneratePage() {
   const isMobile = useIsMobile()
+  const isTablet = useIsTablet()
   const { planId, dayIndex } = useParams<{ planId: string; dayIndex: string }>()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
@@ -123,7 +124,7 @@ export default function GeneratePage() {
   return (
     <div style={{
       minHeight: 'calc(100vh - 53px)',
-      padding: isMobile ? '20px 12px' : '32px 24px',
+      padding: isMobile ? '20px 12px' : isTablet ? '24px 16px' : '32px 24px',
       maxWidth: 960,
       margin: '0 auto',
     }}>

@@ -15,7 +15,7 @@ import SocialConnect from '../components/SocialConnect'
 import IntegrationConnect from '../components/IntegrationConnect'
 import VideoRepurpose from '../components/VideoRepurpose'
 import Spinner from '../components/Spinner'
-import { useIsMobile } from '../hooks/useIsMobile'
+import { useIsMobile, useIsTablet } from '../hooks/useIsMobile'
 
 type Tab = 'calendar' | 'posts' | 'connections' | 'video'
 
@@ -28,6 +28,7 @@ const TABS: { key: Tab; label: string; icon: string }[] = [
 
 export default function DashboardPage() {
   const isMobile = useIsMobile()
+  const isTablet = useIsTablet()
   const { brandId } = useParams<{ brandId: string }>()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -135,7 +136,7 @@ export default function DashboardPage() {
   if (!brand) return null
 
   return (
-    <div style={{ maxWidth: 1400, margin: '0 auto', padding: isMobile ? '16px 12px' : '32px 24px' }}>
+    <div style={{ maxWidth: 1400, margin: '0 auto', padding: isMobile ? '16px 12px' : isTablet ? '20px 16px' : '32px 24px' }}>
       {/* Notion connected banner */}
       {notionParam === 'connected' && (
         <div style={{

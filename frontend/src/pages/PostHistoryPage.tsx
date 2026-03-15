@@ -1,11 +1,12 @@
 import { useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-import { useIsMobile } from '../hooks/useIsMobile'
+import { useIsMobile, useIsTablet } from '../hooks/useIsMobile'
 import PostHistory from '../components/PostHistory'
 
 export default function PostHistoryPage() {
   const isMobile = useIsMobile()
+  const isTablet = useIsTablet()
   const { brandId } = useParams<{ brandId: string }>()
   const navigate = useNavigate()
   const { isSignedIn, loading: authLoading } = useAuth()
@@ -17,7 +18,7 @@ export default function PostHistoryPage() {
   if (!brandId) return null
 
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', padding: isMobile ? '16px 12px' : '32px 24px' }}>
+    <div style={{ maxWidth: 1100, margin: '0 auto', padding: isMobile ? '16px 12px' : isTablet ? '20px 16px' : '32px 24px' }}>
       <PostHistory brandId={brandId} />
     </div>
   )
