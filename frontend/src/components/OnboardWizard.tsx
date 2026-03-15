@@ -41,7 +41,7 @@ export default function OnboardWizard() {
   const [analyzing, setAnalyzing] = useState(false)
   const [completedSteps, setCompletedSteps] = useState<AnalysisStep[]>([])
   const [progress, setProgress] = useState(0)
-  const [error, setError] = useState('')
+  const [_error, setError] = useState('')
   const isSubmittingRef = useRef(false)
 
   // Color picker state

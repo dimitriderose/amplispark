@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { A } from '../theme'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { computePlacement, getTooltipStyle, getArrowStyle } from '../hooks/useTooltipPlacement'

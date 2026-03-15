@@ -1,4 +1,3 @@
-import React, { useMemo } from 'react'
 import { A } from '../theme'
 
 export type Placement = 'top' | 'bottom' | 'left' | 'right'

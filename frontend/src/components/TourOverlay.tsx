@@ -1,4 +1,3 @@
-import React from 'react'
 import { A } from '../theme'
 import type { Cutout } from '../hooks/useTooltipPlacement'
 
