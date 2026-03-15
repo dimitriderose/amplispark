@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { A } from '../theme'
 import { api } from '../api/client'
 import { useBrandProfile } from '../hooks/useBrandProfile'
-import { useIsMobile, useIsTablet } from '../hooks/useIsMobile'
+import { useIsMobile } from '../hooks/useIsMobile'
 import { PLATFORMS } from '../platformRegistry'
 import { IMAGE_STYLE_GROUPS } from '../imageStyleOptions'
 import PageContainer from '../components/ui/PageContainer'
@@ -27,7 +27,6 @@ interface UploadedAsset {
 
 export default function EditBrandPage() {
   const isMobile = useIsMobile()
-  const isTablet = useIsTablet()
   const { brandId } = useParams<{ brandId: string }>()
   const navigate = useNavigate()
   const { brand, loading, error: loadError, refetch } = useBrandProfile(brandId)

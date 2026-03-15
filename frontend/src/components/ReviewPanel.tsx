@@ -78,7 +78,7 @@ export default function ReviewPanel({ brandId, postId, reviewKey, onApproved, in
     setLoading(true)
     setError('')
     try {
-      const res = await api.reviewPost(brandId, postId, force) as { review: ReviewResult }
+      const res = await api.reviewPost(brandId, postId, force) as unknown as { review: ReviewResult }
       setReview(res.review)
       // Don't auto-navigate on approval — let the user see the review first
     } catch (err: any) {

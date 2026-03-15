@@ -47,7 +47,7 @@ export default function GeneratePage() {
     if (!brandId) return
     api.getBrand(brandId)
       .then(res => {
-        const brand = res.brand_profile as Record<string, unknown>
+        const brand = res.brand_profile as unknown as Record<string, unknown>
         if (brand.image_generation_risk === 'high') {
           const rec = brand.byop_recommendation
           setByopRecommendation(
