@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { A } from '../theme'
 import { api } from '../api/client'
+import { useIsMobile } from '../hooks/useIsMobile'
 import type { Post } from '../hooks/usePostLibrary'
 import { getMediaAspectRatio } from '../platformRegistry'
 
@@ -31,6 +32,8 @@ interface Props {
 }
 
 export default function PostCard({ post, brandId, onApproved, onDismiss, onView }: Props) {
+  const isMobile = useIsMobile()
+  const btnPad = isMobile ? '10px 12px' : '6px'
   const color = STATUS_COLORS[post.status] || A.textMuted
   const label = STATUS_LABELS[post.status] || post.status
   const [copied, setCopied] = useState(false)
@@ -193,7 +196,7 @@ export default function PostCard({ post, brandId, onApproved, onDismiss, onView 
               aria-label={copied ? 'Copied to clipboard' : 'Copy caption to clipboard'}
               title="Copy caption + hashtags"
               style={{
-                flex: 1, padding: '6px', borderRadius: 6, cursor: 'pointer',
+                flex: 1, padding: btnPad, borderRadius: 6, cursor: 'pointer',
                 border: `1px solid ${copied ? A.emerald : A.border}`,
                 background: copied ? A.emeraldLight : 'transparent',
                 color: copied ? A.emerald : A.textSoft,
@@ -207,7 +210,7 @@ export default function PostCard({ post, brandId, onApproved, onDismiss, onView 
             <button
               onClick={handleExport}
               style={{
-                flex: 1, padding: '6px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                flex: 1, padding: btnPad, borderRadius: 6, border: 'none', cursor: 'pointer',
                 background: `linear-gradient(135deg, ${A.indigo}, ${A.violet})`,
                 color: 'white', fontSize: 11, fontWeight: 600,
               }}
@@ -219,7 +222,7 @@ export default function PostCard({ post, brandId, onApproved, onDismiss, onView 
             <button
               onClick={handleApprove}
               style={{
-                flex: 1, padding: '6px', borderRadius: 6, border: `1px solid ${A.emerald}`,
+                flex: 1, padding: btnPad, borderRadius: 6, border: `1px solid ${A.emerald}`,
                 background: 'transparent', color: A.emerald, fontSize: 11, fontWeight: 600, cursor: 'pointer',
               }}
             >

@@ -2,8 +2,10 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { A } from '../theme'
 import { useAuth } from '../hooks/useAuth'
+import { useIsMobile } from '../hooks/useIsMobile'
 
 export default function NavBar() {
+  const isMobile = useIsMobile()
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams] = useSearchParams()
@@ -45,7 +47,7 @@ export default function NavBar() {
   return (
     <nav style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: '12px 24px', borderBottom: `1px solid ${A.border}`,
+      padding: isMobile ? '10px 12px' : '12px 24px', borderBottom: `1px solid ${A.border}`,
       background: A.surface, position: 'sticky', top: 0, zIndex: 50,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}

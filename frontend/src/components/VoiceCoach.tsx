@@ -2,6 +2,7 @@ import React from 'react'
 import { A } from '../theme'
 import { useVoiceCoach } from '../hooks/useVoiceCoach'
 import type { VoiceCoachStatus } from '../hooks/useVoiceCoach'
+import { useIsMobile } from '../hooks/useIsMobile'
 
 interface Props {
   brandId: string
@@ -10,24 +11,28 @@ interface Props {
 }
 
 export default function VoiceCoach({ brandId, brandName, planId }: Props) {
+  const isMobile = useIsMobile()
   const { status, isAISpeaking, transcript, error, startSession, stopSession } = useVoiceCoach()
 
   const isOpen = status !== 'idle'
 
   return (
     <div
+      className="vc-container"
       style={{
         position: 'fixed',
-        bottom: 28,
-        right: 28,
+        bottom: isMobile ? 12 : 28,
+        right: isMobile ? 12 : 28,
+        left: (isMobile && isOpen) ? 12 : undefined,
         zIndex: 1000,
         display: 'flex',
         flexDirection: 'column',
-        alignItems: 'flex-end',
+        alignItems: isMobile ? 'stretch' : 'flex-end',
         gap: 10,
       }}
     >
       <style>{`
+        .vc-container { padding-bottom: env(safe-area-inset-bottom, 0px); }
         @keyframes vc-pulse {
           0%, 100% { transform: scale(1); opacity: 0.9; }
           50% { transform: scale(1.18); opacity: 1; }
@@ -49,7 +54,7 @@ export default function VoiceCoach({ brandId, brandName, planId }: Props) {
       {isOpen && (
         <div
           style={{
-            width: 248,
+            width: isMobile ? '100%' : 248,
             borderRadius: 14,
             background: A.surface,
             border: `1px solid ${A.border}`,

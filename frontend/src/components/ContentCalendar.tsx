@@ -3,6 +3,7 @@ import { A } from '../theme'
 import { getPlatform } from '../platformRegistry'
 import { api } from '../api/client'
 import { IMAGE_STYLE_GROUPS, styleLabel } from '../imageStyleOptions'
+import { useIsMobile } from '../hooks/useIsMobile'
 import type { Post } from '../hooks/usePostLibrary'
 
 const PILLAR_COLORS: Record<string, string> = {
@@ -77,6 +78,7 @@ interface Props {
 }
 
 export default function ContentCalendar({ plan, brandId, posts, defaultImageStyle, onGeneratePost, onViewPost, onPhotoUploaded, trendSummary, onRefreshResearch }: Props) {
+  const isMobile = useIsMobile()
   const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
   // Map posts by day_index+platform — use the latest post per (day, platform)
@@ -200,7 +202,7 @@ export default function ContentCalendar({ plan, brandId, posts, defaultImageStyl
       )}
 
       {/* Day-column grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${numDays}, 1fr)`, gap: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : `repeat(${numDays}, 1fr)`, gap: 8 }}>
         {uniqueDayIndices.map((dayIdx, colIndex) => {
           const days = dayGroups[dayIdx]
           return (

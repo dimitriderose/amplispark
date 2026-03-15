@@ -3,6 +3,7 @@ import type React from 'react'
 import { A } from '../theme'
 import type { GenerationState } from '../hooks/usePostGeneration'
 import { useVideoGeneration } from '../hooks/useVideoGeneration'
+import { useIsMobile } from '../hooks/useIsMobile'
 import PlatformPreview from './PlatformPreview'
 import { api } from '../api/client'
 import { getPlatform, getVideoSupport, getMediaAspectRatio } from '../platformRegistry'
@@ -144,6 +145,7 @@ function CaptionOnlyBanner({ recommendation, onToggle }: { recommendation: strin
 }
 
 export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, onVideoGenerated, byopRecommendation, editMediaSlot, editVideoSlot, overrideImageUrl }: Props) {
+  const isMobile = useIsMobile()
   const [copied, setCopied] = useState(false)
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [editingCaption, setEditingCaption] = useState(false)
@@ -314,7 +316,7 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
       )}
 
       {/* M-3: When captionOnly, collapse to 1-column so caption fills the width */}
-      <div style={{ display: 'grid', gridTemplateColumns: captionOnly ? '1fr' : '1fr 1fr', gap: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: (isMobile || captionOnly) ? '1fr' : '1fr 1fr', gap: 20 }}>
 
         {/* Left: Caption */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

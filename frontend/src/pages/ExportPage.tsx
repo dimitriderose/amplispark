@@ -1,8 +1,10 @@
 import { useParams, useSearchParams } from 'react-router-dom'
 import { A } from '../theme'
+import { useIsMobile } from '../hooks/useIsMobile'
 import PostLibrary from '../components/PostLibrary'
 
 export default function ExportPage() {
+  const isMobile = useIsMobile()
   const { brandId } = useParams<{ brandId: string }>()
   const [searchParams] = useSearchParams()
   const planId = searchParams.get('plan_id') || undefined
@@ -17,7 +19,7 @@ export default function ExportPage() {
 
   return (
     <div style={{
-      maxWidth: 1100, margin: '0 auto', padding: '32px 24px',
+      maxWidth: 1100, margin: '0 auto', padding: isMobile ? '16px 12px' : '32px 24px',
     }}>
       {/* M-8: Differentiate export page from dashboard with clear workflow header */}
       <div style={{ marginBottom: 28 }}>

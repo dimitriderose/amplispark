@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { A } from '../theme'
 import { api } from '../api/client'
 import { useBrandProfile } from '../hooks/useBrandProfile'
+import { useIsMobile } from '../hooks/useIsMobile'
 import { PLATFORMS } from '../platformRegistry'
 import { IMAGE_STYLE_GROUPS } from '../imageStyleOptions'
 
@@ -24,6 +25,7 @@ interface UploadedAsset {
 }
 
 export default function EditBrandPage() {
+  const isMobile = useIsMobile()
   const { brandId } = useParams<{ brandId: string }>()
   const navigate = useNavigate()
   const { brand, loading, error: loadError, refetch } = useBrandProfile(brandId)
@@ -223,7 +225,7 @@ export default function EditBrandPage() {
   }
 
   return (
-    <div style={{ maxWidth: 720, margin: '0 auto', padding: '32px 24px' }}>
+    <div style={{ maxWidth: 720, margin: '0 auto', padding: isMobile ? '20px 12px' : '32px 24px' }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }}>
         <div>
@@ -273,7 +275,7 @@ export default function EditBrandPage() {
 
         {/* ── Section 1: Brand Identity ──────────────────────── */}
         <Section title="Brand Identity">
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
             <FormField label="Business Name" value={businessName} onChange={setBusinessName} />
             <FormField label="Industry" value={industry} onChange={setIndustry} />
           </div>
@@ -281,7 +283,7 @@ export default function EditBrandPage() {
             textarea rows={3} hint="min. 20 chars" />
           <FormField label="Website URL" value={websiteUrl} onChange={setWebsiteUrl}
             placeholder="https://yourbusiness.com" />
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
             <FormField label="Tone of Voice" value={tone} onChange={setTone}
               placeholder="e.g. warm, professional, witty" />
             <FormField label="Target Audience" value={targetAudience} onChange={setTargetAudience} />
@@ -290,7 +292,7 @@ export default function EditBrandPage() {
 
         {/* ── Section 2: Visual Identity ─────────────────────── */}
         <Section title="Visual Identity">
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
             <div>
               <Label>Brand Colors</Label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
@@ -525,7 +527,7 @@ export default function EditBrandPage() {
 
         {/* ── Section 5: Content Strategy ────────────────────── */}
         <Section title="Content Strategy">
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
             <TagEditor label="Content Themes" tags={contentThemes} setTags={setContentThemes}
               newValue={newTheme} setNewValue={setNewTheme} />
             <TagEditor label="Competitors" tags={competitors} setTags={setCompetitors}

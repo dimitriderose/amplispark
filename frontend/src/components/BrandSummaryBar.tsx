@@ -1,4 +1,5 @@
 import { A } from '../theme'
+import { useIsMobile } from '../hooks/useIsMobile'
 import type { BrandProfile } from '../hooks/useBrandProfile'
 
 /** Convert a gs:// URI to a proxy-servable URL. */
@@ -18,6 +19,7 @@ interface Props {
 }
 
 export default function BrandSummaryBar({ brand, onNavigateEdit, onNavigateNew }: Props) {
+  const isMobile = useIsMobile()
   const connectedPlatforms = brand.connected_platforms ?? []
   const notionConnected = !!brand.integrations?.notion?.access_token
 
@@ -35,7 +37,7 @@ export default function BrandSummaryBar({ brand, onNavigateEdit, onNavigateNew }
       <div style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 14,
+        gap: isMobile ? 8 : 14,
         flexWrap: 'wrap',
       }}>
         {/* Logo / letter fallback */}

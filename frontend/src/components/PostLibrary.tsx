@@ -2,6 +2,7 @@ import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { A } from '../theme'
 import { api } from '../api/client'
+import { useIsMobile } from '../hooks/useIsMobile'
 import PostCard from './PostCard'
 import { usePostLibrary } from '../hooks/usePostLibrary'
 
@@ -15,6 +16,7 @@ interface Props {
 }
 
 export default function PostLibrary({ brandId, planId, defaultFilter = 'all', notionReady }: Props) {
+  const isMobile = useIsMobile()
   const navigate = useNavigate()
   const { posts, loading, error, refresh } = usePostLibrary(brandId, planId)
   const [filter, setFilter] = React.useState<Filter>(defaultFilter)
@@ -444,7 +446,7 @@ export default function PostLibrary({ brandId, planId, defaultFilter = 'all', no
       {!loading && filtered.length > 0 && (
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+          gridTemplateColumns: isMobile ? 'repeat(auto-fill, minmax(140px, 1fr))' : 'repeat(auto-fill, minmax(200px, 1fr))',
           gap: 16,
         }}>
           {filtered.map(post => (
