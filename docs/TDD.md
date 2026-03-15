@@ -4,7 +4,7 @@
 **Category:** ✍️ Creative Storyteller
 **Author:** Software Architecture Team
 **Companion Document:** PRD — Amplifi v1.5
-**Version:** 1.6 | March 13, 2026 (updated from v1.5 March 12)
+**Version:** 1.7 | March 15, 2026 (updated from v1.6 March 13)
 
 ---
 
@@ -12,7 +12,7 @@
 
 This Technical Design Document specifies the implementation architecture for Amplifi, an AI-powered creative director that produces complete social media content packages using Gemini's interleaved text and image output. It translates the PRD's product requirements into concrete engineering decisions, API contracts, data models, code structure, and deployment specifications.
 
-**Scope:** All P0 and P1 features from the PRD, plus shipped P2 features: brand analysis from URL (with deterministic analysis at temperature 0.15), content calendar generation with event integration and social proof tier system, interleaved post generation with carousel support, image fallback, video_first pipeline, and brand reference image injection, calibrated 1-10 review scoring with 5 engagement dimensions and platform-specific checks, React dashboard with tab-based navigation and Edit Brand page, image/video storage, streaming UI, Firebase Google Sign-In with account dropdown, dedicated Brands page with pagination (5 per page), tier-aware Gemini Live voice coaching, Veo 3.1 video generation, full ZIP export with media, Platform Registry (10 platforms), Notion integration (OAuth + database export), calendar .ics export with email delivery, platform-specific caption/hashtag enforcement, Cloud Build CI/CD pipeline with `deploy.sh`, SPA catch-all routing for deep links on Cloud Run, AI-researched posting frequency with Google Search grounding, and multi-platform calendar generation with brief_index/day_index separation.
+**Scope:** All P0 and P1 features from the PRD, plus shipped P2 features: brand analysis from URL (with deterministic analysis at temperature 0.15), content calendar generation with event integration and social proof tier system, interleaved post generation with carousel support, image fallback, video_first pipeline, and brand reference image injection, multiplicative two-step review scoring with platform-specific weights (15 profiles: 11 platforms + 4 derivative overrides), React dashboard with tab-based navigation and Edit Brand page, image/video storage, streaming UI, Firebase Google Sign-In with account dropdown and Firebase ID token verification middleware, dedicated Brands page with pagination (5 per page), tier-aware Gemini Live voice coaching with content calendar context, Veo 3.1 video generation, full ZIP export with media, Platform Registry (11 platforms), Notion integration (OAuth + Fernet-encrypted tokens + database export), calendar .ics export with email delivery, platform-specific caption/hashtag enforcement, Cloud Build CI/CD pipeline with `deploy.sh`, SPA catch-all routing for deep links on Cloud Run with path traversal prevention, AI-researched posting frequency with Google Search grounding, multi-platform calendar generation with brief_index/day_index separation, modular backend architecture (7 FastAPI routers, 5 content creator sub-modules, shared constants/clients/middleware), and centralized frontend type system with generic hooks.
 
 **Out of scope (unspecified):** Post analytics dashboard (P3). Remaining P2 features are specified in §14.1. P3 features are additive and do not affect core architecture.
 
@@ -137,6 +137,36 @@ Rationale: Without deduplication, regenerating a day would create a second post 
 The Review Agent is a separate LLM call that receives the generated post content + the brand profile and produces a structured review. It does NOT modify the generated content; it only flags issues and provides suggestions.
 
 Rationale: Keeping generation and review separate allows the user to accept "flagged" posts anyway. It also avoids circular loops where the reviewer rewrites content that then needs re-reviewing.
+
+**Decision 8: Modular Backend Architecture (Router Split + Module Extraction)**
+The backend was refactored from two monolithic files (`server.py` at 2,150 lines, `content_creator.py` at 2,518 lines) into a modular architecture:
+
+- **server.py** is now ~65 lines: app setup, middleware wiring, and `app.include_router()` calls for 7 routers.
+- **7 FastAPI routers** (`backend/routers/`): `brands.py`, `plans.py`, `posts.py`, `generation.py`, `media.py`, `integrations.py`, `voice.py`. Each router owns its route prefix and endpoint logic.
+- **5 content creator sub-modules** (`backend/agents/`): `caption_pipeline.py`, `carousel_builder.py`, `hashtag_engine.py`, `quality_gates.py`, `image_prompt_builder.py`. Extracted from `content_creator.py` for testability and separation of concerns.
+- **Shared utilities**: `clients.py` (singleton Gemini client), `gcs_utils.py` (GCS URI parsing), `constants.py` (shared PILLARS, DERIVATIVE_TYPES, PLATFORM_STRENGTHS, PILLAR_DESCRIPTIONS, PILLAR_NARRATIVES, scoring weights), `middleware.py` (Firebase Auth + brand ownership verification).
+
+Rationale: The monolithic files were approaching unmaintainable size. The router split follows FastAPI best practices (one router per domain). Module extraction from `content_creator.py` allows individual testing of caption generation, carousel building, and hashtag processing without invoking the full pipeline.
+
+**Decision 9: Firebase Auth Middleware with Brand Ownership Verification**
+All API routes are protected by a middleware chain: (1) `verify_firebase_token()` validates the Firebase ID token from the `Authorization: Bearer` header using `firebase_admin.verify_id_token()`, and (2) `verify_brand_owner()` checks that the authenticated user owns the brand being accessed. Both are wired to routers via FastAPI's `Depends()`.
+
+Rationale: The previous auth model relied on client-side UID passing. Server-side token verification prevents unauthorized access to other users' brands.
+
+**Decision 10: Fernet Encryption for OAuth Tokens**
+Notion OAuth access tokens are encrypted at rest using Fernet (AES-128-CBC + HMAC-SHA256) before storage in Firestore. The encryption key is derived from the application's secret configuration.
+
+Rationale: OAuth tokens stored in plaintext in Firestore would be exposed if the database were compromised. Fernet provides authenticated encryption with a simple API.
+
+**Decision 11: Multiplicative Two-Step Scoring System**
+The Review Agent scoring was refactored from a single LLM-decided overall score (prone to inflation) to a two-step computation:
+
+1. **LLM outputs** `engagement_scores` (5 dimensions, 1-10 each) + `structural_issues` (list of violations).
+2. **Code computes** `score = content_quality x structural_modifier`, where:
+   - `content_quality` = weighted average of engagement scores using platform-specific weights from `platforms.py` (15 profiles: 11 platforms + 4 derivative overrides).
+   - `structural_modifier` = penalty factor based on structural issues, with a platform-specific floor (0.60-0.92).
+
+Rationale: Separating subjective quality assessment (LLM) from objective structural checks (code) produces more consistent, reproducible scores. The multiplicative formula ensures structural violations (wrong hashtag count, over character limit) always reduce the score, regardless of how high the LLM rates engagement.
 
 ---
 
@@ -709,18 +739,46 @@ review_agent = Agent(
 )
 ```
 
-### 3.5.1 Calibrated 1-10 Scoring System (Shipped)
+### 3.5.1 Multiplicative Two-Step Scoring System (Shipped, supersedes calibrated rubric)
 
-The Review Agent now uses a calibrated 1-10 scoring rubric designed to prevent score inflation:
+> **Superseded:** The previous "calibrated 1-10 rubric" (v1.6) relied on the LLM to output a single overall score, which was prone to inflation. The new system separates LLM judgment from score computation.
 
-| Score Range | Meaning |
-|-------------|---------|
-| 1-3 | Unusable — wrong format, off-brand, factual errors, broken formatting |
-| 4-5 | Below average — brand paragraphs, generic hooks, dual CTAs, vague social proof |
-| 6 | Acceptable — on-brand, no major violations, but unremarkable |
-| 7 | Good — genuine hook with pattern interrupt, platform-appropriate, brand-specific |
-| 8 | Strong — teaches something actionable, hook creates knowledge gap, CTA matches intent |
-| 9-10 | Exceptional — viral potential, perfectly crafted for platform algorithm |
+The Review Agent scoring is now a two-step process:
+
+**Step 1 — LLM Assessment:** The LLM outputs two structured fields:
+- `engagement_scores`: 5 dimensions (hook_strength, relevance, cta_effectiveness, platform_fit, teaching_depth), each scored 1-10.
+- `structural_issues`: A list of objective violations (e.g., "caption exceeds 280 chars for X", "hashtag count exceeds platform limit").
+
+**Step 2 — Code Computation:**
+```python
+# content_quality = weighted average of engagement_scores
+# Weights are platform-specific, loaded from platforms.py
+content_quality = sum(
+    score * weight
+    for score, weight in zip(engagement_scores.values(), platform_weights.values())
+)
+
+# structural_modifier = penalty for violations, floored per platform
+structural_modifier = max(
+    platform_floor,  # 0.60-0.92 depending on platform
+    1.0 - (penalty_per_issue * len(structural_issues))
+)
+
+# Final score
+score = content_quality * structural_modifier
+```
+
+**Platform-specific weights** are defined in `platforms.py` across 15 profiles (11 platforms + 4 derivative overrides: carousel, thread_hook, video_first, story). Each profile adjusts which engagement dimensions matter most — e.g., X weighs hook_strength heavily, LinkedIn weighs teaching_depth.
+
+**Structural modifier floors** prevent a single minor issue from tanking the score:
+
+| Platform | Floor | Rationale |
+|----------|-------|-----------|
+| Instagram | 0.70 | Moderate — hashtag/fold violations common |
+| LinkedIn | 0.75 | Professional context tolerates fewer issues |
+| X | 0.60 | Tight constraints (280 chars) mean violations are severe |
+| TikTok | 0.80 | Casual platform, minor issues less impactful |
+| Pinterest | 0.92 | SEO-focused, structural violations rare |
 
 Approval threshold: `score >= 8` (hard-coded, not trusted from model output).
 
@@ -782,7 +840,15 @@ strategy_context = (
 )
 ```
 
-Key capabilities: explain WHY the calendar has its specific pillar mix, coach caption writing in the brand's authentic voice, give platform-specific advice, and suggest content ideas grounded in the brand's actual business.
+**Content Calendar Context Injection (v1.7):** The Voice Coach now receives the full content calendar context when invoked from the Dashboard. The `plan_id` is passed from `DashboardPage` → `VoiceCoach` → `useVoiceCoach` → WebSocket URL. The backend loads the plan and injects:
+- Calendar days (themes, platforms, derivative types)
+- Review scores for already-generated posts
+- Trend insights from Google Search grounding
+- Pillar definitions and CTA strategy
+
+This allows the coach to answer questions like "Why did you schedule a carousel on Wednesday?" or "How can I improve my LinkedIn post that scored 6.2?"
+
+Key capabilities: explain WHY the calendar has its specific pillar mix, coach caption writing in the brand's authentic voice, give platform-specific advice, suggest content ideas grounded in the brand's actual business, and discuss specific posts from the current calendar with awareness of their review scores.
 
 ---
 
@@ -1016,28 +1082,60 @@ Response: { status: "approved" | "unapproved" }
 
 ## 4.2 SSE Implementation
 
+> **Note (v1.7):** The app setup below reflects the modular router architecture. `server.py` is now ~65 lines. Each router is a separate module in `backend/routers/`.
+
 ```python
-from fastapi import FastAPI, Request
-from fastapi.responses import StreamingResponse, JSONResponse
+# backend/server.py (~65 lines — app setup + router includes)
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-import json
-import os
+from backend.middleware import firebase_auth_middleware
+from backend.routers import brands, plans, posts, generation, media, integrations, voice
 
 app = FastAPI()
 
-# CORS middleware (for local dev: Vite on :5173, FastAPI on :8080)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Restrict in production
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS middleware
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-# Serve frontend static files (Vite build output)
+# Firebase Auth middleware (verifies ID tokens on all /api/* routes)
+app.middleware("http")(firebase_auth_middleware)
+
+# Router includes — each router owns its route prefix
+app.include_router(brands.router, prefix="/api")       # /api/brands/*
+app.include_router(plans.router, prefix="/api")        # /api/plans/*
+app.include_router(posts.router, prefix="/api")        # /api/posts/*
+app.include_router(generation.router, prefix="/api")   # /api/generate/*
+app.include_router(media.router, prefix="/api")        # /api/storage/*, /api/export/*
+app.include_router(integrations.router, prefix="/api") # /api/brands/*/integrations/*
+app.include_router(voice.router, prefix="/api")        # /api/voice/*
+
+# SPA catch-all with path traversal prevention
 frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
-if os.path.exists(frontend_dir):
-    app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
+@app.get("/{full_path:path}")
+async def spa_fallback(full_path: str):
+    # Reject path traversal attempts (../ sequences)
+    if ".." in full_path:
+        raise HTTPException(400, "Invalid path")
+    # Serve static asset if exists, otherwise index.html
+    ...
+```
+
+```python
+# backend/middleware.py — Firebase Auth + brand ownership verification
+import firebase_admin
+from firebase_admin import auth as firebase_auth
+
+async def verify_firebase_token(request: Request) -> dict:
+    """Extract and verify Firebase ID token from Authorization header.
+    Returns decoded token with uid, email, etc."""
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    return firebase_auth.verify_id_token(token)
+
+async def verify_brand_owner(brand_id: str, token: dict = Depends(verify_firebase_token)):
+    """Verify the authenticated user owns the requested brand."""
+    brand = await firestore_client.get_brand(brand_id)
+    if brand.get("owner_uid") != token["uid"]:
+        raise HTTPException(403, "Not authorized for this brand")
+```
 
 @app.get("/api/generate/{plan_id}/{day_index}")
 async def generate_post_endpoint(plan_id: str, day_index: int, request: Request):
@@ -1240,7 +1338,7 @@ class PlatformSpec:
     voice: str                        # How content should *sound* on this platform
 ```
 
-## 5.2 Platform Table (10 Platforms)
+## 5.2 Platform Table (11 Platforms)
 
 | Platform | Key | fold_at | hashtag_limit | caption_max | image_aspect | derivative_types |
 |----------|-----|---------|---------------|-------------|--------------|-----------------|
@@ -2261,12 +2359,18 @@ EXPOSE 8080
 CMD ["uvicorn", "backend.server:app", "--host", "0.0.0.0", "--port", "8080"]
 ```
 
-Frontend static files are served by FastAPI's `StaticFiles` mount (`server.py:1786-1789`):
+Frontend static files are served by FastAPI's SPA catch-all route in `server.py`. The catch-all includes path traversal prevention (rejects `..` sequences) and serves `index.html` for all non-API, non-static paths:
 
 ```python
-frontend_dist = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
-if os.path.exists(frontend_dist):
-    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
+# server.py — SPA catch-all with security
+@app.get("/{full_path:path}")
+async def spa_fallback(full_path: str):
+    if ".." in full_path:
+        raise HTTPException(400, "Invalid path")
+    static_path = os.path.join(frontend_dist, full_path)
+    if os.path.isfile(static_path):
+        return FileResponse(static_path)
+    return FileResponse(os.path.join(frontend_dist, "index.html"))
 ```
 
 ## 10.3 Terraform Infrastructure-as-Code
@@ -2347,6 +2451,7 @@ The `deploy.sh` script:
 | `NOTION_CLIENT_ID` | No | `""` | Notion OAuth client ID |
 | `NOTION_CLIENT_SECRET` | No | `""` | Notion OAuth client secret |
 | `NOTION_REDIRECT_URI` | No | `""` | Notion OAuth redirect URI (must match Cloud Run URL) |
+| `FERNET_KEY` | No | `""` | Fernet encryption key for Notion OAuth token encryption at rest |
 
 **Build-time environment** (Docker build args — baked into JS bundle):
 
@@ -2377,39 +2482,71 @@ The `deploy.sh` script:
 ```
 amplifi-hackaton/
 ├── backend/
+│   ├── server.py                  # FastAPI app (~65 lines — app setup + router includes)
+│   ├── middleware.py              # Firebase Auth middleware (verify_firebase_token, verify_brand_owner)
+│   ├── clients.py                 # Singleton Gemini client (shared across all agents)
+│   ├── gcs_utils.py               # Shared GCS URI parsing utilities
+│   ├── constants.py               # Shared constants: PILLARS, DERIVATIVE_TYPES, PLATFORM_STRENGTHS,
+│   │                              #   PILLAR_DESCRIPTIONS, PILLAR_NARRATIVES, scoring weights
+│   ├── config.py                  # Environment variables
+│   ├── platforms.py               # Platform Registry — 11 platforms + 4 derivative overrides, PlatformSpec
+│   │                              #   + platform-specific scoring weights + structural modifier floors
+│   │
+│   ├── routers/                   # FastAPI routers (split from monolithic server.py)
+│   │   ├── brands.py             # /api/brands/* — CRUD, analyze, upload, logo, claim
+│   │   ├── plans.py              # /api/plans/* — calendar generation, day updates
+│   │   ├── posts.py              # /api/posts/* — list, approve, regenerate
+│   │   ├── generation.py         # /api/generate/* — SSE content generation stream
+│   │   ├── media.py              # /api/storage/*, /api/export/* — GCS proxy, ZIP export
+│   │   ├── integrations.py       # /api/brands/*/integrations/* — Notion OAuth, email, .ics
+│   │   └── voice.py              # /api/voice/* — Gemini Live WebSocket proxy
+│   │
 │   ├── agents/
 │   │   ├── brand_analyst.py       # Brand Analyst Agent + system prompt
 │   │   ├── strategy_agent.py      # Strategy Agent + calendar generation (social proof tiers)
-│   │   ├── content_creator.py     # Content Creator Agent (interleaved output, video_first)
+│   │   ├── content_creator.py     # Content Creator Agent (orchestrator — delegates to sub-modules)
+│   │   ├── caption_pipeline.py    # Caption generation pipeline (extracted from content_creator.py)
+│   │   ├── carousel_builder.py    # 3-slide parallel carousel generation (extracted)
+│   │   ├── hashtag_engine.py      # Hashtag generation, sanitization, per-platform limits (extracted)
+│   │   ├── quality_gates.py       # Pre/post-generation quality checks (extracted)
+│   │   ├── image_prompt_builder.py # Platform-aware image prompt construction (extracted)
 │   │   ├── video_creator.py       # Video Creator (Veo 3.1 integration)
-│   │   ├── review_agent.py        # Review Agent (calibrated 1-10 scoring, platform checks)
-│   │   ├── voice_coach.py         # Voice Coach prompt builder (tier-aware strategy)
+│   │   ├── review_agent.py        # Review Agent (multiplicative two-step scoring)
+│   │   ├── voice_coach.py         # Voice Coach prompt builder (tier-aware + calendar context)
 │   │   ├── social_voice_agent.py  # Platform voice analysis
 │   │   └── video_repurpose_agent.py # Video clip repurposing
+│   │
 │   ├── tools/
 │   │   ├── web_scraper.py         # fetch_website, extract colors
 │   │   └── brand_tools.py         # analyze_brand_colors, extract_brand_voice
-│   ├── platforms.py               # Platform Registry — 10 platforms, PlatformSpec dataclass
+│   │
 │   ├── services/
 │   │   ├── firestore_client.py    # All Firestore CRUD operations
 │   │   ├── storage_client.py      # Cloud Storage upload + signed URLs
 │   │   ├── budget_tracker.py      # Image generation budget tracking
 │   │   ├── brand_assets.py        # Brand reference image injection (logo, product photos, style ref)
-│   │   ├── notion_client.py       # Notion OAuth + database export
+│   │   ├── notion_client.py       # Notion OAuth + Fernet-encrypted token storage + database export
 │   │   └── email_client.py        # Resend API — .ics calendar email delivery
+│   │
 │   ├── models/
 │   │   ├── brand.py               # Pydantic models for BrandProfile
 │   │   ├── plan.py                # ContentPlan, DayBrief models
 │   │   ├── post.py                # Post, ReviewResult models
 │   │   └── api.py                 # Request/Response models
-│   ├── server.py                  # FastAPI app (REST + SSE + SPA catch-all)
-│   ├── config.py                  # Environment variables, constants
+│   │
 │   ├── requirements.txt
 │   ├── Dockerfile                 # Multi-stage: Node.js frontend build + Python runtime
 │   └── .env.example
 ├── frontend/
 │   ├── src/
 │   │   ├── App.tsx                # React Router (/, /brands, /onboard, /dashboard/:id, ...)
+│   │   ├── types/                 # Centralized type definitions (v1.7)
+│   │   │   ├── index.ts           # Shared interfaces (Brand, Plan, Post, Review, etc.)
+│   │   │   └── api.ts             # API response types (ApiResponse<T>, PaginatedResponse, etc.)
+│   │   ├── constants/
+│   │   │   └── statusMaps.ts      # Shared color/label maps for status badges
+│   │   ├── utils/
+│   │   │   └── downloads.ts       # downloadBlob helper (programmatic <a> click pattern)
 │   │   ├── pages/                 # Route-level page components
 │   │   │   ├── LandingPage.tsx    # Marketing landing page (hero, features, CTA)
 │   │   │   ├── BrandsPage.tsx     # Brand list with pagination + "Create" CTA
@@ -2422,6 +2559,10 @@ amplifi-hackaton/
 │   │   │   ├── TermsPage.tsx      # Terms of Service
 │   │   │   └── PrivacyPage.tsx    # Privacy Policy
 │   │   ├── components/            # Reusable UI components
+│   │   │   ├── ui/                # Shared primitives (v1.7)
+│   │   │   │   ├── PageContainer.tsx  # Consistent page wrapper (max-width, padding)
+│   │   │   │   ├── ErrorBanner.tsx    # Dismissible error display
+│   │   │   │   └── Spinner.tsx        # Loading spinner
 │   │   │   ├── NavBar.tsx         # Sticky nav (Home, My Brands, Export, Account dropdown)
 │   │   │   ├── PostCard.tsx       # Individual post display
 │   │   │   ├── PostGenerator.tsx  # SSE consumer, generation stream
@@ -2437,9 +2578,13 @@ amplifi-hackaton/
 │   │   │   ├── IntegrationConnect.tsx # Notion/email integration UI
 │   │   │   └── SocialConnect.tsx  # Social platform OAuth (future)
 │   │   ├── hooks/
-│   │   │   └── useAuth.ts        # Firebase Google Auth hook (signIn, signOut, uid, user)
+│   │   │   ├── useAuth.ts        # Firebase Google Auth hook (signIn, signOut, uid, user)
+│   │   │   ├── useFetch.ts       # Generic data fetching hook useFetch<T> (v1.7)
+│   │   │   ├── useIsMobile.ts    # Mobile breakpoint hook (useMediaQuery helper) (v1.7)
+│   │   │   └── useIsTablet.ts    # Tablet breakpoint hook (v1.7)
 │   │   ├── api/
-│   │   │   ├── client.ts         # REST API client (fetch wrapper)
+│   │   │   ├── client.ts         # REST API client (handleResponse + handleBlobResponse)
+│   │   │   │                     #   Sends Firebase ID token in Authorization: Bearer header
 │   │   │   └── firebase.ts       # Firebase config + Google Sign-In
 │   │   └── theme.ts              # Design system tokens (colors, spacing)
 │   ├── package.json              # React 19 + react-router-dom + Vite 7
@@ -3585,6 +3730,7 @@ RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
 | `NOTION_CLIENT_ID` | | Notion OAuth client ID | `315d872b-...` |
 | `NOTION_CLIENT_SECRET` | | Notion OAuth client secret | `secret_...` |
 | `NOTION_REDIRECT_URI` | | Notion OAuth redirect URI | `https://your-url/auth/notion/callback` |
+| `FERNET_KEY` | | Fernet encryption key for Notion OAuth token encryption at rest | `base64-encoded-32-byte-key` |
 
 ### Client-Side (Build-Time — Docker `--build-arg`)
 

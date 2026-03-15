@@ -1,23 +1,58 @@
 graph TB
     subgraph Browser["User Browser (React 19 + TypeScript)"]
         FE["Frontend<br/>React 19 + TypeScript<br/>Vite 7<br/>React Router"]
-        AUTH["Firebase Google Auth<br/>signInWithPopup<br/>Account Dropdown<br/>Profile Photo"]
+        AUTH["Firebase Google Auth<br/>signInWithPopup<br/>ID Token → Bearer Header<br/>Account Dropdown"]
         PAGES["Pages<br/>Landing (marketing)<br/>Brands (paginated list)<br/>Dashboard / Generate<br/>Post History<br/>Export / Edit Brand"]
+        FE_HOOKS["Shared Hooks & Types<br/>useFetch&lt;T&gt; · useIsMobile · useIsTablet<br/>types/index.ts · types/api.ts<br/>constants/statusMaps.ts<br/>utils/downloads.ts<br/>ui/PageContainer · ErrorBanner · Spinner"]
     end
 
     subgraph CloudRun["Google Cloud Run"]
-        API["FastAPI Backend<br/>Port 8080<br/>REST + SSE Streaming<br/>SPA Catch-All Routing"]
+        subgraph AppSetup["server.py (~65 lines)"]
+            APP["FastAPI App<br/>CORS · Router Includes<br/>SPA Catch-All<br/>(path traversal prevention)"]
+        end
+
+        subgraph Middleware["Auth Middleware Layer"]
+            MW["middleware.py<br/>verify_firebase_token()<br/>firebase_admin.verify_id_token()<br/>verify_brand_owner()<br/>Depends() on all routers"]
+        end
+
+        subgraph Routers["FastAPI Routers (7 modules)"]
+            R_BRANDS["brands.py<br/>/api/brands/*"]
+            R_PLANS["plans.py<br/>/api/plans/*"]
+            R_POSTS["posts.py<br/>/api/posts/*"]
+            R_GEN["generation.py<br/>/api/generate/*<br/>SSE Stream"]
+            R_MEDIA["media.py<br/>/api/storage/*<br/>/api/export/*"]
+            R_INT["integrations.py<br/>/api/brands/*/integrations/*<br/>Notion OAuth · Email · .ics"]
+            R_VOICE["voice.py<br/>/api/voice/*<br/>WebSocket Proxy"]
+        end
 
         subgraph Pipeline["ADK Sequential Pipeline"]
             BA["Brand Analyst Agent<br/>URL Scraping + Brand DNA<br/>Colors, Tone, Audience<br/>Temperature 0.15"]
             STR["Strategy Agent<br/>Multi-Platform Calendar<br/>AI-Researched Frequency<br/>Google Search Grounding<br/>Pillar-Based Planning<br/>Social Proof Tiers"]
-            CC["Content Creator Agent<br/>Gemini Interleaved Output<br/>Text + Image Together<br/>Carousel: 3-Slide Parallel Gen<br/>video_first: Caption-Only then Veo"]
-            RA["Review Agent<br/>Calibrated 1-10 Scoring<br/>5 Engagement Dimensions<br/>Platform-Specific Checks<br/>Engagement Prediction"]
+            CC["Content Creator Agent<br/>(Orchestrator)"]
+            RA["Review Agent<br/>Multiplicative Two-Step Scoring<br/>LLM → engagement_scores +<br/>structural_issues →<br/>code computes score"]
+        end
+
+        subgraph CCModules["Content Creator Sub-Modules"]
+            CP["caption_pipeline.py<br/>Caption Generation"]
+            CB["carousel_builder.py<br/>3-Slide Parallel Gen"]
+            HE["hashtag_engine.py<br/>Sanitization · Limits"]
+            QG["quality_gates.py<br/>Pre/Post Quality Checks"]
+            IPB["image_prompt_builder.py<br/>Platform-Aware Prompts"]
+        end
+
+        subgraph Scoring["Scoring Computation"]
+            SC["Score = content_quality ×<br/>structural_modifier<br/>Platform-specific weights<br/>(15 profiles: 11 platforms +<br/>4 derivative overrides)<br/>Structural floor: 0.60–0.92"]
         end
 
         subgraph Support["Supporting Agents"]
-            VC["Voice Coach<br/>Gemini Live API<br/>BidiGenerateContent<br/>Tier-Aware Strategy Context"]
+            VC["Voice Coach<br/>Gemini Live API<br/>BidiGenerateContent<br/>Tier-Aware Strategy +<br/>Calendar Context<br/>(plan_id → days, scores, trends)"]
             VID["Video Creator<br/>Veo 3.1<br/>Reels / TikTok Clips"]
+        end
+
+        subgraph Shared["Shared Modules"]
+            CL["clients.py<br/>Singleton Gemini Client"]
+            GU["gcs_utils.py<br/>GCS URI Parsing"]
+            CO["constants.py<br/>PILLARS · DERIVATIVE_TYPES<br/>PLATFORM_STRENGTHS<br/>PILLAR_DESCRIPTIONS<br/>PILLAR_NARRATIVES<br/>Scoring Weights"]
         end
 
         subgraph Services["Backend Services"]
@@ -26,16 +61,16 @@ graph TB
             HS["Hashtag Sanitizer<br/>Stopword Filter<br/>Per-Platform Limits"]
             EX["Export Service<br/>ZIP + Notion + .ics<br/>Direct GCS Download"]
             IF["Image Fallback<br/>Separate Image-Only Gen<br/>On Interleaved Failure"]
-            PR["Platform Registry<br/>platforms.py<br/>10 Platforms<br/>PlatformSpec Dataclass"]
+            PR["Platform Registry<br/>platforms.py<br/>11 Platforms + 4 Derivative Overrides<br/>PlatformSpec + Scoring Weights"]
             BA_SVC["Brand Assets Service<br/>brand_assets.py<br/>Logo + Product Photo Cache"]
-            NC["Notion Client<br/>notion_client.py<br/>OAuth + Database Export"]
+            NC["Notion Client<br/>notion_client.py<br/>OAuth + Fernet Encryption<br/>(AES-128-CBC + HMAC-SHA256)<br/>Database Export"]
             EC["Email Client<br/>email_client.py<br/>Resend API / .ics Delivery"]
         end
     end
 
     subgraph CICD["CI/CD Pipeline"]
         DS["deploy.sh<br/>One-Command Deploy<br/>Reads .env Config"]
-        CB["Cloud Build<br/>cloudbuild.yaml<br/>3-Step Pipeline"]
+        CBuild["Cloud Build<br/>cloudbuild.yaml<br/>3-Step Pipeline"]
         AR["Artifact Registry<br/>Docker Images<br/>amplifi:latest"]
         TF["Terraform IaC<br/>main.tf<br/>GCP Resource Provisioning"]
     end
@@ -43,7 +78,7 @@ graph TB
     subgraph GCP["Google Cloud Platform"]
         FS[("Cloud Firestore<br/>Brand Profiles (owner_uid)<br/>Content Plans + Posts<br/>Video Jobs<br/>Frequency Cache (7-day TTL)")]
         GCS[("Cloud Storage<br/>Generated Images<br/>Generated Videos<br/>Uploaded Assets")]
-        FA["Firebase Auth<br/>Google Sign-In Provider<br/>Persistent UIDs"]
+        FA["Firebase Auth<br/>Google Sign-In Provider<br/>Persistent UIDs<br/>ID Token Verification"]
     end
 
     subgraph Gemini["Google Gemini API"]
@@ -51,50 +86,103 @@ graph TB
         GLive["Gemini Live API<br/>BidiGenerateContent<br/>Multi-Turn Voice"]
     end
 
-    FE <-->|"REST + SSE<br/>/api/*"| API
-    AUTH <-->|"Google Sign-In<br/>UID + Profile"| FA
+    %% Browser to backend
+    FE <-->|"REST + SSE<br/>/api/*<br/>Authorization: Bearer token"| APP
+    AUTH <-->|"Google Sign-In<br/>UID + ID Token"| FA
     FE --- PAGES
+    FE --- FE_HOOKS
 
-    API --> BA
+    %% App → Middleware → Routers
+    APP --> MW
+    MW --> R_BRANDS
+    MW --> R_PLANS
+    MW --> R_POSTS
+    MW --> R_GEN
+    MW --> R_MEDIA
+    MW --> R_INT
+    MW --> R_VOICE
+
+    %% Middleware verifies against Firebase Auth
+    MW -->|"verify_id_token()"| FA
+
+    %% Routers → Pipeline
+    R_BRANDS --> BA
+    R_PLANS --> STR
+    R_GEN --> CC
+    R_GEN --> RA
+
+    %% Pipeline flow
     BA --> STR
     STR --> CC
     CC --> RA
 
-    API --> VC
-    API --> VID
+    %% Content Creator → Sub-modules
+    CC --> CP
+    CC --> CB
+    CC --> HE
+    CC --> QG
+    CC --> IPB
 
+    %% Review Agent → Scoring
+    RA --> SC
+    SC --> PR
+
+    %% Router → Support
+    R_VOICE --> VC
+    R_POSTS --> VID
+
+    %% Agent → Services
     BA --> WS
     BA --> BT
     CC --> HS
     CC --> IF
     RA --> HS
-    API --> EX
+    R_MEDIA --> EX
 
+    %% Shared modules
+    CL --> BA
+    CL --> STR
+    CL --> CC
+    CL --> RA
+    CO --> STR
+    CO --> CC
+    CO --> RA
+    CO --> VC
+    GU --> EX
+    GU --> R_MEDIA
+
+    %% Platform Registry
     PR --> CC
     PR --> RA
     CC --> BA_SVC
     VID --> BA_SVC
     BA_SVC -->|"Reference Images"| GCS
-    API --> NC
-    API --> EC
-    NC -->|"OAuth + Export"| FS
+    R_INT --> NC
+    R_INT --> EC
+    NC -->|"Fernet-Encrypted<br/>OAuth Tokens"| FS
 
+    %% Gemini API calls
     BA -->|"Brand Analysis<br/>(temp 0.15)"| GFlash
     STR -->|"Strategy + Frequency<br/>Google Search Grounding"| GFlash
     CC -->|"Interleaved<br/>Text + Image"| GFlash
     IF -->|"Image-Only<br/>Fallback"| GFlash
-    RA -->|"Review + Revise"| GFlash
-    VC -->|"Voice Sessions"| GLive
+    RA -->|"engagement_scores +<br/>structural_issues"| GFlash
+    VC -->|"Voice Sessions<br/>+ Calendar Context"| GLive
 
-    API --> FS
-    API --> GCS
+    %% Data stores
+    R_BRANDS --> FS
+    R_PLANS --> FS
+    R_POSTS --> FS
+    R_GEN --> FS
+    R_MEDIA --> GCS
     CC -->|"Store Images"| GCS
     VID -->|"Store Video"| GCS
     EX -->|"Download Media<br/>blob.download_as_bytes"| GCS
 
-    DS -->|"Triggers"| CB
-    CB -->|"Step 1: Docker Build<br/>Step 2: Push"| AR
-    AR -->|"Step 3: Deploy"| API
+    %% CI/CD
+    DS -->|"Triggers"| CBuild
+    CBuild -->|"Step 1: Docker Build<br/>Step 2: Push"| AR
+    AR -->|"Step 3: Deploy"| APP
     TF -->|"Provisions"| FS
     TF -->|"Provisions"| GCS
     TF -->|"Provisions"| AR
@@ -109,14 +197,24 @@ graph TB
     classDef auth fill:#ff9800,stroke:#f57c00,color:#fff
     classDef infra fill:#2e7d32,stroke:#1b5e20,color:#fff
     classDef pages fill:#1a1a2e,stroke:#8ab4f8,color:#fff
+    classDef router fill:#1b5e20,stroke:#4caf50,color:#fff
+    classDef middleware fill:#e65100,stroke:#ff6d00,color:#fff
+    classDef shared fill:#4a148c,stroke:#7c43bd,color:#fff
+    classDef scoring fill:#880e4f,stroke:#c2185b,color:#fff
+    classDef submodule fill:#311b92,stroke:#7e57c2,color:#fff
 
     class FE browser
     class AUTH auth
-    class PAGES pages
-    class API cloud
+    class PAGES,FE_HOOKS pages
+    class APP cloud
+    class MW middleware
+    class R_BRANDS,R_PLANS,R_POSTS,R_GEN,R_MEDIA,R_INT,R_VOICE router
     class BA,STR,CC,RA pipeline
+    class CP,CB,HE,QG,IPB submodule
+    class SC scoring
     class VC,VID support
+    class CL,GU,CO shared
     class WS,BT,HS,EX,IF,PR,BA_SVC,NC,EC tools
     class FS,GCS,FA gcp
     class GFlash,GLive gemini
-    class DS,CB,AR,TF infra
+    class DS,CBuild,AR,TF infra

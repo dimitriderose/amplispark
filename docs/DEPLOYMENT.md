@@ -51,8 +51,8 @@ pip install -r requirements.txt
 
 **Dependencies installed:**
 - `fastapi==0.115.0` + `uvicorn[standard]==0.30.0` — ASGI web framework
-- `google-adk==0.5.0` — Google Agent Development Kit (ADK sequential pipeline)
-- `google-genai==1.0.0` — Gemini API (interleaved text+image generation)
+- `google-adk>=1.25.0` — Google Agent Development Kit (ADK sequential pipeline)
+- `google-genai>=1.64.0` — Gemini API (interleaved text+image generation)
 - `google-cloud-firestore==2.19.0` — Firestore client
 - `google-cloud-storage==2.18.0` — Cloud Storage client (images, video)
 - `httpx==0.27.0` — Async HTTP (web scraping, external API calls)
@@ -61,6 +61,8 @@ pip install -r requirements.txt
 - `python-dotenv==1.0.0` — Environment variable loading
 - `python-multipart==0.0.9` — File upload handling
 - `sse-starlette==1.8.2` — Server-Sent Events (streaming generation)
+- `cryptography==42.0.0` — Fernet encryption for Notion OAuth token storage
+- `firebase-admin==6.5.0` — Firebase Admin SDK for ID token verification
 
 ### 1.3 Environment Variables
 
@@ -86,6 +88,10 @@ CORS_ORIGINS=http://localhost:5173
 
 # === OPTIONAL: Gemini model override ===
 GEMINI_MODEL=gemini-2.5-flash
+
+# === OPTIONAL: Token encryption (Notion OAuth) ===
+# Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+TOKEN_ENCRYPT_KEY=your-fernet-key
 ```
 
 **Frontend** — create `frontend/.env.local` with your Firebase config:
@@ -260,6 +266,10 @@ NOTION_CLIENT_ID=your-notion-client-id
 NOTION_CLIENT_SECRET=your-notion-client-secret
 NOTION_REDIRECT_URI=https://your-cloud-run-url/auth/notion/callback
 
+# Token encryption for Notion OAuth tokens (Fernet)
+# Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+TOKEN_ENCRYPT_KEY=your-fernet-key
+
 # Resend email (optional)
 RESEND_API_KEY=your-resend-api-key
 ```
@@ -278,7 +288,7 @@ This single command:
 3. Submits a Cloud Build job with substitutions
 4. Cloud Build builds the Docker image (with `VITE_FIREBASE_*` as build args)
 5. Pushes the image to Artifact Registry
-6. Deploys to Cloud Run with all runtime env vars (`GOOGLE_API_KEY`, `CORS_ORIGINS`, `RESEND_API_KEY`, `NOTION_*`, `GEMINI_MODEL`)
+6. Deploys to Cloud Run with all runtime env vars (`GOOGLE_API_KEY`, `CORS_ORIGINS`, `RESEND_API_KEY`, `NOTION_*`, `TOKEN_ENCRYPT_KEY`, `GEMINI_MODEL`)
 7. Prints the live URL
 
 ### 2.5 Cloud Build Pipeline Details
@@ -289,11 +299,11 @@ The `cloudbuild.yaml` defines a 3-step pipeline:
 |------|------|-------------|
 | 1. Docker Build | Builds multi-stage image | Firebase `VITE_*` vars passed as `--build-arg` (baked into JS bundle) |
 | 2. Push | Pushes to Artifact Registry | `{region}-docker.pkg.dev/{project}/amplifi/amplifi:latest` |
-| 3. Deploy | Deploys to Cloud Run | Runtime env vars: `GOOGLE_API_KEY`, `CORS_ORIGINS`, `RESEND_API_KEY`, `NOTION_*`, `GEMINI_MODEL` |
+| 3. Deploy | Deploys to Cloud Run | Runtime env vars: `GOOGLE_API_KEY`, `CORS_ORIGINS`, `RESEND_API_KEY`, `NOTION_*`, `TOKEN_ENCRYPT_KEY`, `GEMINI_MODEL` |
 
 **Build-time vs runtime env vars:**
 - **Build-time** (`--build-arg`): `VITE_FIREBASE_*` — baked into the JS bundle by Vite, cannot be changed after build
-- **Runtime** (`--update-env-vars`): `GOOGLE_API_KEY`, `CORS_ORIGINS`, `RESEND_API_KEY`, `NOTION_*`, `GEMINI_MODEL` — read by the Python backend at startup. Uses `--update-env-vars` (not `--set-env-vars`) to preserve any existing env vars on the Cloud Run service
+- **Runtime** (`--update-env-vars`): `GOOGLE_API_KEY`, `CORS_ORIGINS`, `RESEND_API_KEY`, `NOTION_*`, `TOKEN_ENCRYPT_KEY`, `GEMINI_MODEL` — read by the Python backend at startup. Uses `--update-env-vars` (not `--set-env-vars`) to preserve any existing env vars on the Cloud Run service
 
 ### 2.6 Post-Deploy: Firebase Auth Domain
 
@@ -387,7 +397,8 @@ gcloud storage buckets update gs://$PROJECT_ID-amplifi-assets --cors-file=cors.j
 | `RESEND_API_KEY` | No | `""` | Resend API key for email delivery (.ics calendar) |
 | `NOTION_CLIENT_ID` | No | `""` | Notion OAuth client ID |
 | `NOTION_CLIENT_SECRET` | No | `""` | Notion OAuth client secret |
-| `NOTION_REDIRECT_URI` | No | `""` | Notion OAuth redirect URI (must match Cloud Run URL) |
+| `NOTION_REDIRECT_URI` | Yes (if Notion) | — | Notion OAuth redirect URI — **no default**, must be set explicitly (e.g., `https://your-url.run.app/auth/notion/callback`) |
+| `TOKEN_ENCRYPT_KEY` | No | — | Fernet encryption key for Notion OAuth tokens. Without it, tokens stored as plaintext (warning logged). Generate: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
 
 ### Client-Side (Build-Time)
 
@@ -441,7 +452,7 @@ amplifi-hackaton/
 │   ├── tools/
 │   │   ├── web_scraper.py            # httpx + BeautifulSoup URL crawling
 │   │   └── brand_tools.py            # ADK tool wrappers for brand analysis
-│   ├── server.py                     # FastAPI app (REST + SSE + SPA catch-all)
+│   ├── server.py                     # FastAPI app setup + router includes (REST + SSE + SPA catch-all)
 │   ├── config.py                     # Environment config + budget constants
 │   ├── platforms.py                  # Platform Registry (10 platforms)
 │   ├── Dockerfile                    # Multi-stage: Node build + Python runtime
@@ -592,6 +603,42 @@ terraform destroy   # Removes all provisioned resources
 
 ---
 
+## Part 7: Security
+
+### 7.1 Authentication Flow
+
+All API requests require a Firebase ID token in the `Authorization: Bearer <token>` header. The backend verifies tokens using the **Firebase Admin SDK** (`firebase_admin`).
+
+**How it works:**
+1. Frontend signs in via Firebase Google Sign-In and obtains an ID token
+2. Every API call includes `Authorization: Bearer <id_token>` header
+3. Backend auth middleware verifies the token using `firebase_admin.auth.verify_id_token()`
+4. Verified user UID is attached to the request for downstream use (Firestore scoping, etc.)
+
+**Credentials:**
+- **Cloud Run (production):** Uses Application Default Credentials (ADC) automatically — no service account key file needed. The Cloud Run service account is auto-detected by the Firebase Admin SDK.
+- **Local development:** Uses `gcloud auth application-default login` credentials (already set up in Part 1).
+- **No new env var needed** for Firebase Admin SDK — it discovers credentials via ADC.
+
+### 7.2 Notion Token Encryption
+
+Notion OAuth access tokens are encrypted at rest in Firestore using **Fernet symmetric encryption** (AES-128-CBC via the `cryptography` package).
+
+| Component | Details |
+|-----------|---------|
+| Algorithm | Fernet (AES-128-CBC + HMAC-SHA256) |
+| Key env var | `TOKEN_ENCRYPT_KEY` |
+| Key generation | `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
+| Fallback | If `TOKEN_ENCRYPT_KEY` is not set, tokens are stored as plaintext with a warning log |
+
+**Important:** Once tokens are encrypted with a key, changing or losing that key makes existing stored tokens unreadable. Back up the key securely.
+
+### 7.3 CORS
+
+CORS is configured via the `CORS_ORIGINS` env var. The backend uses `allow_headers=["*"]` which permits the `Authorization` header needed for Firebase auth. In production, set `CORS_ORIGINS` to your exact Cloud Run URL (not `*`).
+
+---
+
 ## Troubleshooting
 
 | Issue | Cause | Fix |
@@ -612,6 +659,10 @@ terraform destroy   # Removes all provisioned resources
 | Firestore `permission denied` (403) | Cloud Run service account missing role | Grant `roles/datastore.user` to the compute service account (see §2.2) |
 | SPA routes return 404 | Backend not serving `index.html` for deep links | Backend uses catch-all route — ensure you're on the latest `server.py` |
 | Notion OAuth callback 404 | Same as SPA routing issue | Backend catch-all serves `index.html` for `/auth/notion/callback` |
+| `401 Unauthorized` on all API calls | Firebase ID token missing or invalid | Ensure frontend sends `Authorization: Bearer <token>` header; check that Firebase project IDs match between frontend and backend |
+| `TOKEN_ENCRYPT_KEY` warning in logs | Env var not set | Generate a Fernet key and set `TOKEN_ENCRYPT_KEY` — tokens will be stored as plaintext until set |
+| Notion tokens unreadable after redeploy | `TOKEN_ENCRYPT_KEY` changed or lost | Tokens encrypted with the old key cannot be decrypted; users must re-authorize Notion |
+| `NOTION_REDIRECT_URI` not set error | No default fallback | Set `NOTION_REDIRECT_URI` explicitly in `.env` (e.g., `https://your-url.run.app/auth/notion/callback`) |
 
 ---
 
