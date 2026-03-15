@@ -536,6 +536,15 @@ export default function EditBrandPage() {
         </Section>
 
         {/* ── Actions ────────────────────────────────────────── */}
+        {platformMode === 'manual' && selectedPlatforms.length === 0 && (
+          <div style={{
+            padding: '10px 14px', borderRadius: 8,
+            background: `${A.coral}12`, border: `1px solid ${A.coral}30`,
+            fontSize: 12, color: A.coral, fontWeight: 500,
+          }}>
+            Select at least one platform before saving. Switch to manual platform selection above or choose "Let AI choose platforms".
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 12, paddingTop: 8, paddingBottom: 32 }}>
           <button onClick={handleSave} disabled={saving || (platformMode === 'manual' && selectedPlatforms.length === 0)} style={{
             flex: 1, padding: '14px', borderRadius: 10, border: 'none',

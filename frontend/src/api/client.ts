@@ -192,6 +192,9 @@ export const api = {
       return r.json()
     }),
 
+  regeneratePost: (brandId: string, postId: string) =>
+    request<{ generate_url: string }>(`/api/brands/${brandId}/posts/${postId}/regenerate`, { method: 'POST' }),
+
   refreshPlanResearch: (brandId: string, planId: string) =>
     fetch(`/api/brands/${brandId}/plans/${planId}/refresh-research`, { method: 'POST' }).then(r => {
       if (!r.ok) return r.json().then(e => Promise.reject(new Error(e?.detail || 'Refresh failed')))

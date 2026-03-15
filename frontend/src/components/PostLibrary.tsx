@@ -438,7 +438,26 @@ export default function PostLibrary({ brandId, planId, defaultFilter = 'all', no
         }}>
           {visiblePosts.length === 0
             ? 'No posts yet — generate some from the calendar above!'
-            : `No ${filter} posts${platformFilter !== 'all' ? ` on ${platformFilter}` : ''}`}
+            : (
+              <>
+                <p style={{ margin: '0 0 8px' }}>
+                  No {filter !== 'all' ? `"${FILTERS.find(f => f.key === filter)?.label || filter}"` : ''} posts{platformFilter !== 'all' ? ` on ${platformFilter}` : ''} found
+                  {visiblePosts.length > 0 && (
+                    <span style={{ color: A.textSoft }}> — {visiblePosts.length} total post{visiblePosts.length !== 1 ? 's' : ''} available</span>
+                  )}
+                </p>
+                <button
+                  onClick={() => { setFilter('all'); setPlatformFilter('all') }}
+                  style={{
+                    padding: '6px 14px', borderRadius: 6, border: `1px solid ${A.border}`,
+                    background: 'transparent', color: A.indigo, fontSize: 12,
+                    fontWeight: 500, cursor: 'pointer',
+                  }}
+                >
+                  Clear filters
+                </button>
+              </>
+            )}
         </div>
       )}
 

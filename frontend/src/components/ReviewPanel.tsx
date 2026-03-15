@@ -167,7 +167,9 @@ export default function ReviewPanel({ brandId, postId, reviewKey, onApproved, in
             background: A.surfaceAlt, border: `1px solid ${A.border}`,
           }}>
             {/* Score circle */}
-            <div style={{
+            <div
+              aria-label={`Review score: ${review.score} out of 10`}
+              style={{
               width: 56, height: 56, borderRadius: '50%',
               background: `conic-gradient(${A.indigo} ${review.score * 36}deg, ${A.surfaceAlt} 0deg)`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',

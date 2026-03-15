@@ -167,7 +167,7 @@ export default function LandingPage() {
               boxShadow: `0 8px 32px ${A.indigo}40`,
             }}
           >
-            Build My Brand Profile →
+            Get Started Free →
           </button>
           <button
             onClick={() => {

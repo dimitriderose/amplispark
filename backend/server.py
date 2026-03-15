@@ -1132,6 +1132,25 @@ async def approve_post_endpoint(brand_id: str, post_id: str):
     return {"status": "approved", "post_id": post_id}
 
 
+@app.post("/api/brands/{brand_id}/posts/{post_id}/regenerate")
+async def regenerate_post(brand_id: str, post_id: str):
+    """Delete a failed/stuck post and return the generate URL so the frontend can retry."""
+    post = await firestore_client.get_post(brand_id, post_id)
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    status = post.get("status", "")
+    if status not in ("failed", "generating"):
+        raise HTTPException(status_code=409, detail="Only failed or stuck posts can be regenerated")
+    plan_id = post.get("plan_id")
+    day_index = post.get("day_index")
+    if plan_id is None or day_index is None:
+        raise HTTPException(status_code=422, detail="Post is missing plan_id or day_index")
+    await firestore_client.delete_post(brand_id, post_id)
+    return {
+        "generate_url": f"/generate/{plan_id}/{day_index}?brand_id={brand_id}"
+    }
+
+
 @app.post("/api/brands/{brand_id}/posts/{post_id}/edit-media")
 async def edit_post_media(brand_id: str, post_id: str, body: EditMediaBody):
     """Apply a conversational edit to a post's image using AI."""

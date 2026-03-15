@@ -1,10 +1,11 @@
-import { useParams, useSearchParams } from 'react-router-dom'
+import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { A } from '../theme'
 import { useIsMobile } from '../hooks/useIsMobile'
 import PostLibrary from '../components/PostLibrary'
 
 export default function ExportPage() {
   const isMobile = useIsMobile()
+  const navigate = useNavigate()
   const { brandId } = useParams<{ brandId: string }>()
   const [searchParams] = useSearchParams()
   const planId = searchParams.get('plan_id') || undefined
@@ -21,6 +22,17 @@ export default function ExportPage() {
     <div style={{
       maxWidth: 1100, margin: '0 auto', padding: isMobile ? '16px 12px' : '32px 24px',
     }}>
+      <button
+        onClick={() => navigate(`/dashboard/${brandId}`)}
+        style={{
+          marginBottom: 16, padding: '6px 12px', borderRadius: 6,
+          border: `1px solid ${A.border}`, background: 'transparent',
+          color: A.textSoft, fontSize: 13, cursor: 'pointer',
+        }}
+      >
+        ← Back to Dashboard
+      </button>
+
       {/* M-8: Differentiate export page from dashboard with clear workflow header */}
       <div style={{ marginBottom: 28 }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: A.text, margin: 0, marginBottom: 4 }}>

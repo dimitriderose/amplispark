@@ -180,22 +180,33 @@ export default function ContentCalendar({ plan, brandId, posts, defaultImageStyl
           {trendSummary.platform_trends && Object.keys(trendSummary.platform_trends).length > 0 && (
             <div style={{ fontSize: 11, color: '#555', marginBottom: 3 }}>
               <strong>Captions:</strong>{' '}
-              {Object.values(trendSummary.platform_trends)
-                .flatMap((t: any) => t?.trending_hooks?.slice(0, 2) ?? [])
-                .slice(0, 4)
-                .join(' · ')}
+              {isMobile
+                ? Object.values(trendSummary.platform_trends)
+                    .flatMap((t: any) => t?.trending_hooks?.slice(0, 2) ?? [])
+                    .slice(0, 4)
+                    .map((hook: string, i: number) => <div key={i} style={{ marginLeft: 8, marginTop: 2 }}>• {hook}</div>)
+                : Object.values(trendSummary.platform_trends)
+                    .flatMap((t: any) => t?.trending_hooks?.slice(0, 2) ?? [])
+                    .slice(0, 4)
+                    .join(' · ')}
             </div>
           )}
           {trendSummary.visual_trends && (
             <div style={{ fontSize: 11, color: '#555', marginBottom: 3 }}>
               <strong>Visuals:</strong>{' '}
-              {[...(trendSummary.visual_trends.trending_styles?.slice(0, 2) ?? []), trendSummary.visual_trends.format_performance].filter(Boolean).join(' · ').slice(0, 120)}
+              {isMobile
+                ? [...(trendSummary.visual_trends.trending_styles?.slice(0, 2) ?? []), trendSummary.visual_trends.format_performance].filter(Boolean)
+                    .map((item: string, i: number) => <div key={i} style={{ marginLeft: 8, marginTop: 2 }}>• {item}</div>)
+                : [...(trendSummary.visual_trends.trending_styles?.slice(0, 2) ?? []), trendSummary.visual_trends.format_performance].filter(Boolean).join(' · ').slice(0, 120)}
             </div>
           )}
           {trendSummary.video_trends && (
             <div style={{ fontSize: 11, color: '#555' }}>
               <strong>Video:</strong>{' '}
-              {[...(trendSummary.video_trends.trending_formats?.slice(0, 2) ?? []), trendSummary.video_trends.optimal_lengths].filter(Boolean).join(' · ').slice(0, 120)}
+              {isMobile
+                ? [...(trendSummary.video_trends.trending_formats?.slice(0, 2) ?? []), trendSummary.video_trends.optimal_lengths].filter(Boolean)
+                    .map((item: string, i: number) => <div key={i} style={{ marginLeft: 8, marginTop: 2 }}>• {item}</div>)
+                : [...(trendSummary.video_trends.trending_formats?.slice(0, 2) ?? []), trendSummary.video_trends.optimal_lengths].filter(Boolean).join(' · ').slice(0, 120)}
             </div>
           )}
         </div>

@@ -402,7 +402,10 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
                 aria-label={status === 'complete' && savedCaption ? 'Edit caption' : undefined}
                 style={{
                   minHeight: 120, padding: '12px 14px', borderRadius: 10,
-                  background: A.surfaceAlt, border: `1px solid ${A.border}`,
+                  background: A.surfaceAlt,
+                  border: status === 'complete' && savedCaption
+                    ? `1.5px dashed ${A.indigo}40`
+                    : `1px solid ${A.border}`,
                   fontSize: 14, color: A.text, lineHeight: 1.6,
                   position: 'relative',
                   paddingRight: status === 'complete' && savedCaption ? 72 : 14,
@@ -445,7 +448,7 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
               </div>
               {/* Edit hint — below caption, not overlapping text */}
               {status === 'complete' && savedCaption && (
-                <p style={{ fontSize: 10, color: A.textMuted, margin: '4px 0 0', opacity: 0.7, userSelect: 'none' }}>
+                <p style={{ fontSize: 11, color: A.indigo, margin: '6px 0 0', fontWeight: 500, userSelect: 'none' }}>
                   ✏️ Click caption to edit
                 </p>
               )}

@@ -14,6 +14,7 @@ import VoiceCoach from '../components/VoiceCoach'
 import SocialConnect from '../components/SocialConnect'
 import IntegrationConnect from '../components/IntegrationConnect'
 import VideoRepurpose from '../components/VideoRepurpose'
+import Spinner from '../components/Spinner'
 import { useIsMobile } from '../hooks/useIsMobile'
 
 type Tab = 'calendar' | 'posts' | 'connections' | 'video'
@@ -31,7 +32,7 @@ export default function DashboardPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const { brand, loading: brandLoading, error: brandError, updateBrand: _updateBrand, refetch: refetchBrand } = useBrandProfile(brandId)
-  const { plan, generating, error: planError, generatePlan, setDayCustomPhoto, clearPlan } = useContentPlan(brandId ?? '')
+  const { plan, loading: planLoading, generating, error: planError, generatePlan, setDayCustomPhoto, clearPlan } = useContentPlan(brandId ?? '')
   const { posts: calendarPosts } = usePostLibrary(brandId ?? '', plan?.plan_id)
   const [activeTab, setActiveTab] = useState<Tab>('calendar')
   const [postsSubTab, setPostsSubTab] = useState<'weekly' | 'history'>('weekly')
@@ -55,6 +56,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (plan?.plan_id && brandId) {
       sessionStorage.setItem(`amplifi_plan_${brandId}`, plan.plan_id)
+      sessionStorage.setItem(`amplifi_brandname_${brandId}`, brand?.business_name || '')
     } else if (brandId) {
       sessionStorage.removeItem(`amplifi_plan_${brandId}`)
     }
@@ -214,7 +216,13 @@ export default function DashboardPage() {
       </div>
 
       {/* ── Calendar Tab ─────────────────────────────────── */}
-      {activeTab === 'calendar' && (
+      {activeTab === 'calendar' && planLoading && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40, gap: 10 }}>
+          <Spinner size={18} />
+          <span style={{ fontSize: 13, color: A.textSoft }}>Loading calendar...</span>
+        </div>
+      )}
+      {activeTab === 'calendar' && !planLoading && (
         plan ? (
           <div style={{ padding: 24, borderRadius: 12, background: A.surface, border: `1px solid ${A.border}` }}>
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>

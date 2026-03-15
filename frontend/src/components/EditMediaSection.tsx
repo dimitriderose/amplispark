@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { A } from '../theme'
 import { api } from '../api/client'
+import Spinner from './Spinner'
 
 interface EditMediaSectionProps {
   postId: string
@@ -293,7 +294,7 @@ export default function EditMediaSection({
                 whiteSpace: 'nowrap',
               }}
             >
-              {isLoading ? '⏳' : 'Send'}
+              {isLoading ? <Spinner size={14} color="#fff" /> : 'Send'}
             </button>
           </div>
 

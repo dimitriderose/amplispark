@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { A } from '../theme'
 import { api } from '../api/client'
 
@@ -24,6 +24,8 @@ export default function IntegrationConnect({ brandId, notion, onUpdate }: Props)
   const [error, setError] = useState('')
   const [databases, setDatabases] = useState<{ id: string; title: string }[]>([])
   const [loadingDbs, setLoadingDbs] = useState(false)
+  const [dbTimeout, setDbTimeout] = useState(false)
+  const dbTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Auto-fetch databases when connected but no database selected
   useEffect(() => {
@@ -61,15 +63,28 @@ export default function IntegrationConnect({ brandId, notion, onUpdate }: Props)
   const fetchDatabases = async () => {
     setLoadingDbs(true)
     setError('')
+    setDbTimeout(false)
+    if (dbTimeoutRef.current) clearTimeout(dbTimeoutRef.current)
+    dbTimeoutRef.current = setTimeout(() => {
+      setDbTimeout(true)
+      setLoadingDbs(false)
+    }, 10000)
     try {
       const res = await api.getNotionDatabases(brandId)
+      if (dbTimeoutRef.current) clearTimeout(dbTimeoutRef.current)
+      setDbTimeout(false)
       setDatabases(res.databases)
     } catch (err: any) {
+      if (dbTimeoutRef.current) clearTimeout(dbTimeoutRef.current)
       setError(err.message || 'Failed to load databases')
     } finally {
       setLoadingDbs(false)
     }
   }
+
+  useEffect(() => {
+    return () => { if (dbTimeoutRef.current) clearTimeout(dbTimeoutRef.current) }
+  }, [])
 
   const handleSelectDatabase = async (dbId: string, dbName: string) => {
     setLoading(true)
@@ -182,7 +197,22 @@ export default function IntegrationConnect({ brandId, notion, onUpdate }: Props)
                 <p style={{ fontSize: 12, color: A.amber, margin: '0 0 8px' }}>
                   Select a database to export your content calendar to:
                 </p>
-                {loadingDbs ? (
+                {dbTimeout ? (
+                  <div>
+                    <p style={{ fontSize: 12, color: A.coral, margin: '0 0 6px' }}>
+                      Couldn't load databases — the request timed out.
+                    </p>
+                    <button
+                      onClick={fetchDatabases}
+                      style={{
+                        padding: '4px 10px', borderRadius: 6, border: `1px solid ${A.coral}60`,
+                        background: 'transparent', color: A.coral, fontSize: 11, cursor: 'pointer',
+                      }}
+                    >
+                      ↻ Retry
+                    </button>
+                  </div>
+                ) : loadingDbs ? (
                   <p style={{ fontSize: 12, color: A.textMuted }}>Loading databases...</p>
                 ) : databases.length > 0 ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>

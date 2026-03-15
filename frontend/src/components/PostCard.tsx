@@ -1,4 +1,5 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { A } from '../theme'
 import { api } from '../api/client'
 import { useIsMobile } from '../hooks/useIsMobile'
@@ -33,6 +34,7 @@ interface Props {
 
 export default function PostCard({ post, brandId, onApproved, onDismiss, onView }: Props) {
   const isMobile = useIsMobile()
+  const navigate = useNavigate()
   const btnPad = isMobile ? '10px 12px' : '6px'
   const color = STATUS_COLORS[post.status] || A.textMuted
   const label = STATUS_LABELS[post.status] || post.status
@@ -42,6 +44,20 @@ export default function PostCard({ post, brandId, onApproved, onDismiss, onView 
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const isFinal = post.status === 'complete' || post.status === 'approved'
+
+  // Auto-dismiss errors after 5 seconds
+  useEffect(() => {
+    if (!exportError) return
+    const t = setTimeout(() => setExportError(null), 5000)
+    return () => clearTimeout(t)
+  }, [exportError])
+  useEffect(() => {
+    if (!approveError) return
+    const t = setTimeout(() => setApproveError(null), 5000)
+    return () => clearTimeout(t)
+  }, [approveError])
+  // Clean up copy timer on unmount
+  useEffect(() => () => { if (copyTimerRef.current) clearTimeout(copyTimerRef.current) }, [])
 
   const handleCopy = () => {
     if (!navigator.clipboard) return
@@ -105,8 +121,8 @@ export default function PostCard({ post, brandId, onApproved, onDismiss, onView 
             muted
             loop
             playsInline
-            onMouseOver={e => (e.target as HTMLVideoElement).play()}
-            onMouseOut={e => { const v = e.target as HTMLVideoElement; v.pause(); v.currentTime = 0 }}
+            onMouseOver={e => (e.currentTarget as HTMLVideoElement).play()}
+            onMouseOut={e => { const v = e.currentTarget as HTMLVideoElement; v.pause(); v.currentTime = 0 }}
             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
           />
         ) : (
@@ -180,10 +196,38 @@ export default function PostCard({ post, brandId, onApproved, onDismiss, onView 
 
         {/* L-5: Inline errors instead of alert() */}
         {exportError && (
-          <p style={{ fontSize: 11, color: A.coral, margin: 0 }}>{exportError}</p>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
+            <p style={{ fontSize: 11, color: A.coral, margin: 0, flex: 1 }}>{exportError}</p>
+            <button onClick={() => setExportError(null)} style={{ background: 'none', border: 'none', color: A.coral, cursor: 'pointer', fontSize: 13, padding: 0, lineHeight: 1 }}>×</button>
+          </div>
         )}
         {approveError && (
-          <p style={{ fontSize: 11, color: A.coral, margin: 0 }}>{approveError}</p>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
+            <p style={{ fontSize: 11, color: A.coral, margin: 0, flex: 1 }}>{approveError}</p>
+            <button onClick={() => setApproveError(null)} style={{ background: 'none', border: 'none', color: A.coral, cursor: 'pointer', fontSize: 13, padding: 0, lineHeight: 1 }}>×</button>
+          </div>
+        )}
+
+        {/* Retry button for failed posts */}
+        {post.status === 'failed' && post.plan_id != null && post.day_index != null && (
+          <button
+            onClick={async () => {
+              try {
+                const res = await api.regeneratePost(post.post_id, brandId)
+                navigate(res.generate_url)
+              } catch {
+                navigate(`/generate/${post.plan_id}/${post.day_index}?brand_id=${brandId}`)
+              }
+            }}
+            style={{
+              width: '100%', padding: btnPad, borderRadius: 6,
+              border: `1px solid ${A.coral}`, background: 'transparent',
+              color: A.coral, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+              marginBottom: 4,
+            }}
+          >
+            ↺ Retry
+          </button>
         )}
 
         {/* Action buttons */}

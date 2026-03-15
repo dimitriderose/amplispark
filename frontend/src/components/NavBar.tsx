@@ -35,6 +35,9 @@ export default function NavBar() {
     (generateMatch && searchParams.get('brand_id')) ||
     null
 
+  const brandName = activeBrandId ? sessionStorage.getItem(`amplifi_brandname_${activeBrandId}`) : null
+  const generateDayIndex = generateMatch ? location.pathname.split('/').pop() : null
+
   const staticLinks = [
     { path: '/', label: 'Home' },
     isSignedIn
@@ -67,26 +70,11 @@ export default function NavBar() {
             fontWeight: isActive(path) ? 600 : 400,
           }}>{label}</button>
         ))}
-        {activeBrandId && (
-          <button
-            onClick={() => {
-              // H-8: Include plan_id from sessionStorage so ExportPage loads the right plan ZIP
-              const planId = sessionStorage.getItem(`amplifi_plan_${activeBrandId}`)
-              const url = planId
-                ? `/export/${activeBrandId}?plan_id=${planId}`
-                : `/export/${activeBrandId}`
-              navigate(url)
-            }}
-            style={{
-              padding: '5px 12px', borderRadius: 6,
-              background: location.pathname.startsWith('/export/') ? A.indigoLight : 'transparent',
-              border: 'none', cursor: 'pointer', fontSize: 13,
-              color: location.pathname.startsWith('/export/') ? A.indigo : A.textSoft,
-              fontWeight: location.pathname.startsWith('/export/') ? 600 : 400,
-            }}
-          >
-            Export
-          </button>
+        {/* Export accessible via dashboard PostLibrary tab */}
+        {generateMatch && brandName && (
+          <span style={{ fontSize: 13, color: A.textSoft, marginLeft: 8 }}>
+            {brandName} {generateDayIndex ? `› Day ${generateDayIndex}` : ''}
+          </span>
         )}
       </div>
 

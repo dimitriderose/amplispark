@@ -1,5 +1,6 @@
 import { A } from '../theme'
 import { useState } from 'react'
+import { useIsMobile } from '../hooks/useIsMobile'
 
 const PLAN_STEPS = [
   { label: 'Understanding your brand...', icon: '🎨' },
@@ -18,6 +19,7 @@ interface Props {
 }
 
 export default function EventsInput({ onGenerate, generating, analysisStatus }: Props) {
+  const isMobile = useIsMobile()
   const [events, setEvents] = useState('')
 
   const isBrandBuilding = analysisStatus === 'analyzing'
@@ -45,7 +47,7 @@ export default function EventsInput({ onGenerate, generating, analysisStatus }: 
         <textarea
           value={events}
           onChange={e => setEvents(e.target.value)}
-          placeholder="e.g. Launching lavender croissant Tuesday, farmer's market booth Saturday, staff birthday Wednesday"
+          placeholder={isMobile ? "e.g. Product launch Tue, market Sat" : "e.g. Launching lavender croissant Tuesday, farmer's market booth Saturday, staff birthday Wednesday"}
           rows={2}
           style={{
             width: '100%', padding: '10px 12px', borderRadius: 8, fontSize: 13, lineHeight: 1.5,

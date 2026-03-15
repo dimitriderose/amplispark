@@ -82,14 +82,22 @@ export default function VideoRepurpose({ brandId }: Props) {
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  }
+
+  const [selectedFileSize, setSelectedFileSize] = useState('')
+
   const handleFile = async (file: File) => {
     const ext = file.name.split('.').pop()?.toLowerCase()
     if (!['mp4', 'mov'].includes(ext ?? '')) {
       setError('Only .mp4 and .mov files are supported')
       return
     }
+    setSelectedFileSize(formatFileSize(file.size))
     if (file.size > 500 * 1024 * 1024) {
-      setError('File must be under 500 MB')
+      setError(`File is too large (${formatFileSize(file.size)}). Must be under 500 MB.`)
       return
     }
 
@@ -177,7 +185,7 @@ export default function VideoRepurpose({ brandId }: Props) {
                 border: `3px solid ${A.borderLight}`, borderTopColor: A.violet,
                 animation: 'vr-spin 0.8s linear infinite',
               }} />
-              <p style={{ fontSize: 12, color: A.textSoft, margin: 0 }}>Uploading…</p>
+              <p style={{ fontSize: 12, color: A.textSoft, margin: 0 }}>Uploading{selectedFileSize ? ` (${selectedFileSize})` : ''}…</p>
             </>
           ) : (
             <>
