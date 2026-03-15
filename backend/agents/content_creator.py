@@ -8,6 +8,7 @@ from google import genai
 from google.genai import types
 
 from backend.config import GOOGLE_API_KEY, GEMINI_MODEL
+from backend.constants import get_proof_tier
 from backend.platforms import get as get_platform
 
 # Interleaved text+image generation requires an image-capable model
@@ -1360,12 +1361,10 @@ async def generate_post(
         _story_details.append(f"Known for: {brand_profile['unique_selling_points']}")
 
     # Determine social proof tier based on available data
-    if _has_years and _has_clients:
-        _proof_tier = "data_rich"
-    elif _has_years or _has_clients:
-        _proof_tier = "partial_data"
-    else:
-        _proof_tier = "thin_profile"
+    _proof_tier = get_proof_tier(
+        brand_profile.get("years_in_business"),
+        brand_profile.get("client_count"),
+    )
 
     _PROOF_STRATEGIES = {
         "data_rich": (

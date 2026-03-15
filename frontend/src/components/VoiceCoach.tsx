@@ -6,9 +6,10 @@ import type { VoiceCoachStatus } from '../hooks/useVoiceCoach'
 interface Props {
   brandId: string
   brandName?: string
+  planId?: string
 }
 
-export default function VoiceCoach({ brandId, brandName }: Props) {
+export default function VoiceCoach({ brandId, brandName, planId }: Props) {
   const { status, isAISpeaking, transcript, error, startSession, stopSession } = useVoiceCoach()
 
   const isOpen = status !== 'idle'
@@ -215,7 +216,7 @@ export default function VoiceCoach({ brandId, brandName }: Props) {
                   </p>
                 )}
                 <button
-                  onClick={() => startSession(brandId)}
+                  onClick={() => startSession(brandId, planId)}
                   style={{
                     padding: '7px 16px',
                     borderRadius: 8,
@@ -249,7 +250,7 @@ export default function VoiceCoach({ brandId, brandName }: Props) {
       <VoicePill
         status={status}
         isAISpeaking={isAISpeaking}
-        onStart={() => startSession(brandId)}
+        onStart={() => startSession(brandId, planId)}
         onStop={stopSession}
       />
     </div>

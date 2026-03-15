@@ -7,7 +7,7 @@ interface UseVoiceCoachResult {
   isAISpeaking: boolean
   transcript: string | null
   error: string | null
-  startSession: (brandId: string) => Promise<void>
+  startSession: (brandId: string, planId?: string) => Promise<void>
   stopSession: () => void
 }
 
@@ -75,6 +75,7 @@ export function useVoiceCoach(): UseVoiceCoachResult {
   // Conversation history for multi-turn continuity
   const conversationHistoryRef = useRef<string[]>([])
   const brandIdRef = useRef<string>('')
+  const planIdRef = useRef<string | undefined>(undefined)
   const reconnectCountRef = useRef(0)
   // Flag to distinguish user-initiated stop from auto-reconnect teardown
   const userStoppedRef = useRef(false)
@@ -133,6 +134,7 @@ export function useVoiceCoach(): UseVoiceCoachResult {
     brandId: string,
     stream: MediaStream,
     contextStr: string,
+    planId?: string,
   ) => {
     gracefulEndRef.current = false
     userStoppedRef.current = false
@@ -145,8 +147,11 @@ export function useVoiceCoach(): UseVoiceCoachResult {
     playNextTimeRef.current = playbackCtx.currentTime
 
     const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
-    const contextParam = contextStr ? `?context=${encodeURIComponent(contextStr)}` : ''
-    const wsUrl = `${proto}://${window.location.host}/api/brands/${brandId}/voice-coaching${contextParam}`
+    const params = new URLSearchParams()
+    if (contextStr) params.set('context', contextStr)
+    if (planId) params.set('plan_id', planId)
+    const qs = params.toString() ? `?${params.toString()}` : ''
+    const wsUrl = `${proto}://${window.location.host}/api/brands/${brandId}/voice-coaching${qs}`
     const ws = new WebSocket(wsUrl)
     ws.binaryType = 'arraybuffer'
     wsRef.current = ws
@@ -224,7 +229,7 @@ export function useVoiceCoach(): UseVoiceCoachResult {
             setTimeout(() => {
               if (userStoppedRef.current || !streamRef.current) return
               const history = conversationHistoryRef.current.slice(-10).join('\n')
-              connectWebSocket(brandId, streamRef.current!, history)
+              connectWebSocket(brandId, streamRef.current!, history, planIdRef.current)
             }, 500)
           } else if (msg.type === 'session_complete') {
             // AI decided to end the conversation (user said goodbye etc.)
@@ -243,7 +248,7 @@ export function useVoiceCoach(): UseVoiceCoachResult {
     }
   }, [teardownConnection, stopSession])
 
-  const startSession = useCallback(async (brandId: string) => {
+  const startSession = useCallback(async (brandId: string, planId?: string) => {
     if (isStartingRef.current) return
     if (status !== 'idle' && status !== 'error') return
     isStartingRef.current = true
@@ -257,6 +262,7 @@ export function useVoiceCoach(): UseVoiceCoachResult {
     conversationHistoryRef.current = []
     reconnectCountRef.current = 0
     brandIdRef.current = brandId
+    planIdRef.current = planId
 
     let stream: MediaStream
     try {
@@ -279,7 +285,7 @@ export function useVoiceCoach(): UseVoiceCoachResult {
     }
     streamRef.current = stream
 
-    connectWebSocket(brandId, stream, '')
+    connectWebSocket(brandId, stream, '', planId)
   }, [status, connectWebSocket])
 
   return { status, isAISpeaking, transcript, error, startSession, stopSession }

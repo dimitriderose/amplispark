@@ -11,8 +11,33 @@ from google import genai
 from google.genai import types
 
 from backend.config import GEMINI_MODEL, GOOGLE_API_KEY
+from backend.constants import PILLARS
 
 logger = logging.getLogger(__name__)
+
+# Pillar-aware clip selection criteria
+_CLIP_PILLAR_CRITERIA = {
+    "education": (
+        "Prioritize moments where a technique, process, or framework is being "
+        "explained or demonstrated. The viewer should learn something by watching."
+    ),
+    "promotion": (
+        "Prioritize moments showing the product/service in action, results, "
+        "or customer benefit. Open with the problem, end with the solution."
+    ),
+    "inspiration": (
+        "Prioritize transformation moments, emotional peaks, or breakthrough "
+        "insights. Emotional arc matters more than technical detail."
+    ),
+    "behind_the_scenes": (
+        "Prioritize candid process reveals, workspace moments, or unpolished "
+        "authenticity. The viewer should feel they're seeing something normally hidden."
+    ),
+    "user_generated": (
+        "Prioritize customer reactions, real-world usage, or community highlights. "
+        "Authentic moments over produced content."
+    ),
+}
 
 # Platform aspect-ratio configurations
 _PLATFORM_CONFIGS: dict[str, dict] = {
@@ -115,7 +140,8 @@ async def _upload_to_gemini_files(video_path: str, mime_type: str) -> tuple:
     return video_file, client
 
 
-async def _analyze_video(video_file: object, client: object, brand_profile: dict) -> list[dict]:
+async def _analyze_video(video_file: object, client: object, brand_profile: dict,
+                         pillar: str = "", content_theme: str = "") -> list[dict]:
     """Ask Gemini to identify the top 3 clip-worthy moments in the video."""
     # Sanitize brand fields to prevent prompt injection
     business = (brand_profile.get("business_name") or brand_profile.get("name") or "this brand")[:80]
@@ -135,17 +161,29 @@ async def _analyze_video(video_file: object, client: object, brand_profile: dict
     if themes_str or competitors_str:
         parts = []
         if themes_str:
-            parts.append(f"Content pillars: {themes_str}")
+            parts.append(f"Brand topics: {themes_str}")
         if competitors_str:
             parts.append(f"Key competitors: {competitors_str}")
-        parts.append("For each clip, tag it to the most relevant content pillar from the list above. Prioritize clips covering DIFFERENT pillars.")
+        parts.append("For each clip, tag it to the most relevant brand topic from the list above. Prioritize clips covering DIFFERENT topics.")
         strategy_lines = "\n".join(parts) + "\n"
+
+    # Pillar-aware clip selection guidance
+    pillar_guidance = ""
+    if pillar:
+        _criteria = _CLIP_PILLAR_CRITERIA.get(pillar, "")
+        if _criteria:
+            pillar_guidance = f"\nCLIP SELECTION PRIORITY (pillar: {pillar}):\n{_criteria}\n"
+    if content_theme:
+        pillar_guidance += (
+            f"\nCONTENT TOPIC: {content_theme[:200]}. Prioritize clips that visually "
+            "connect to this specific topic.\n"
+        )
 
     # Build platform list from known keys
     platform_keys = list(_PLATFORM_CONFIGS.keys())
 
     prompt = f"""Analyze this video for a {industry} brand called "{business}" (tone: {tone}).
-{strategy_lines}
+{strategy_lines}{pillar_guidance}
 Identify the TOP 3 most clip-worthy moments for social media short-form content.
 
 For each clip, choose the most suitable platform from: {platform_keys}
@@ -162,7 +200,7 @@ Return ONLY a valid JSON array with this exact structure:
     "hook": "The verbatim opening line or moment that immediately grabs attention",
     "suggested_caption": "A ready-to-post caption in the brand voice.{caption_note}",
     "reason": "2-3 sentences: (1) why this moment stops the scroll, (2) what makes it right for this platform specifically, (3) the audience emotion it targets",
-    "content_theme": "The content pillar this clip best represents"
+    "content_theme": "The brand topic this clip best represents"
   }}
 ]
 
@@ -235,6 +273,8 @@ async def analyze_and_repurpose(
     video_bytes: bytes,
     brand_profile: dict,
     mime_type: str = "video/mp4",
+    pillar: str = "",
+    content_theme: str = "",
 ) -> list[dict]:
     """
     Analyze a raw video using Gemini and extract up to 3 platform-ready short clips.
@@ -268,7 +308,8 @@ async def analyze_and_repurpose(
         logger.info("Gemini file ready: %s", video_file.name)
 
         # 3 ─ Analyze for clip-worthy moments
-        clip_specs = await _analyze_video(video_file, client, brand_profile)
+        clip_specs = await _analyze_video(video_file, client, brand_profile,
+                                          pillar=pillar, content_theme=content_theme)
         logger.info("Gemini identified %d clips", len(clip_specs))
 
         # 4 ─ Clean up Gemini file (awaited, so errors don't swallow silently)

@@ -11,6 +11,7 @@ from google import genai
 from google.genai import types
 
 from backend.config import GOOGLE_API_KEY
+from backend.constants import PILLARS
 from backend.platforms import get as get_platform
 from backend.services.storage_client import upload_video_to_gcs
 
@@ -120,7 +121,7 @@ def _build_prompt(caption: str, brand_profile: dict, platform: str,
             "Authenticity over polish. The viewer should feel they're seeing something normally hidden."
         ),
         "user_generated": (
-            "NARRATIVE: Tell a customer's story in 8 seconds. Open with them in their context, "
+            "NARRATIVE: Tell a customer's story concisely. Open with them in their context, "
             "show their challenge, close with their outcome or satisfaction."
         ),
     }.get(pillar, (

@@ -343,7 +343,7 @@ export default function DashboardPage() {
 
       {/* Voice Brand Coach — floating button, fixed position */}
       {brandId && (
-        <VoiceCoach brandId={brandId} brandName={brand.business_name} />
+        <VoiceCoach brandId={brandId} brandName={brand.business_name} planId={plan?.plan_id} />
       )}
     </div>
   )

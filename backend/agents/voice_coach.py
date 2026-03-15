@@ -1,4 +1,7 @@
 import logging
+from collections import defaultdict
+
+from backend.constants import PILLAR_DESCRIPTIONS, PLATFORM_STRENGTHS, get_proof_tier
 
 logger = logging.getLogger(__name__)
 
@@ -33,14 +36,11 @@ def _build_tier_block(proof_tier: str, years, clients) -> str:
 
 
 def _build_pillar_block(proof_tier: str) -> str:
-    header = (
-        "CONTENT PILLARS (the 5 types used in the calendar):\n"
-        "- Education: teach a specific technique or insight that proves expertise\n"
-        "- Inspiration: process authority, professional philosophy\n"
-        "- Promotion: the service itself — kept minimal unless social proof backs it\n"
-        "- Behind the Scenes: team, process, day-in-the-life — builds authenticity\n"
-        "- User Generated: community content — only used when a community exists\n\n"
+    pillar_lines = "\n".join(
+        f"- {p.replace('_', ' ').title()}: {PILLAR_DESCRIPTIONS[p]}"
+        for p in PILLAR_DESCRIPTIONS
     )
+    header = f"CONTENT PILLARS (the 5 types used in the calendar):\n{pillar_lines}\n\n"
     if proof_tier == "thin_profile":
         return header + (
             "PILLAR BALANCE FOR THIS BRAND:\n"
@@ -82,41 +82,172 @@ def _build_cta_block(proof_tier: str) -> str:
     )
 
 
-_PLATFORM_STRENGTHS = {
-    "instagram": "Instagram: Reels get 2x reach; carousels are top for education; saves and DM shares are the algorithm signals.",
-    "linkedin": "LinkedIn: Video gets 5x engagement; never put external links in posts (reach penalty).",
-    "x": "X: Video gets 10x engagement; threads for education; tweets under 200 chars spark replies.",
-    "facebook": "Facebook: Shares worth 50x likes; best for community questions; no external links.",
-    "tiktok": "TikTok: Video first for most content; carousels for educational lists; raw/authentic outperforms polished.",
-    "threads": "Threads: Image posts get 60% more engagement; algorithm suppresses promotional content; end with a question.",
-    "youtube_shorts": "YouTube Shorts: Always video; first 125 chars appear in search — include primary keyword.",
-    "pinterest": "Pinterest: It's a search engine — keyword-rich titles and descriptions; Idea Pins get 4x engagement.",
-}
-
 _DEFAULT_PLATFORMS = ["instagram", "linkedin", "x", "facebook"]
 
 
 def _build_platform_block(connected_platforms: list) -> str:
     platforms = connected_platforms if connected_platforms else _DEFAULT_PLATFORMS
     lines = [
-        _PLATFORM_STRENGTHS[p]
+        PLATFORM_STRENGTHS[p]
         for p in platforms
-        if p in _PLATFORM_STRENGTHS
+        if p in PLATFORM_STRENGTHS
     ]
     if not lines:
-        lines = [_PLATFORM_STRENGTHS[p] for p in _DEFAULT_PLATFORMS]
+        lines = [PLATFORM_STRENGTHS[p] for p in _DEFAULT_PLATFORMS]
     return "PLATFORM STRENGTHS (reference when explaining platform decisions):\n" + "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Calendar context builder
+# ---------------------------------------------------------------------------
+
+_DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+
+def _build_calendar_block(plan: dict | None, posts: list | None) -> str:
+    """Summarise the current content plan + post statuses for the voice coach.
+
+    Returns a compact text block (~30-60 lines) suitable for a Gemini Live
+    system prompt.  Returns an empty string if no plan exists.
+    """
+    if not plan:
+        return (
+            "CONTENT CALENDAR:\n"
+            "No content calendar has been generated yet. The owner can create "
+            "one from the dashboard."
+        )
+
+    days = plan.get("days", [])
+    if not days:
+        return (
+            "CONTENT CALENDAR:\n"
+            "A content plan exists but has no scheduled days yet. "
+            "The owner may still be configuring their week."
+        )
+
+    # Index posts by (day_index, platform) for fast lookup
+    post_map: dict[tuple[int, str], dict] = {}
+    for p in (posts or []):
+        key = (p.get("day_index"), p.get("platform", ""))
+        if key not in post_map or p.get("status") == "complete":
+            post_map[key] = p
+
+    # Group day briefs by day_index
+    day_groups: dict[int, list[dict]] = defaultdict(list)
+    for d in days:
+        day_groups[(d.get("day_index") or 0)].append(d)
+
+    # Detect repurposing groups (pillar_id shared across >1 entry)
+    pillar_id_counts: dict[str, list[int]] = defaultdict(list)
+    for d in days:
+        pid = d.get("pillar_id")
+        if pid:
+            pillar_id_counts[pid].append((d.get("day_index") or 0))
+    repurpose_ids = {pid for pid, idxs in pillar_id_counts.items() if len(set(idxs)) > 1 or len(idxs) > 1}
+
+    lines = ["YOUR CONTENT CALENDAR THIS WEEK:"]
+    total_entries = 0
+    generated = 0
+    approved = 0
+    scores = []
+
+    for di in sorted(day_groups.keys()):
+        entries = day_groups[di]
+        day_name = _DAY_NAMES[di % 7]
+        lines.append(f"\nDay {di} ({day_name}):")
+
+        # Track if this day has a repurposing group
+        day_pids = {e.get("pillar_id") for e in entries if e.get("pillar_id")}
+        is_repurpose = bool(day_pids & repurpose_ids)
+
+        for entry in entries:
+            total_entries += 1
+            platform = entry.get("platform", "?")
+            deriv = entry.get("derivative_type", "original")
+            pillar = entry.get("pillar", "?")
+            theme = entry.get("content_theme", "")
+            hook = entry.get("caption_hook", "")
+            cta = entry.get("cta_type", "?")
+            event = entry.get("event_anchor")
+
+            # Post status
+            post = post_map.get((di, platform))
+            if post and post.get("status") in ("complete", "approved"):
+                generated += 1
+                review = post.get("review", {})
+                score = review.get("score")
+                is_approved = review.get("approved", False)
+                if is_approved:
+                    approved += 1
+                if isinstance(score, (int, float)):
+                    scores.append(score)
+
+                status_str = f"GENERATED (score: {score}"
+                if is_approved:
+                    status_str += ", approved"
+                status_str += ")"
+
+                # Top improvement for context
+                improvements = review.get("improvements", [])
+                review_note = f'\n    Review: "{improvements[0][:80]}"' if improvements else ""
+            elif post and post.get("status") == "generating":
+                status_str = "GENERATING..."
+                review_note = ""
+            else:
+                status_str = "NOT YET GENERATED"
+                review_note = ""
+
+            lines.append(f"  {platform.title()} | {deriv.replace('_', ' ').title()} | {pillar.replace('_', ' ').title()} | \"{theme}\"")
+            if hook:
+                lines.append(f"    Hook: \"{hook}\"")
+            event_note = f" | Event: {event}" if event else ""
+            lines.append(f"    CTA: {cta}{event_note} | Status: {status_str}{review_note}")
+
+        if is_repurpose and len(entries) > 1:
+            lines.append("  ↳ Repurposing group: same theme adapted per platform")
+
+    # Trend insights
+    trend_summary = plan.get("trend_summary", {})
+    platform_trends = trend_summary.get("platform_trends", {})
+    if platform_trends:
+        lines.append("\nTREND INSIGHTS (what informed this calendar):")
+        for plat, trend_data in list(platform_trends.items())[:4]:
+            if isinstance(trend_data, str):
+                lines.append(f"- {plat.title()}: {trend_data[:120]}")
+            elif isinstance(trend_data, dict):
+                hooks = trend_data.get("trending_hooks", "")
+                if hooks:
+                    lines.append(f"- {plat.title()}: {str(hooks)[:120]}")
+
+    visual_trends = trend_summary.get("visual_trends")
+    if visual_trends:
+        lines.append(f"- Visual trends: {str(visual_trends)[:120]}")
+    video_trends = trend_summary.get("video_trends")
+    if video_trends:
+        lines.append(f"- Video trends: {str(video_trends)[:120]}")
+
+    # Progress summary
+    avg_score = round(sum(scores) / len(scores), 1) if scores else 0
+    lines.append(f"\nPROGRESS: {generated}/{total_entries} generated, {approved} approved"
+                 + (f", avg score {avg_score}" if avg_score else ""))
+
+    result = "\n".join(lines)
+    # Cap calendar block to prevent prompt bloat (Gemini Live has limited context)
+    if len(result) > 3000:
+        result = result[:2900] + "\n... (calendar truncated for brevity)"
+    return result
 
 
 # ---------------------------------------------------------------------------
 # Main prompt builder
 # ---------------------------------------------------------------------------
 
-def build_coaching_prompt(brand_profile: dict) -> str:
+def build_coaching_prompt(brand_profile: dict, plan: dict = None,
+                          posts: list = None) -> str:
     """Build the Gemini Live API system prompt for voice brand coaching.
 
-    The prompt injects the full brand profile so the coach speaks with
-    specific, brand-aware intelligence rather than generic advice.
+    The prompt injects the full brand profile and content calendar so the
+    coach speaks with specific, brand-aware intelligence.
     """
     business_name = brand_profile.get("business_name", "this brand")
     business_type = brand_profile.get("business_type", "business")
@@ -136,54 +267,25 @@ def build_coaching_prompt(brand_profile: dict) -> str:
     unique_selling_points = brand_profile.get("unique_selling_points", "")
     connected_platforms = brand_profile.get("connected_platforms", [])
 
-    # Social proof tier — mirrors strategy_agent.py logic exactly
-    _has_years = bool(years_in_business)
-    _has_clients = bool(client_count)
-    if _has_years and _has_clients:
-        proof_tier = "data_rich"
-    elif _has_years or _has_clients:
-        proof_tier = "partial_data"
-    else:
-        proof_tier = "thin_profile"
+    # Social proof tier — shared logic from constants.py
+    proof_tier = get_proof_tier(years_in_business, client_count)
 
     # Build brand context lines (only include populated fields)
-    industry_line = f"- Industry: {industry}" if industry else ""
-    audience_line = f"- Target audience: {target_audience}" if target_audience else ""
-    visual_line = f"- Visual style: {visual_style}" if visual_style else ""
-    caption_line = f"- Writing style: {caption_style}" if caption_style else ""
-    themes_line = (
-        f"- Key content themes: {', '.join(content_themes)}" if content_themes else ""
-    )
-    competitors_line = (
-        f"- Key competitors: {', '.join(competitors[:3])}" if competitors else ""
-    )
-    description_line = f"- Business description: {description}" if description else ""
-    years_line = f"- In business: {years_in_business} years" if _has_years else ""
-    clients_line = f"- Clients served: {client_count}+" if _has_clients else ""
-    location_line = f"- Location: {location}" if location else ""
-    usp_line = f"- Differentiators: {unique_selling_points}" if unique_selling_points else ""
-    platforms_line = (
-        f"- Active platforms: {', '.join(connected_platforms)}"
-        if connected_platforms else ""
-    )
-
-    brand_context = "\n".join(
-        line for line in [
-            industry_line,
-            audience_line,
-            visual_line,
-            caption_line,
-            themes_line,
-            competitors_line,
-            description_line,
-            years_line,
-            clients_line,
-            location_line,
-            usp_line,
-            platforms_line,
-        ]
-        if line
-    )
+    brand_lines = [
+        f"- Industry: {industry}" if industry else "",
+        f"- Target audience: {target_audience}" if target_audience else "",
+        f"- Visual style: {visual_style}" if visual_style else "",
+        f"- Writing style: {caption_style}" if caption_style else "",
+        f"- Key content themes: {', '.join(content_themes)}" if content_themes else "",
+        f"- Key competitors: {', '.join(competitors[:3])}" if competitors else "",
+        f"- Business description: {description}" if description else "",
+        f"- In business: {years_in_business} years" if years_in_business else "",
+        f"- Clients served: {client_count}+" if client_count else "",
+        f"- Location: {location}" if location else "",
+        f"- Differentiators: {unique_selling_points}" if unique_selling_points else "",
+        f"- Active platforms: {', '.join(connected_platforms)}" if connected_platforms else "",
+    ]
+    brand_context = "\n".join(line for line in brand_lines if line)
 
     # Build tier-aware strategy blocks
     tier_block = _build_tier_block(proof_tier, years_in_business, client_count)
@@ -204,6 +306,9 @@ def build_coaching_prompt(brand_profile: dict) -> str:
         f"- Reels/video: outperforms static on every platform — always the reach play"
     )
 
+    # Calendar context (plan + post statuses)
+    calendar_block = _build_calendar_block(plan, posts)
+
     return f"""You are Amplifi's AI brand strategist and creative director — a warm, expert advisor \
 personally assigned to {business_name}.
 
@@ -213,6 +318,8 @@ BRAND PROFILE:
 {brand_context}
 
 {strategy_context}
+
+{calendar_block}
 
 YOUR ROLE:
 You are having a live voice conversation with the owner of {business_name}. Act like their most \
@@ -227,11 +334,14 @@ WHAT YOU CAN DO:
 4. Walk through the content repurposing strategy — how one strong idea becomes multiple posts
 5. Suggest what photos or videos to capture based on their visual style
 6. Help brainstorm content ideas rooted in their actual business activities
-7. Answer any question about their weekly content calendar
+7. Answer questions about the content calendar — from weekly strategy to specific days, themes, and format choices
+9. Advise on not-yet-generated days — what to focus on, what photo or video to prepare
+10. Explain repurposing groups — how one idea becomes multiple platform-adapted posts
+11. Discuss review feedback on generated posts and how to improve scores
 
 COMMUNICATION STYLE:
 - Conversational and warm — like a trusted advisor, not a formal presentation
-- Keep each response to 20-40 seconds of spoken audio (roughly 50-100 words)
+- For simple questions, keep to 20-40 seconds (50-100 words). For calendar walkthroughs or multi-day explanations, up to 60 seconds (150 words) is fine — pause naturally so the user can interject
 - Be specific to {business_name} — never give generic advice that could apply to any brand
 - When you don't know something about the brand, say so and ask the owner
 - Use the tone "{tone}" as your baseline when crafting any example copy

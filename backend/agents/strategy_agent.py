@@ -5,18 +5,13 @@ from datetime import datetime
 from google import genai
 from google.genai import types
 from backend.config import GOOGLE_API_KEY, GEMINI_MODEL
+from backend.constants import PILLARS, DERIVATIVE_TYPES, get_proof_tier
 from backend.platforms import keys as platform_keys, get as get_platform
 from backend.services import firestore_client
 
 logger = logging.getLogger(__name__)
 
 client = genai.Client(api_key=GOOGLE_API_KEY)
-
-PILLARS = ["education", "inspiration", "promotion", "behind_the_scenes", "user_generated"]
-DERIVATIVE_TYPES = [
-    "original", "carousel", "thread_hook", "blog_snippet", "story",
-    "pin", "video_first",
-]
 
 
 # ── Platform intelligence ─────────────────────────────────────────────────────
@@ -672,14 +667,10 @@ async def run_strategy(
     )
 
     # ── Social proof tier → pillar + format guidance ──
-    _has_years = bool(brand_profile.get("years_in_business"))
-    _has_clients = bool(brand_profile.get("client_count"))
-    if _has_years and _has_clients:
-        _proof_tier = "data_rich"
-    elif _has_years or _has_clients:
-        _proof_tier = "partial_data"
-    else:
-        _proof_tier = "thin_profile"
+    _proof_tier = get_proof_tier(
+        brand_profile.get("years_in_business"),
+        brand_profile.get("client_count"),
+    )
 
     _pillar_guidance = ""
     if _proof_tier == "thin_profile":
