@@ -69,15 +69,15 @@ This Technical Design Document specifies the implementation architecture for Amp
 │  │  │ Analyst  │   │  Agent   │   │ Creator  │  │ Agent  │ │  │
 │  │  │          │   │          │   │ ⭐        │  │        │ │  │
 │  │  │ gemini-  │   │ gemini-  │   │ gemini-  │  │gemini- │ │  │
-│  │  │ 2.5-flash│   │ 2.5-flash│   │ 2.5-flash│  │2.5-    │ │  │
-│  │  │ (text)   │   │ (text)   │   │ TEXT+IMG │  │flash   │ │  │
+│  │  │ 3-flash- │   │ 3-flash- │   │ 3-flash- │  │3-flash-│ │  │
+│  │  │ preview  │   │ preview  │   │ prev+img │  │preview │ │  │
 │  │  └──────────┘   └──────────┘   └──────────┘  └────────┘ │  │
 │  └──────────────┬────────────────────────────────────────────┘  │
 │                 │                                                │
 │  ┌──────────────▼────────────────────────────────────────────┐  │
 │  │         Gemini API (generateContent)                       │  │
-│  │         Model: gemini-2.5-flash                            │  │
-│  │         responseModalities: ["TEXT", "IMAGE"]               │  │
+│  │         Text model: gemini-3-flash-preview                  │  │
+│  │         Image model: gemini-3.1-flash-image-preview         │  │
 │  └───────────────────────────────────────────────────────────┘  │
 └──────────────┬──────────────────────────────┬───────────────────┘
                │                              │
@@ -192,7 +192,7 @@ Note: For MVP, the pipeline is invoked step-by-step through REST endpoints rathe
 ```python
 brand_analyst = Agent(
     name="brand_analyst",
-    model="gemini-2.5-flash",
+    model="gemini-3-flash-preview",
     description="Analyzes a brand from its website and assets to build a brand profile",
     # Temperature 0.15 for deterministic, consistent analysis across repeated runs
     generation_config=types.GenerateContentConfig(temperature=0.15),
@@ -318,7 +318,7 @@ def analyze_brand_colors(css_colors: list[str], logo_path: str | None = None) ->
 ```python
 strategy_agent = Agent(
     name="strategy_agent",
-    model="gemini-2.5-flash",
+    model="gemini-3-flash-preview",
     description="Creates a multi-platform content calendar with AI-researched posting frequency from a brand profile using pillar-based repurposing",
     instruction="""You are a social media strategist creating a weekly content calendar.
     
@@ -549,7 +549,7 @@ The caption should make followers feel like they're seeing a curated, intentiona
         ]
         
         response_stream = client.models.generate_content_stream(
-            model="gemini-2.5-flash",
+            model="gemini-3-flash-preview",
             contents=prompt_parts,
             config=types.GenerateContentConfig(
                 response_modalities=["TEXT"],  # Text-only — we already have the image
@@ -591,7 +591,7 @@ The image should visually match the mood and message of the caption.
 """
         
         response_stream = client.models.generate_content_stream(
-            model="gemini-2.5-flash",
+            model="gemini-3.1-flash-image-preview",
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_modalities=["TEXT", "IMAGE"],
@@ -618,7 +618,7 @@ async def generate_post_fallback(brand_profile: dict, day_brief: dict):
     """Non-streaming fallback if interleaved output doesn't support streaming."""
     
     response = await client.aio.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-3.1-flash-image-preview",
         contents=prompt,
         config=types.GenerateContentConfig(
             response_modalities=["TEXT", "IMAGE"],
@@ -681,7 +681,7 @@ spec = get_platform(platform)  # Returns PlatformSpec
 ```python
 review_agent = Agent(
     name="review_agent",
-    model="gemini-2.5-flash",
+    model="gemini-3-flash-preview",
     description="Reviews generated content against brand profile for consistency",
     instruction="""You are a brand consistency reviewer. Evaluate generated social 
     media content against the brand profile.
@@ -1631,7 +1631,7 @@ The Gemini API's interleaved output generates text and images in a single `gener
 ```python
 # Actual API call
 response = client.models.generate_content(
-    model="gemini-2.5-flash",
+    model="gemini-3.1-flash-image-preview",
     contents="Create an Instagram post for a bakery's fresh sourdough bread. "
              "Include a warm, inviting caption and generate a matching product image.",
     config=types.GenerateContentConfig(
@@ -2446,7 +2446,7 @@ The `deploy.sh` script:
 | `GCP_PROJECT_ID` | Yes | — | GCP project ID |
 | `GCS_BUCKET_NAME` | Yes | — | Cloud Storage bucket for images/video |
 | `CORS_ORIGINS` | Yes | `http://localhost:5173` | Comma-separated allowed origins |
-| `GEMINI_MODEL` | No | `gemini-2.5-flash` | Default Gemini model override |
+| `GEMINI_MODEL` | No | `gemini-3-flash-preview` | Default Gemini model override |
 | `RESEND_API_KEY` | No | `""` | Resend API key for email delivery (.ics calendar) |
 | `NOTION_CLIENT_ID` | No | `""` | Notion OAuth client ID |
 | `NOTION_CLIENT_SECRET` | No | `""` | Notion OAuth client secret |
@@ -2775,7 +2775,7 @@ logger.info("generation_event", extra={
 | Multi-platform formatting (P2) | §5 Platform Registry (shipped) | ✓ Shipped |
 | Frontend serving (single container) | §10.1 Docker Configuration | ✓ Specified |
 | CORS configuration | §4.2 FastAPI app setup | ✓ Specified |
-| Gemini model compliance | §3.4 model="gemini-2.5-flash" | ✓ gemini-2.5-flash with ["TEXT", "IMAGE"] |
+| Gemini model compliance | §3.4 model="gemini-3-flash-preview" / "gemini-3.1-flash-image-preview" | ✓ gemini-3-flash-preview (text) + gemini-3.1-flash-image-preview (image) |
 | ADK compliance | §3.1 SequentialAgent pipeline | ✓ ADK SequentialAgent |
 | Cloud Run + Firestore + Storage | §10 Deployment, §7 Data Model | ✓ All three services |
 | Interleaved output (category req) | §8 Deep Dive, responseModalities | ✓ ["TEXT", "IMAGE"] |
@@ -3262,7 +3262,7 @@ def predict_engagement(caption: str, platform: str, brand_profile: dict,
     }}
     """
     
-    response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+    response = client.models.generate_content(model="gemini-3-flash-preview", contents=prompt)
     return json.loads(response.text)
 ```
 
@@ -3337,7 +3337,7 @@ async def analyze_social_voice(posts: list[dict]) -> dict:
     }}
     """
     
-    response = await client.aio.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+    response = await client.aio.models.generate_content(model="gemini-3-flash-preview", contents=prompt)
     return json.loads(response.text)
 ```
 
@@ -3385,7 +3385,7 @@ def research_platform_trends(platform: str, industry: str) -> dict:
     """
     
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-3-flash-preview",
         contents=prompt,
         config=genai.types.GenerateContentConfig(
             tools=[genai.types.Tool(google_search=genai.types.GoogleSearch())]
@@ -3432,7 +3432,7 @@ async def generate_style_reference(brand_profile: dict) -> str:
     """
     
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-3.1-flash-image-preview",
         contents=prompt,
         config=genai.types.GenerateContentConfig(response_modalities=["IMAGE"])
     )
@@ -3725,7 +3725,7 @@ RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
 | `GCP_PROJECT_ID` | ✓ | GCP project ID | `amplifi-488503-a0bd0` |
 | `GCS_BUCKET_NAME` | ✓ | Cloud Storage bucket for images/video | `amplifi-488503-a0bd0-amplifi-assets` |
 | `CORS_ORIGINS` | ✓ | Comma-separated allowed origins | `https://amplifi-xxxxx-uc.a.run.app` |
-| `GEMINI_MODEL` | | Default Gemini model (default: `gemini-2.5-flash`) | `gemini-2.5-flash` |
+| `GEMINI_MODEL` | | Default Gemini model (default: `gemini-3-flash-preview`) | `gemini-3-flash-preview` |
 | `RESEND_API_KEY` | | Resend API key for .ics email delivery | `re_...` |
 | `NOTION_CLIENT_ID` | | Notion OAuth client ID | `315d872b-...` |
 | `NOTION_CLIENT_SECRET` | | Notion OAuth client secret | `secret_...` |
@@ -3770,7 +3770,7 @@ For engineers working on both projects, here is a comparison of the key architec
 | **Primary API** | Gemini Live API (WebSocket, bidirectional) | Gemini generateContent (REST, unidirectional) |
 | **Transport** | WebSocket (persistent, multiplayer) | REST + SSE (stateless, single user) |
 | **Response Modality** | AUDIO (native voice) | TEXT + IMAGE (interleaved) + VIDEO (Veo 3.1, P1) |
-| **Model** | gemini-2.5-flash-native-audio-preview-12-2025 | gemini-2.5-flash + veo-3.1-fast-generate-preview |
+| **Model** | gemini-2.5-flash-native-audio-preview-12-2025 | gemini-3-flash-preview + gemini-3.1-flash-image-preview + veo-3.1-fast-generate-preview |
 | **Agent Architecture** | Narrator (LLM) + Game Master (deterministic) + Traitor (LLM) | Sequential pipeline: Analyst → Strategy → Creator → Review |
 | **Session Management** | Persistent (10+ min, session resumption required) | Stateless per request (no session management needed) |
 | **Cloud Run Config** | Session affinity ON, 3600s timeout, WebSocket | No session affinity needed, 300s timeout, HTTP |
@@ -3824,7 +3824,7 @@ HACKATHON                           PRODUCTION
 
 **Hackathon:** Direct Gemini API calls from a single GCP project. Every agent call = 1 API request.
 
-**Why it breaks:** Gemini 2.5 Flash on Paid Tier 1: ~150 RPM. A single user's full calendar generation = 16 API calls (1 brand analysis + 1 strategy + 7 content generations + 7 reviews). Maximum concurrent full-calendar generations before 429 errors: **~9 users**. This is not a scale problem — it's a "10th customer gets an error" problem.
+**Why it breaks:** Gemini 3 Flash on Paid Tier 1: ~150 RPM. A single user's full calendar generation = 16 API calls (1 brand analysis + 1 strategy + 7 content generations + 7 reviews). Maximum concurrent full-calendar generations before 429 errors: **~9 users**. This is not a scale problem — it's a "10th customer gets an error" problem.
 
 Interleaved output (TEXT + IMAGE) requests are computationally expensive and may hit TPM (tokens per minute) limits before RPM. Image generation has its own IPM cap. Veo has even stricter quotas.
 

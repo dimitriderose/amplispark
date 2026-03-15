@@ -17,7 +17,7 @@ Amplifi is an AI-powered creative director that analyzes a brand and produces co
 
 The key innovation: copy and visuals are born together. Unlike every existing tool that generates text and images separately, Amplifi uses Gemini's interleaved output to produce captions and matching product images in one coherent stream. This directly matches the Creative Storyteller category's core requirement and two of the example use cases listed in the rules (marketing asset generator, social media content creator).
 
-Built on Gemini 2.5 Flash, Google ADK, and Google Cloud.
+Built on Gemini 3 Flash, Google ADK, and Google Cloud.
 
 | | Details |
 |---|---|
@@ -87,10 +87,10 @@ The Creative Storyteller category specifically asks for projects that "leverage 
 
 | Agent | Model | Input | Output | Key Tools |
 |---|---|---|---|---|
-| **Brand Analyst** | gemini-2.5-flash | Website URL (optional), free-text business description, uploaded assets (images/PDFs) | Brand profile document: colors, tone, audience, positioning, content themes, inferred business type | `fetch_website`, `analyze_brand_colors`, `extract_brand_voice`, `scan_competitors`, `process_uploaded_assets` |
-| **Strategy Agent** | gemini-2.5-flash | Brand profile + user goals + platform selection + social proof tier | Multi-platform content calendar with variable briefs per day (19-30+ briefs across 7 days depending on platform count and cadence). Themes, platforms, timing, pillar, format, cta_type, and derivative_type per brief. Tier-aware: education-first for thin-profile brands, data-forward for established ones. | Platform Registry (platform selection + derivative type config), Google Search grounding (platform recommendation + trend research with 7-day Firestore cache), Posting frequency research (per-platform posts/week + best posting times via Gemini + Google Search grounding, Firestore cached) |
-| **Content Creator** ⭐ | gemini-2.5-flash with `responseModalities: ["TEXT", "IMAGE"]` | Brand profile + single day's content brief + brand reference images (logo, product shots, style ref) + prior_hooks for dedup | Interleaved stream: caption text + generated product image + hashtags + posting notes. `pillar`, `format`, `cta_type` stored on post document. | Gemini interleaved output, Brand Assets Service (reference image injection for visual consistency), Platform Registry (content_prompt + voice directive injection) |
-| **Review Agent** | gemini-2.5-flash (text only) | Generated content + brand profile + social_proof_tier + cta_type | Multiplicative score: platform-weighted engagement (5 dimensions: hook_strength, relevance, cta_effectiveness, platform_fit, teaching_depth) multiplied by structural modifier. brand_alignment (strong/moderate/weak), engagement_prediction (low/medium/high/viral), revised_caption, auto-cleaned hashtags. Carousel safety validation and video topic awareness. | Platform Registry (per-platform review guidelines + platform-specific checks), thin-profile social proof check (-3 pts for fabricated claims) |
+| **Brand Analyst** | gemini-3-flash-preview | Website URL (optional), free-text business description, uploaded assets (images/PDFs) | Brand profile document: colors, tone, audience, positioning, content themes, inferred business type | `fetch_website`, `analyze_brand_colors`, `extract_brand_voice`, `scan_competitors`, `process_uploaded_assets` |
+| **Strategy Agent** | gemini-3-flash-preview | Brand profile + user goals + platform selection + social proof tier | Multi-platform content calendar with variable briefs per day (19-30+ briefs across 7 days depending on platform count and cadence). Themes, platforms, timing, pillar, format, cta_type, and derivative_type per brief. Tier-aware: education-first for thin-profile brands, data-forward for established ones. | Platform Registry (platform selection + derivative type config), Google Search grounding (platform recommendation + trend research with 7-day Firestore cache), Posting frequency research (per-platform posts/week + best posting times via Gemini + Google Search grounding, Firestore cached) |
+| **Content Creator** ⭐ | gemini-3-flash-preview (text) + gemini-3.1-flash-image-preview (image) | Brand profile + single day's content brief + brand reference images (logo, product shots, style ref) + prior_hooks for dedup | Interleaved stream: caption text + generated product image + hashtags + posting notes. `pillar`, `format`, `cta_type` stored on post document. | Gemini interleaved output, Brand Assets Service (reference image injection for visual consistency), Platform Registry (content_prompt + voice directive injection) |
+| **Review Agent** | gemini-3-flash-preview (text only) | Generated content + brand profile + social_proof_tier + cta_type | Multiplicative score: platform-weighted engagement (5 dimensions: hook_strength, relevance, cta_effectiveness, platform_fit, teaching_depth) multiplied by structural modifier. brand_alignment (strong/moderate/weak), engagement_prediction (low/medium/high/viral), revised_caption, auto-cleaned hashtags. Carousel safety validation and video topic awareness. | Platform Registry (per-platform review guidelines + platform-specific checks), thin-profile social proof check (-3 pts for fabricated claims) |
 
 ### Social Proof Tier System
 
@@ -126,7 +126,8 @@ The Content Creator Agent uses Gemini's `responseModalities: ["TEXT", "IMAGE"]` 
 - The response contains interleaved `text` and `inline_data` (image bytes) parts that stream to the frontend progressively
 
 **Supported models:**
-- `gemini-2.5-flash` with `responseModalities: ["TEXT", "IMAGE"]` (primary)
+- `gemini-3-flash-preview` for text generation (primary)
+- `gemini-3.1-flash-image-preview` for image generation (primary)
 - `gemini-3-pro-image-preview` for highest quality image gen (fallback)
 - Note: `gemini-2.5-flash-image-preview` has been shut down — do not use
 
@@ -240,7 +241,7 @@ brands/{brandId}/
 
 | Requirement | Implementation | Status |
 |---|---|---|
-| Gemini model | gemini-2.5-flash with `responseModalities: ["TEXT", "IMAGE"]` | ✓ Compliant |
+| Gemini model | gemini-3-flash-preview (text) + gemini-3.1-flash-image-preview (image) | ✓ Compliant |
 | GenAI SDK or ADK | Google ADK (Python) with SequentialAgent pipeline | ✓ Compliant |
 | Google Cloud service | Cloud Run + Cloud Firestore + Cloud Storage | ✓ Compliant |
 | Hosted on Google Cloud | Cloud Run deployment (automated via Cloud Build) | ✓ Compliant |
@@ -341,7 +342,7 @@ brands/{brandId}/
 | Image generation takes several seconds | High | Medium — UI feels slow during generation | Stream text first (appears instantly), images load progressively via SSE. Show skeleton loaders for images. |
 | Image quality inconsistent across posts | Medium | Medium — breaks brand consistency | Review Agent specifically checks visual consistency. User can regenerate individual images. |
 | Brand profile extraction inaccurate | Medium | Low — user can correct | All brand profile fields are editable. User overrides take priority over AI analysis. |
-| Image preview models get deprecated | Low | High — breaks core feature | Use `gemini-2.5-flash` with `responseModalities`, not dedicated image preview models. Already using the stable path. |
+| Image preview models get deprecated | Low | High — breaks core feature | Use `gemini-3-flash-preview` (text) + `gemini-3.1-flash-image-preview` (image), not deprecated preview models. Already using the stable path. |
 | $100 credit budget exhausted | Low | Medium — can't generate more content | ~2,500 images on $100. Rate limit generation during dev. Reserve budget for demo recording. |
 | Generated images contain text artifacts | Medium | Low — cosmetic issue | Prompt engineering to minimize text in images, or instruct model to generate clean product/lifestyle photos. |
 | Video generation latency (Veo) | High | Medium — UI feels slow (2–3 min per clip) | Async generation with polling. User continues reviewing other posts while video generates. Progress indicator shows percentage. Video is a P1 add-on, not blocking the core image flow. |
@@ -451,7 +452,7 @@ Engagement prediction scoring (with multiplicative system) and Instagram grid vi
 | ~$0.039 per image (~1,290 tokens) | Budget: ~2,500 images on $100 credit | Plenty for development + demo. Rate limit during dev. |
 | 1024×1024 max image resolution | Social platforms need various sizes | Generate at 1024×1024, resize client-side per platform spec. |
 | Interleaved output NOT available in Live API | Can't combine voice + image generation | Use standard `generateContent` API for content. Add Live API separately for optional voice coaching. |
-| `gemini-2.5-flash-image-preview` has been shut down | Must use correct model | Use `gemini-2.5-flash` with `responseModalities: ["TEXT", "IMAGE"]`. This is the supported path. |
+| `gemini-2.5-flash-image-preview` has been shut down | Must use correct model | Use `gemini-3-flash-preview` (text) + `gemini-3.1-flash-image-preview` (image). These are the supported models. |
 | Image output may include unwanted text overlays | Generated images sometimes contain text artifacts | Prompt engineering: "Generate a clean product photo without text overlays." Review Agent catches issues. |
 
 ---

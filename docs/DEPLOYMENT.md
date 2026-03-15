@@ -87,7 +87,7 @@ GCS_BUCKET_NAME=your-project-id-amplifi-assets
 CORS_ORIGINS=http://localhost:5173
 
 # === OPTIONAL: Gemini model override ===
-GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MODEL=gemini-3-flash-preview
 
 # === OPTIONAL: Token encryption (Notion OAuth) ===
 # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
@@ -355,7 +355,7 @@ gcloud run deploy amplifi \
   --min-instances 0 \
   --max-instances 10 \
   --timeout 300 \
-  --update-env-vars="GOOGLE_API_KEY=your-key,GCP_PROJECT_ID=$PROJECT_ID,GCS_BUCKET_NAME=$PROJECT_ID-amplifi-assets,CORS_ORIGINS=https://your-url.run.app,GEMINI_MODEL=gemini-2.5-flash"
+  --update-env-vars="GOOGLE_API_KEY=your-key,GCP_PROJECT_ID=$PROJECT_ID,GCS_BUCKET_NAME=$PROJECT_ID-amplifi-assets,CORS_ORIGINS=https://your-url.run.app,GEMINI_MODEL=gemini-3-flash-preview"
 ```
 
 **Critical flags:**
@@ -393,7 +393,7 @@ gcloud storage buckets update gs://$PROJECT_ID-amplifi-assets --cors-file=cors.j
 | `GCP_PROJECT_ID` | Yes | — | GCP project ID |
 | `GCS_BUCKET_NAME` | Yes | `{project}-amplifi-assets` | Cloud Storage bucket for images/video |
 | `CORS_ORIGINS` | Yes | `http://localhost:5173` | Comma-separated allowed origins |
-| `GEMINI_MODEL` | No | `gemini-2.5-flash` | Default Gemini model |
+| `GEMINI_MODEL` | No | `gemini-3-flash-preview` | Default Gemini model |
 | `RESEND_API_KEY` | No | `""` | Resend API key for email delivery (.ics calendar) |
 | `NOTION_CLIENT_ID` | No | `""` | Notion OAuth client ID |
 | `NOTION_CLIENT_SECRET` | No | `""` | Notion OAuth client secret |
