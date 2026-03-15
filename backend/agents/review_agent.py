@@ -5,7 +5,7 @@ from google import genai
 from google.genai import types
 from backend.config import GOOGLE_API_KEY, GEMINI_MODEL
 from backend.clients import get_genai_client
-from backend.platforms import get_review_guidelines_block, get as get_platform
+from backend.platforms import get_review_guidelines_block, get as get_platform, get_scoring_weights
 
 logger = logging.getLogger(__name__)
 
@@ -16,21 +16,21 @@ _PLATFORM_REVIEW_CHECKS = {
     "instagram": (
         "INSTAGRAM-SPECIFIC CHECKS:\n"
         "- FOLD CHECK: First 125 chars must be a complete, compelling hook. "
-        "If the first 125 chars are mid-sentence or contain the brand name, deduct 1 point.\n"
-        "- MOBILE READABILITY: Paragraphs longer than 2 sentences — deduct 1 point."
+        "If the first 125 chars are mid-sentence or contain the brand name, flag as structural issue.\n"
+        "- MOBILE READABILITY: Paragraphs longer than 2 sentences — flag as structural issue."
     ),
     "linkedin": (
         "LINKEDIN-SPECIFIC CHECKS:\n"
         "- FOLD CHECK: First 140 chars must be a complete hook that compels 'see more' click. "
-        "If weak or mid-sentence, deduct 2 points — this determines all LinkedIn reach.\n"
-        "- MOBILE READABILITY: Paragraphs longer than 2 sentences — deduct 1 point. "
+        "If weak or mid-sentence, flag as structural issue — this determines all LinkedIn reach.\n"
+        "- MOBILE READABILITY: Paragraphs longer than 2 sentences — flag as structural issue. "
         "70%+ of LinkedIn consumption is mobile.\n"
-        "- EXTERNAL LINKS in post body — deduct 3 points (40-50% reach penalty)."
+        "- EXTERNAL LINKS in post body — flag as structural issue (40-50% reach penalty)."
     ),
     "tiktok": (
         "TIKTOK-SPECIFIC CHECKS:\n"
         "- CAPITALIZATION: Formal/corporate capitalization (e.g., 'At Derose & Associates, "
-        "We Help...') reads as AI-generated on TikTok — deduct 1 point. "
+        "We Help...') reads as AI-generated on TikTok — flag as structural issue. "
         "TikTok voice is overwhelmingly lowercase.\n"
         "- FOLD CHECK: First 55-75 chars appear before truncation. Must hook immediately.\n"
         "- KEYWORD DENSITY: Carousel/photo posts should contain 2-3 searchable keywords "
@@ -39,57 +39,57 @@ _PLATFORM_REVIEW_CHECKS = {
     "facebook": (
         "FACEBOOK-SPECIFIC CHECKS:\n"
         "- SHAREABILITY: Would a reader share this with a friend? If purely promotional, "
-        "deduct 2 points. Facebook organic reach requires shares.\n"
+        "flag as structural issue. Facebook organic reach requires shares.\n"
         "- COMMUNITY ENGAGEMENT: Does this invite personal stories or opinions? "
         "Broadcast-style posts get suppressed — conversation starters get amplified.\n"
         "- ENGAGEMENT CTA: On Facebook, engagement questions should be the default "
-        "(not conversion CTAs). If a non-boosted post uses a conversion CTA, deduct 1 point."
+        "(not conversion CTAs). If a non-boosted post uses a conversion CTA, flag as structural issue."
     ),
     "x": (
         "X-SPECIFIC CHECKS:\n"
         "- CHARACTER COUNT: Hard 280 limit per tweet. Flag any tweet exceeding 280.\n"
-        "- HASHTAG BLOCKS: Any post with 2+ hashtags grouped together — deduct 1 point "
+        "- HASHTAG BLOCKS: Any post with 2+ hashtags grouped together — flag as structural issue "
         "(dead giveaway of AI-generated X content)."
     ),
     "pinterest": (
         "PINTEREST-SPECIFIC CHECKS:\n"
         "- SEO CHECK: Pin title and description must contain searchable keywords. "
-        "If the title is clever/witty instead of keyword-rich, deduct 2 points "
+        "If the title is clever/witty instead of keyword-rich, flag as structural issue "
         "(Pinterest is a search engine — cleverness kills discoverability).\n"
-        "- NO HASHTAGS: Any hashtags in the content — deduct 1 point.\n"
-        "- NO FIRST-PERSON: 'We', 'our', 'I' in pin description — deduct 1 point. "
+        "- NO HASHTAGS: Any hashtags in the content — flag as structural issue.\n"
+        "- NO FIRST-PERSON: 'We', 'our', 'I' in pin description — flag as structural issue. "
         "Pins are discovered by strangers via search, not followers.\n"
         "- ACTION VERBS: Title should contain an action verb ('Try', 'Learn', 'Get'). "
         "Passive titles get fewer clicks.\n"
-        "- TITLE LENGTH: Title over 100 chars — deduct 2 points."
+        "- TITLE LENGTH: Title over 100 chars — flag as structural issue."
     ),
     "youtube_shorts": (
         "YOUTUBE SHORTS-SPECIFIC CHECKS:\n"
         "- FORMAT: This is ALWAYS a video post. Caption must be a teaser, not standalone text.\n"
         "- CAPTION LENGTH: Flag if >200 chars.\n"
-        "- #SHORTS HASHTAG: If '#Shorts' appears, deduct 1 point (unnecessary).\n"
+        "- #SHORTS HASHTAG: If '#Shorts' appears, flag as structural issue (unnecessary).\n"
         "- KEYWORD SEO: Caption should contain 2-3 searchable keywords for YouTube Search.\n"
         "- SUBSCRIBE CTA: 'Subscribe' is a valid CTA — do NOT penalize it under generic CTA check."
     ),
     "threads": (
         "THREADS-SPECIFIC CHECKS:\n"
         "- PROMOTIONAL CONTENT: If the post reads like a brand announcement or marketing message, "
-        "deduct 3 points. Threads algorithm actively suppresses promotion.\n"
+        "flag as structural issue. Threads algorithm actively suppresses promotion.\n"
         "- CONVERSION CTA: Any conversion CTA ('Book a call', 'DM us', 'Visit our site') "
-        "— deduct 2 points. Engagement questions only.\n"
+        "— flag as structural issue. Engagement questions only.\n"
         "- AUTHENTICITY: Does this sound like a real person sharing a thought, or a brand "
-        "broadcasting? If broadcasting, deduct 2 points.\n"
+        "broadcasting? If broadcasting, flag as structural issue.\n"
         "- LENGTH: Flag if >400 chars. Sweet spot is 200-300."
     ),
     "mastodon": (
         "MASTODON-SPECIFIC CHECKS:\n"
         "- CAMELCASE HASHTAGS: All hashtags must be CamelCase (#SmallBusiness, not #smallbusiness). "
-        "Accessibility requirement for screen readers. Non-CamelCase — deduct 2 points.\n"
+        "Accessibility requirement for screen readers. Non-CamelCase — flag as structural issue.\n"
         "- ENGAGEMENT BAIT: Any explicit engagement request ('What do you think?', "
-        "'Boost if you agree') — deduct 2 points. Mastodon treats this as spam.\n"
+        "'Boost if you agree') — flag as structural issue. Mastodon treats this as spam.\n"
         "- CORPORATE VOICE: If the post sounds like a marketing department wrote it, "
-        "deduct 2 points.\n"
-        "- CONVERSION CTA: Any conversion CTA — deduct 3 points.\n"
+        "flag as structural issue.\n"
+        "- CONVERSION CTA: Any conversion CTA — flag as structural issue.\n"
         "- CONTENT WARNING: Flag if the post touches sensitive topics without noting a CW may be needed."
     ),
     "bluesky": (
@@ -97,9 +97,9 @@ _PLATFORM_REVIEW_CHECKS = {
         "- CHARACTER COUNT: Hard 300-char limit. Flag any post exceeding 300.\n"
         "- THREAD FORMAT: Each post must be <=300 chars (NOT 280).\n"
         "- ENGAGEMENT BAIT: Generic engagement questions ('What do you think?', 'Thoughts?') "
-        "— deduct 2 points.\n"
+        "— flag as structural issue.\n"
         "- SPECIFICITY: Posts must be about a specific topic. Vague motivational content "
-        "('Believe in your journey') — deduct 2 points.\n"
+        "('Believe in your journey') — flag as structural issue.\n"
         "- PLATITUDES: Bluesky users actively reject generic platitudes."
     ),
 }
@@ -165,7 +165,7 @@ _DERIVATIVE_CHECKS = {
         "VIDEO-FIRST FORMAT CHECK:\n"
         "- Caption = 1-3 sentences MAX (teaser, not article)\n"
         "- Char limit: {char_limit} chars. Flag if exceeded.\n"
-        "- Must create curiosity, not describe the video. Reads like standalone post = deduct 2 pts\n"
+        "- Must create curiosity, not describe the video. Reads like standalone post = flag\n"
         "- CTA rules apply but relaxed — cliffhanger works as implied CTA\n"
         "- No brand paragraph — video speaks for brand\n"
         "- PILLAR ({content_pillar}): {pillar_depth_check}\n"
@@ -178,15 +178,15 @@ _DERIVATIVE_CHECKS = {
         "revision_notes must NEVER remove, merge, or renumber them\n"
         "- Slide 1 = hook (<=10 words), no banned hooks\n"
         "- Slide headlines <=50 chars, <=8 words. Generic labels (Technique, Method, Step N, "
-        "Feature, Benefit) = deduct 1 pt. Must NAME the specific technique/feature/moment.\n"
-        "- Middle slides: clear PROGRESSION. Chopped paragraphs = deduct 1 pt. "
-        "Repeated ideas = deduct 1 pt.\n"
+        "Feature, Benefit) = flag. Must NAME the specific technique/feature/moment.\n"
+        "- Middle slides: clear PROGRESSION. Chopped paragraphs = flag. "
+        "Repeated ideas = flag.\n"
         "- Each content slide ends with a different open loop driving swipe\n"
         "- Final slide: clear takeaway + CTA specific to content topic\n"
         "- Char limit: {char_limit} chars total. Flag if exceeded.\n"
         "- PILLAR ({content_pillar}): {pillar_depth_check}\n"
-        "- Generic content (any brand could use it) = deduct 2 pts\n"
-        "- Caption vs slides: caption must NOT duplicate slide text. >50% verbatim = deduct 2 pts\n"
+        "- Generic content (any brand could use it) = flag\n"
+        "- Caption vs slides: caption must NOT duplicate slide text. >50% verbatim = flag\n"
         "- REVISION SCOPE: target SPECIFIC slides by number (e.g., 'Slide 3: replace generic "
         "headline'). Do NOT suggest removing/merging/renumbering slides."
     ),
@@ -196,8 +196,8 @@ _DERIVATIVE_CHECKS = {
         "- X threads use 1/, 2/, 3/. Bluesky threads do NOT need numbering.\n"
         "- Per-post limit: X = 280 chars, Bluesky = 300 chars. Flag any post exceeding limit.\n"
         "- 1/ must be a hook, no banned patterns\n"
-        "- Each post = COMPLETE standalone thought. Transition-only posts = deduct 1 pt.\n"
-        "- Repeated ideas = deduct 1 pt\n"
+        "- Each post = COMPLETE standalone thought. Transition-only posts = flag.\n"
+        "- Repeated ideas = flag\n"
         "- PILLAR ({content_pillar}): {pillar_depth_check}\n"
         "- REVISION SCOPE: target SPECIFIC post numbers (e.g., '3/: add concrete example'). "
         "Do NOT remove/merge/renumber posts."
@@ -206,7 +206,7 @@ _DERIVATIVE_CHECKS = {
         "STORY FORMAT CHECK:\n"
         "- <=50 words total. Char limit: {char_limit} chars. Flag if exceeded.\n"
         "- Must be punchy and immediate — no preamble\n"
-        "- CTA REQUIRED (swipe up / reply / DM). Missing CTA = deduct 2 pts\n"
+        "- CTA REQUIRED (swipe up / reply / DM). Missing CTA = flag\n"
         "- No hashtags in body text\n"
         "- PILLAR ({content_pillar}): {pillar_depth_check}\n"
         "- REVISION SCOPE: surgical edits only (e.g., 'replace opening with punchier hook')"
@@ -233,7 +233,7 @@ _DERIVATIVE_CHECKS = {
     "original": (
         "STANDARD POST FORMAT CHECK:\n"
         "- Hook before platform fold (IG <=125, LinkedIn <=140, X <=280 total, Bluesky <=300)\n"
-        "- Body: 1-2 sentence paragraphs for mobile readability. >2 sentences = deduct 1 pt\n"
+        "- Body: 1-2 sentence paragraphs for mobile readability. >2 sentences = flag\n"
         "- Char limit: {char_limit} chars. Flag if exceeded.\n"
         "- PILLAR ({content_pillar}): {pillar_depth_check}\n"
         "- Close must match assigned CTA type\n"
@@ -298,12 +298,12 @@ async def review_post(
         social_proof_check = (
             "THIN-PROFILE SOCIAL PROOF CHECK (CRITICAL — this brand has NO verified client data):\n"
             "- ANY reference to clients, client counts, years of experience, or client outcomes "
-            "is FABRICATED — deduct 3 points\n"
+            "is FABRICATED — flag as structural issue\n"
             "- Specific dollar amounts, percentages, or statistics not in the brand profile — "
-            "deduct 3 points (these are made up)\n"
+            "flag as structural issue (these are made up)\n"
             "- 'We helped a client...', 'One client saved...', 'A local business...' — "
-            "ALL fabricated, deduct 3 points\n"
-            "- 'We've seen...', 'Our clients...', 'Many businesses...' — deduct 2 points\n"
+            "ALL fabricated, flag as structural issue\n"
+            "- 'We've seen...', 'Our clients...', 'Many businesses...' — flag as structural issue\n"
             "- The ONLY valid proof is teaching a specific, actionable insight\n"
             "- SPECIFICITY for thin-profile brands means TEACHING DEPTH in the brand's industry — "
             "not brand stories, client data, or unique approach claims. A post that teaches a concrete "
@@ -321,7 +321,7 @@ async def review_post(
             "engagement": (
                 "CTA TYPE CHECK: This post was assigned an ENGAGEMENT CTA.\n"
                 "- Must end with a conversational question or discussion prompt\n"
-                "- Any conversion language ('book', 'DM', 'link in bio', 'visit', 'save this') — deduct 2 points\n"
+                "- Any conversion language ('book', 'DM', 'link in bio', 'visit', 'save this') — flag as structural issue\n"
                 "- For cta_effectiveness scoring: score 8-10 if the post ends with a specific, "
                 "thought-provoking question relevant to the content. Score 5-7 if the question is generic "
                 "('What do you think?', 'Thoughts?'). Score 1-4 only if there's no question at all "
@@ -330,7 +330,7 @@ async def review_post(
             "conversion": (
                 "CTA TYPE CHECK: This post was assigned a CONVERSION CTA.\n"
                 "- Must end with one clear action step (book, DM, save, visit)\n"
-                "- Should NOT also have an engagement question (dual CTA) — deduct 1 point\n"
+                "- Should NOT also have an engagement question (dual CTA) — flag as structural issue\n"
                 "- For cta_effectiveness scoring: score 8-10 if the CTA is clear, specific, and has "
                 "one action step. Score 5-7 if the CTA is present but vague or there's a dual CTA. "
                 "Score 1-4 only if there's no conversion CTA at all.\n\n"
@@ -338,14 +338,14 @@ async def review_post(
             "implied": (
                 "CTA TYPE CHECK: This post was assigned an IMPLIED CTA.\n"
                 "- Content should naturally lead reader to want the service\n"
-                "- Any explicit CTA (questions, 'book a call', 'DM us') — deduct 2 points\n"
+                "- Any explicit CTA (questions, 'book a call', 'DM us') — flag as structural issue\n"
                 "- For cta_effectiveness scoring: score 8-10 if the content naturally implies value or "
                 "next steps without any explicit ask. Score 5-7 if the implication is weak but no explicit "
                 "CTA exists. Do NOT score low for 'no explicit CTA' — implied is the intent.\n\n"
             ),
             "none": (
                 "CTA TYPE CHECK: This post was assigned NO CTA.\n"
-                "- Any call to action whatsoever (questions, conversion, 'thoughts?') — deduct 2 points\n"
+                "- Any call to action whatsoever (questions, conversion, 'thoughts?') — flag as structural issue\n"
                 "- For cta_effectiveness scoring: score 8-10 if the post correctly avoids CTAs. "
                 "Do NOT score low for 'no CTA' — that is the INTENDED behavior for this post.\n\n"
             ),
@@ -380,72 +380,59 @@ Hashtags: {hashtags}
 
 {get_review_guidelines_block()}
 
-SCORING RUBRIC (follow this strictly):
-1-3: Unusable — wrong platform format, off-brand, factual errors, broken formatting
-4-5: Below average — brand paragraphs, generic hooks, dual CTAs, vague social proof,
-     or content that could apply to any business
-6: Acceptable — on-brand, no major quality violations, but unremarkable.
-   One minor issue (slightly generic hook, or one too many emojis)
-7: Good — no quality rule violations, genuine hook with a pattern interrupt,
-   platform-appropriate format, specific to the brand
-8: Strong — teaches something actionable, hook creates a knowledge gap,
-   CTA matches post intent, would perform above average on {platform}
-9-10: Exceptional — viral potential, perfectly crafted for platform algorithm,
-   voice indistinguishable from best human creators
 {_thin_profile_rubric}
-Most AI-generated content should score 5-7. Scoring 8+ should be RARE.
-If you give 8+, you must explain exactly why in strengths.
-
-MANDATORY CHECKS (flag these and reduce score accordingly):
-- Caption contains markdown formatting (**bold**, *italic*, [links]()) — instant fail
+STRUCTURAL CHECKS — flag each issue found as a string in the structural_issues list:
+- Caption contains markdown formatting (**bold**, *italic*, [links]()) — flag
 - BANNED HOOKS: Opens with "Are you...?", "Did you know...?", "What if...?",
   "In today's...", "As a...", "When it comes to...", "Here's the thing:",
   "The truth is:", "Let me tell you something:", "Stop [verb]-ing...",
   "Most people don't realize...", "Here's the truth about...",
-  "Nobody is talking about..." — deduct 2 points.
+  "Nobody is talking about..." — flag.
   EXCEPTION: "Stop [verb]-ing" is acceptable on TikTok/Reels where imperatives are native.
 - BRAND PARAGRAPH: A full paragraph dedicated to describing the brand's services,
-  history, or value proposition (brand-as-subject, not narrator) — deduct 2 points
-- CTA CONFLICT: Both an engagement question AND a conversion CTA in the same post — deduct 1 point
+  history, or value proposition (brand-as-subject, not narrator) — flag
+- CTA CONFLICT: Both an engagement question AND a conversion CTA in the same post — flag
 - VAGUE SOCIAL PROOF: "We've seen countless...", "Many businesses...",
-  "So many clients..." without real numbers — deduct 1 point
+  "So many clients..." without real numbers — flag
 - FABRICATED CLAIMS: Made-up statistics, dollar amounts, percentages, or client
-  stories not supported by brand profile data — deduct 2 points
-- GENERIC CTAs: "Follow for more!", "Like and share", "Drop a comment below!" — deduct 2 points
-- EMOJI OVERLOAD: More than 2 emojis in a single caption — deduct 1 point
-- EMOJI BULLET LISTS: Using emojis as bullet points (fire Point one, pin Point two) — deduct 1 point
-- REPETITIVE STRUCTURE: 3+ sentences starting with "It's" or "This is" — deduct 1 point
-- EXCLAMATION SPAM: More than 1 sentence ending with "!" — deduct 1 point
-- THIRD-PERSON VOICE: Writing about the brand in third person instead of first person — deduct 1 point
-- HASHTAG COUNT: Exceeds platform best practice (Instagram 3-5, X 0-1, LinkedIn 3-5, TikTok 4-6,
-  Pinterest 0, YouTube Shorts 3-5, Threads 0-3, Mastodon 3-5 CamelCase, Bluesky 1-3) — deduct 1 point
-- Caption length violates platform limits (X>280, Threads>500, Bluesky>300)
-- Content could apply to ANY business — nothing specific to {business_name}
-- Hashtags contain sentence fragments, common words, or repeated brand name
-- Caption contains external URLs/links (LinkedIn/Facebook penalize heavily)
+  stories not supported by brand profile data — flag
+- GENERIC CTAs: "Follow for more!", "Like and share", "Drop a comment below!" — flag
+- EMOJI OVERLOAD: More than 2 emojis in a single caption — flag
+- EMOJI BULLET LISTS: Using emojis as bullet points — flag
+- REPETITIVE STRUCTURE: 3+ sentences starting with "It's" or "This is" — flag
+- EXCLAMATION SPAM: More than 1 sentence ending with "!" — flag
+- THIRD-PERSON VOICE: Writing about the brand in third person instead of first person — flag
+- HASHTAG COUNT: Exceeds platform best practice — flag
+- Caption length violates platform limits (X>280, Threads>500, Bluesky>300) — flag
+- Content could apply to ANY business — nothing specific to {business_name} — flag
+- Hashtags contain sentence fragments, common words, or repeated brand name — flag
+- Caption contains external URLs/links (LinkedIn/Facebook penalize heavily) — flag
 - MOMENTUM KILLERS: "Sound familiar?", "Let's break it down",
-  "Here's why it matters", "Let me explain" — deduct 1 point
+  "Here's why it matters", "Let me explain" — flag
 
 {platform_checks}
 
 {derivative_checks}
 
 {social_proof_check}{cta_check}CAPTION QUALITY CHECK (carousel and thread posts):
-- Caption must NOT duplicate slide/post text — it should add context, a personal angle, or a hook
-- Mobile readability: insert line breaks every 2-3 sentences. Wall of text — deduct 1 point
+- Caption must NOT duplicate slide/post text — it should add context, a personal angle, or a hook. If it duplicates, flag as structural issue.
+- Mobile readability: insert line breaks every 2-3 sentences. Wall of text — flag.
 - Must end with an engagement prompt or CTA appropriate to the assigned cta_type
-- Caption that reads like a summary of the slides/posts — deduct 1 point
+- Caption that reads like a summary of the slides/posts — flag.
 
 Flag captions that are too long for their platform. Check hashtags for junk (sentence fragments, common words like #the, #for, #your).
 
+IMPORTANT: Do NOT output a "score" field. The overall score is computed from your engagement_scores
+and structural_issues by the system. Focus on accurately rating each engagement dimension and
+flagging every structural issue you find.
+
 Evaluate and respond with JSON only:
 {{
-  "score": <integer 1-10, overall brand quality score — use the rubric above>,
+  "structural_issues": [<list of strings — each structural problem found from the checks above. Be specific: "Slide 2 headline is a full paragraph (>8 words)", "Caption duplicates Slide 1 text verbatim", "No open loop on Slide 4". Empty list [] if no issues found.>],
   "brand_alignment": <"strong"|"moderate"|"weak">,
   "strengths": [<list of 2-3 strength strings>],
   "improvements": [<list of 1-3 improvement suggestions — be specific, not vague>],
-  "approved": <true if score >= 8, false otherwise>,
-  "revision_notes": <if score < 8: 1-3 SPECIFIC, SCOPED edit instructions. For structured formats (carousel, thread, pin), target individual sections by label (e.g., "Slide 3: replace generic headline with named technique", "3/: add a concrete example", "PIN TITLE: add action verb and primary keyword"). Do NOT suggest removing, merging, or renumbering structural labels (Slide N:, 1/, PIN TITLE:, PIN DESCRIPTION:). If score >= 8, null.>,
+  "revision_notes": <1-3 SPECIFIC, SCOPED edit instructions if structural_issues is not empty. For structured formats (carousel, thread, pin), target individual sections by label (e.g., "Slide 3: replace generic headline with named technique", "3/: add a concrete example", "PIN TITLE: add action verb and primary keyword"). Do NOT suggest removing, merging, or renumbering structural labels (Slide N:, 1/, PIN TITLE:, PIN DESCRIPTION:). Null if no issues.>,
   "revised_hashtags": <cleaned/validated hashtag array. RULES: (1) every hashtag must match
     a topic ACTUALLY discussed in the caption — remove mismatches (e.g., #SOPs when SOPs
     aren't mentioned), (2) no sentence fragments or common words, (3) respect platform limits:
@@ -485,44 +472,72 @@ Evaluate and respond with JSON only:
 
         result = json.loads(raw)
 
-        # Normalize fields
+        # Normalize engagement scores
         raw_engagement = result.get("engagement_scores", {})
-        final_score = int(result.get("score", 5))
-        # Hard-coded threshold — don't trust the model's approved field
+        engagement = {
+            "hook_strength": int(raw_engagement.get("hook_strength", 5)),
+            "relevance": int(raw_engagement.get("relevance", 5)),
+            "cta_effectiveness": int(raw_engagement.get("cta_effectiveness", 5)),
+            "platform_fit": int(raw_engagement.get("platform_fit", 5)),
+            "teaching_depth": int(raw_engagement.get("teaching_depth", 0)),
+        }
+
+        # Extract structural issues from LLM response
+        structural_issues = result.get("structural_issues", [])
+        if not isinstance(structural_issues, list):
+            structural_issues = []
+
+        # Compute score deterministically from engagement scores + structural issues
+        weights = get_scoring_weights(platform, derivative_type)
+        content_quality = (
+            engagement["hook_strength"] * weights["hook"]
+            + engagement["relevance"] * weights["relevance"]
+            + engagement["cta_effectiveness"] * weights["cta"]
+            + engagement["platform_fit"] * weights["platform_fit"]
+            + engagement["teaching_depth"] * weights["teaching_depth"]
+        )
+        structural_mod = max(weights["floor"], 1.0 - len(structural_issues) * 0.05)
+        final_score = max(1, min(10, round(content_quality * structural_mod)))
         approved = final_score >= 8
+
+        logger.info(
+            "Review score computed: content=%.1f × struct=%.2f (%d issues) = %d for %s/%s",
+            content_quality, structural_mod, len(structural_issues),
+            final_score, platform, derivative_type,
+        )
+
+        # Enforce invariant: revision_notes only when structural issues exist
+        revision_notes = result.get("revision_notes") if structural_issues else None
+
         return {
             "score": final_score,
             "brand_alignment": result.get("brand_alignment", "moderate"),
             "strengths": result.get("strengths", []),
             "improvements": result.get("improvements", []),
             "approved": approved,
-            "revision_notes": result.get("revision_notes"),
+            "revision_notes": revision_notes,
             "revised_hashtags": result.get("revised_hashtags"),
-            "engagement_scores": {
-                "hook_strength": int(raw_engagement.get("hook_strength", 5)),
-                "relevance": int(raw_engagement.get("relevance", 5)),
-                "cta_effectiveness": int(raw_engagement.get("cta_effectiveness", 5)),
-                "platform_fit": int(raw_engagement.get("platform_fit", 5)),
-                "teaching_depth": int(raw_engagement.get("teaching_depth", 0)),
-            },
+            "structural_issues": structural_issues,
+            "engagement_scores": engagement,
             "engagement_prediction": result.get("engagement_prediction", "medium"),
         }
 
     except Exception as e:
         logger.error(f"Review agent error: {e}")
         return {
-            "score": 5,
+            "score": 7,
             "brand_alignment": "moderate",
             "strengths": ["Content generated successfully"],
             "improvements": ["Review service temporarily unavailable"],
-            "approved": True,
+            "approved": False,
             "revision_notes": None,
+            "structural_issues": [],
             "engagement_scores": {
                 "hook_strength": 5,
                 "relevance": 5,
                 "cta_effectiveness": 5,
                 "platform_fit": 5,
-                "teaching_depth": 0,
+                "teaching_depth": 5,
             },
             "engagement_prediction": "medium",
         }

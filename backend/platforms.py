@@ -491,3 +491,48 @@ def get_review_guidelines_block() -> str:
     for spec in REGISTRY.values():
         lines.append(f"- {spec.display_name}: {spec.review_guidelines}")
     return "\n".join(lines)
+
+
+# ── Scoring weights (platform + derivative specific) ─────────────────────────
+# Each entry: hook, relevance, cta, platform_fit, teaching_depth weights (sum=1.0)
+# + floor = minimum structural modifier (prevents catastrophic scores)
+
+_SCORING_WEIGHTS: dict[str, dict[str, float]] = {
+    # Instagram
+    "instagram":              {"hook": 0.25, "relevance": 0.20, "cta": 0.15, "platform_fit": 0.15, "teaching_depth": 0.25, "floor": 0.70},
+    "instagram/carousel":     {"hook": 0.30, "relevance": 0.20, "cta": 0.15, "platform_fit": 0.10, "teaching_depth": 0.25, "floor": 0.70},
+    "instagram/video_first":  {"hook": 0.40, "relevance": 0.20, "cta": 0.10, "platform_fit": 0.20, "teaching_depth": 0.10, "floor": 0.75},
+    # LinkedIn
+    "linkedin":               {"hook": 0.25, "relevance": 0.25, "cta": 0.15, "platform_fit": 0.10, "teaching_depth": 0.25, "floor": 0.65},
+    "linkedin/carousel":      {"hook": 0.20, "relevance": 0.20, "cta": 0.15, "platform_fit": 0.15, "teaching_depth": 0.30, "floor": 0.65},
+    # X / Twitter
+    "x":                      {"hook": 0.35, "relevance": 0.30, "cta": 0.15, "platform_fit": 0.15, "teaching_depth": 0.05, "floor": 0.90},
+    "x/thread_hook":          {"hook": 0.30, "relevance": 0.25, "cta": 0.15, "platform_fit": 0.15, "teaching_depth": 0.15, "floor": 0.85},
+    # TikTok
+    "tiktok":                 {"hook": 0.50, "relevance": 0.20, "cta": 0.05, "platform_fit": 0.15, "teaching_depth": 0.10, "floor": 0.80},
+    "tiktok/carousel":        {"hook": 0.30, "relevance": 0.25, "cta": 0.05, "platform_fit": 0.15, "teaching_depth": 0.25, "floor": 0.80},
+    # Facebook
+    "facebook":               {"hook": 0.25, "relevance": 0.30, "cta": 0.20, "platform_fit": 0.10, "teaching_depth": 0.15, "floor": 0.80},
+    # Pinterest
+    "pinterest":              {"hook": 0.20, "relevance": 0.25, "cta": 0.10, "platform_fit": 0.25, "teaching_depth": 0.20, "floor": 0.60},
+    # YouTube Shorts
+    "youtube_shorts":         {"hook": 0.35, "relevance": 0.20, "cta": 0.10, "platform_fit": 0.10, "teaching_depth": 0.25, "floor": 0.75},
+    # Threads
+    "threads":                {"hook": 0.30, "relevance": 0.30, "cta": 0.10, "platform_fit": 0.20, "teaching_depth": 0.10, "floor": 0.92},
+    # Mastodon
+    "mastodon":               {"hook": 0.10, "relevance": 0.30, "cta": 0.05, "platform_fit": 0.25, "teaching_depth": 0.30, "floor": 0.70},
+    # Bluesky
+    "bluesky":                {"hook": 0.25, "relevance": 0.30, "cta": 0.10, "platform_fit": 0.25, "teaching_depth": 0.10, "floor": 0.88},
+}
+
+
+def get_scoring_weights(platform: str, derivative_type: str = "") -> dict[str, float]:
+    """Get platform/derivative-specific scoring weights.
+
+    Lookup: try platform/derivative first, fall back to platform default.
+    """
+    if derivative_type:
+        key = f"{platform}/{derivative_type}"
+        if key in _SCORING_WEIGHTS:
+            return _SCORING_WEIGHTS[key]
+    return _SCORING_WEIGHTS.get(platform, _SCORING_WEIGHTS["instagram"])
