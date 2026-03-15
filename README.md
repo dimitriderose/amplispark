@@ -38,7 +38,7 @@ Amplifi uses Gemini's interleaved text + image output to generate copy and visua
 
 ## Tech Stack
 
-- **AI Engine:** Google Gemini 2.5 Flash (interleaved text + image output)
+- **AI Engine:** Gemini 3 Flash (text/captions/reviews), Gemini 3.1 Flash Image Preview (image generation), Gemini 2.5 Flash Native Audio (voice coaching), Veo 3.1 (video generation)
 - **Voice:** Gemini Live API (BidiGenerateContent) for multi-turn voice coaching
 - **Agent Framework:** Google ADK (Agent Development Kit)
 - **Backend:** FastAPI on Cloud Run (port 8080), modular router architecture
