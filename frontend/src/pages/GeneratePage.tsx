@@ -23,6 +23,7 @@ export default function GeneratePage() {
   const [byopRecommendation, setByopRecommendation] = useState<string | undefined>(undefined)
   const [reviewKey, setReviewKey] = useState(0)
   const hasRegenerated = useRef(false)
+  const generatedRef = useRef(false)
   // Local overrides for edited image URLs (post-edit)
   const [editedImageUrl, setEditedImageUrl] = useState<string | null>(null)
   const [editedEditCount, setEditedEditCount] = useState<number>(0)
@@ -79,8 +80,15 @@ export default function GeneratePage() {
         })
         .catch(() => {})
     } else if (planId && dayIndex !== undefined && brandId) {
+      // Guard against double-fire in React strict mode
+      if (generatedRef.current) return
+      generatedRef.current = true
       // Auto-start generation; return cleanup so EventSource closes on unmount
-      return generate(planId, parseInt(dayIndex, 10), brandId, undefined, imageStyle || undefined)
+      const cleanup = generate(planId, parseInt(dayIndex, 10), brandId, undefined, imageStyle || undefined)
+      return () => {
+        generatedRef.current = false
+        if (typeof cleanup === 'function') cleanup()
+      }
     }
   }, [planId, dayIndex, brandId, imageStyle, generate, viewPostId, loadExisting])
 

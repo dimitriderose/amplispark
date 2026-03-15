@@ -71,14 +71,30 @@ export default function EditMediaSection({
     setIsAccepted(true)
   }
 
-  const handleUndo = () => {
+  const handleUndo = async () => {
     if (beforeUrl && beforeUrl !== currentUrl) {
-      const newCount = Math.max(0, localEditCount - 1)
-      setCurrentUrl(beforeUrl)
-      setBeforeUrl('')
-      setLocalEditCount(newCount)
-      setEditHistory(h => h.slice(0, -1))
-      onImageUpdated(beforeUrl, newCount)
+      setIsLoading(true)
+      try {
+        const result = await api.resetPostMedia(brandId, postId) as { image_url: string }
+        const restoredUrl = result.image_url || beforeUrl
+        const newCount = Math.max(0, localEditCount - 1)
+        setCurrentUrl(restoredUrl)
+        setBeforeUrl('')
+        setLocalEditCount(newCount)
+        setEditHistory(h => h.slice(0, -1))
+        onImageUpdated(restoredUrl, newCount)
+      } catch (err) {
+        // Fall back to local-only undo if backend call fails
+        console.error('Undo persist failed, applying local undo', err)
+        const newCount = Math.max(0, localEditCount - 1)
+        setCurrentUrl(beforeUrl)
+        setBeforeUrl('')
+        setLocalEditCount(newCount)
+        setEditHistory(h => h.slice(0, -1))
+        onImageUpdated(beforeUrl, newCount)
+      } finally {
+        setIsLoading(false)
+      }
     }
   }
 

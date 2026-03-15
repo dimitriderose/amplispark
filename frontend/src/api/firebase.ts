@@ -35,6 +35,16 @@ export function getUid(): string | null {
   return auth.currentUser?.uid ?? null
 }
 
+export async function getIdToken(): Promise<string | null> {
+  const user = auth.currentUser
+  if (!user) return null
+  try {
+    return await user.getIdToken()
+  } catch {
+    return null
+  }
+}
+
 export function getCurrentUser(): {
   displayName: string | null
   photoURL: string | null

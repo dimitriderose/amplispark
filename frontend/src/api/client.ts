@@ -1,3 +1,4 @@
+import { getIdToken, getUid } from './firebase'
 import { downloadBlob } from '../utils/downloads'
 import type {
   BrandResponse,
@@ -22,8 +23,9 @@ import type {
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
+    const clone = res.clone()
     const err = await res.json().catch(async () => {
-      const text = await res.text().catch(() => '')
+      const text = await clone.text().catch(() => '')
       return { error: text.slice(0, 200) || res.statusText }
     })
     throw new Error(err.detail || err.error || `HTTP ${res.status}`)
@@ -46,10 +48,20 @@ async function handleBlobResponse(res: Response): Promise<Blob> {
   return res.blob()
 }
 
+async function _authHeaders(): Promise<Record<string, string>> {
+  const token = await getIdToken()
+  if (token) return { 'Authorization': `Bearer ${token}` }
+  // Fallback to UID header during migration
+  const uid = getUid()
+  return uid ? { 'X-User-UID': uid } : {}
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const authH = await _authHeaders()
   const res = await fetch(path, {
     headers: {
-      ...(options?.body ? { 'Content-Type': 'application/json' } : {}),
+      ...authH,
+      ...(options?.body && !(options.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}),
       ...options?.headers,
     },
     ...options,

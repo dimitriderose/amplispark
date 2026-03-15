@@ -33,8 +33,11 @@ async def _refresh_signed_urls(post: dict) -> dict:
     for i, uri in enumerate(post.get("image_gcs_uris") or []):
         try:
             urls = post.setdefault("image_urls", [])
+            signed = await get_signed_url(uri)
             if i < len(urls):
-                urls[i] = await get_signed_url(uri)
+                urls[i] = signed
+            else:
+                urls.append(signed)
         except Exception as e:
             logger.warning("Failed to re-sign image URL index %d for %s: %s", i, post.get("post_id"), e)
     if post.get("thumbnail_gcs_uri"):
@@ -50,6 +53,9 @@ async def _auto_fail_stale_generating(post: dict, brand_id: str) -> None:
     if post.get("status") != "generating":
         return
     created = post.get("created_at")
+    if created:
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
     if created and (datetime.now(timezone.utc) - created) > timedelta(minutes=10):
         post["status"] = "failed"
         post_id = post.get("post_id")
@@ -394,6 +400,33 @@ def _ics_escape(text: str) -> str:
     return text.replace("\\", "\\\\").replace("\n", "\\n").replace(",", "\\,").replace(";", "\\;")
 
 
+def _ics_fold_line(line: str) -> str:
+    """Fold a single iCalendar content line at 75 octets per RFC 5545 Section 3.1.
+
+    Long lines are split with CRLF followed by a single space continuation character.
+    """
+    encoded = line.encode("utf-8")
+    if len(encoded) <= 75:
+        return line
+    parts: list[str] = []
+    while len(encoded) > 75:
+        # First chunk is 75 bytes, continuations are 74 (the space counts as 1)
+        cut = 75 if not parts else 74
+        # Don't split in the middle of a multi-byte UTF-8 sequence
+        chunk = encoded[:cut]
+        while cut > 1 and (encoded[cut - 1] & 0xC0) == 0x80:
+            cut -= 1
+            chunk = encoded[:cut]
+        if cut == 0:
+            cut = 1
+            chunk = encoded[:cut]
+        parts.append(chunk.decode("utf-8", errors="replace"))
+        encoded = encoded[cut:]
+    if encoded:
+        parts.append(encoded.decode("utf-8"))
+    return "\r\n ".join(parts)
+
+
 def _build_ics(plan: dict, posts: list[dict], brand_name: str) -> str:
     """Build an .ics (iCalendar) string from a content plan and its posts."""
     days = plan.get("days", [])
@@ -407,9 +440,9 @@ def _build_ics(plan: dict, posts: list[dict], brand_name: str) -> str:
             base_date = datetime.fromisoformat(created.replace("Z", "+00:00")).date()
         except Exception as e:
             logger.warning("Failed to parse plan created_at date %r: %s", created, e)
-            base_date = datetime.utcnow().date()
+            base_date = datetime.now(timezone.utc).date()
     else:
-        base_date = datetime.utcnow().date()
+        base_date = datetime.now(timezone.utc).date()
 
     # Build lookup: day_index -> day brief
     day_lookup = {d.get("day_index", i): d for i, d in enumerate(days)}
@@ -461,8 +494,8 @@ def _build_ics(plan: dict, posts: list[dict], brand_name: str) -> str:
             f"UID:post_{post_id}@amplifi",
             f"DTSTART:{dt_start.strftime('%Y%m%dT%H%M%S')}",
             f"DTEND:{dt_end.strftime('%Y%m%dT%H%M%S')}",
-            f"SUMMARY:{_ics_escape(summary)}",
-            f"DESCRIPTION:{description}",
+            _ics_fold_line(f"SUMMARY:{_ics_escape(summary)}"),
+            _ics_fold_line(f"DESCRIPTION:{description}"),
             f"CATEGORIES:{platform}",
             "STATUS:CONFIRMED",
             "END:VEVENT",
@@ -497,6 +530,9 @@ async def download_calendar_ics(brand_id: str, plan_id: str):
     )
 
 
+_EMAIL_RE = re.compile(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$")
+
+
 @router.post("/brands/{brand_id}/plans/{plan_id}/calendar/email")
 async def email_calendar(
     brand_id: str,
@@ -504,6 +540,9 @@ async def email_calendar(
     email: str = Body(..., embed=True),
 ):
     """Email the content plan .ics file to the specified address."""
+    if not _EMAIL_RE.match(email):
+        raise HTTPException(status_code=400, detail="Invalid email address format")
+
     from backend.services.email_client import send_calendar_email
 
     brand = await firestore_client.get_brand(brand_id)

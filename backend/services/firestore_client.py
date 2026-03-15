@@ -56,20 +56,30 @@ async def list_brands_by_owner(owner_uid: str) -> list:
 
 
 async def claim_brand(brand_id: str, owner_uid: str) -> bool:
-    """Assign an owner to an unclaimed brand. Returns True if claimed."""
+    """Assign an owner to an unclaimed brand. Returns True if claimed.
+
+    Uses a Firestore transaction to prevent TOCTOU race conditions where
+    two concurrent requests could both read the brand as unclaimed.
+    """
     db = get_client()
     doc_ref = db.collection("brands").document(brand_id)
-    doc = await doc_ref.get()
-    if not doc.exists:
-        return False
-    data = doc.to_dict()
-    if data.get("owner_uid"):
-        return data["owner_uid"] == owner_uid
-    await doc_ref.update({
-        "owner_uid": owner_uid,
-        "updated_at": datetime.now(timezone.utc),
-    })
-    return True
+
+    @firestore.async_transactional
+    async def _claim_in_txn(txn, ref):
+        doc = await ref.get(transaction=txn)
+        if not doc.exists:
+            return False
+        data = doc.to_dict()
+        if data.get("owner_uid"):
+            return data["owner_uid"] == owner_uid
+        txn.update(ref, {
+            "owner_uid": owner_uid,
+            "updated_at": datetime.now(timezone.utc),
+        })
+        return True
+
+    txn = db.transaction()
+    return await _claim_in_txn(txn, doc_ref)
 
 
 async def update_brand(brand_id: str, data: dict) -> None:
@@ -133,11 +143,15 @@ async def update_plan_day(brand_id: str, plan_id: str, day_index: int, data: dic
     plan_ref = (db.collection("brands").document(brand_id)
                   .collection("content_plans").document(plan_id))
     plan_doc = await plan_ref.get()
-    if plan_doc.exists:
-        days = plan_doc.to_dict().get("days", [])
-        if 0 <= day_index < len(days):
-            days[day_index].update(data)
-            await plan_ref.update({"days": days})
+    if not plan_doc.exists:
+        raise ValueError(f"Plan {plan_id} not found for brand {brand_id}")
+    days = plan_doc.to_dict().get("days", [])
+    if day_index < 0 or day_index >= len(days):
+        raise ValueError(
+            f"day_index {day_index} out of range (plan has {len(days)} days)"
+        )
+    days[day_index].update(data)
+    await plan_ref.update({"days": days})
 
 # ── Post operations ───────────────────────────────────────────
 

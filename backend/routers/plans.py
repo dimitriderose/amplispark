@@ -160,9 +160,23 @@ async def upload_day_photo(
     if mime not in _ALLOWED_IMAGE_TYPES:
         raise HTTPException(status_code=400, detail="Only JPEG, PNG, or WebP images are accepted")
 
-    file_bytes = await file.read()
-    if len(file_bytes) > 20 * 1024 * 1024:  # 20 MB cap
+    # Check Content-Length / file.size before reading entire file into memory
+    max_size = 20 * 1024 * 1024  # 20 MB cap
+    if file.size is not None and file.size > max_size:
         raise HTTPException(status_code=400, detail="Image must be smaller than 20 MB")
+
+    # Stream-read up to max_size + 1 byte to detect oversized uploads
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(1024 * 64)  # 64 KB chunks
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_size:
+            raise HTTPException(status_code=400, detail="Image must be smaller than 20 MB")
+        chunks.append(chunk)
+    file_bytes = b"".join(chunks)
 
     try:
         signed_url, gcs_uri = await upload_byop_photo(

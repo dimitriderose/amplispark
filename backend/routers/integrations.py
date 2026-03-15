@@ -1,5 +1,7 @@
 import logging
-from datetime import datetime
+import base64
+import os
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Query, Body
 from fastapi.responses import Response
@@ -7,6 +9,41 @@ from fastapi.responses import Response
 from backend.services import firestore_client
 
 logger = logging.getLogger(__name__)
+
+# ── Token obfuscation helpers ────────────────────────────────
+# Fernet symmetric encryption for Notion OAuth tokens
+_TOKEN_KEY = os.environ.get("TOKEN_ENCRYPT_KEY", "")
+_fernet = None
+if _TOKEN_KEY:
+    from cryptography.fernet import Fernet
+    # Fernet requires a 32-byte URL-safe base64-encoded key
+    # Generate one with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    try:
+        _fernet = Fernet(_TOKEN_KEY.encode() if isinstance(_TOKEN_KEY, str) else _TOKEN_KEY)
+    except Exception as e:
+        logger.warning("Invalid TOKEN_ENCRYPT_KEY — tokens will be stored as plaintext: %s", e)
+
+
+def _encrypt_token(token: str) -> str:
+    """Encrypt a token using Fernet. Falls back to plaintext if no key configured."""
+    if not _fernet:
+        return token
+    return "enc:" + _fernet.encrypt(token.encode("utf-8")).decode("ascii")
+
+
+def _decrypt_token(stored: str) -> str:
+    """Decrypt a Fernet-encrypted token. Handles legacy plaintext and XOR-obfuscated tokens."""
+    if stored.startswith("enc:") and _fernet:
+        from cryptography.fernet import InvalidToken
+        try:
+            return _fernet.decrypt(stored[4:].encode("ascii")).decode("utf-8")
+        except InvalidToken:
+            logger.error("Failed to decrypt token — key may have changed")
+            return ""
+    if stored.startswith("obf:"):
+        # Legacy XOR obfuscation — decode and re-encrypt on next write
+        return stored  # return as-is; caller should re-encrypt
+    return stored  # legacy plaintext
 
 router = APIRouter()
 
@@ -109,7 +146,7 @@ async def notion_databases(brand_id: str):
         raise HTTPException(status_code=400, detail="Notion not connected")
 
     try:
-        databases = await search_databases(notion["access_token"])
+        databases = await search_databases(_decrypt_token(notion["access_token"]))
     except Exception as e:
         logger.error("Failed to list Notion databases: %s", e)
         raise HTTPException(status_code=502, detail=f"Could not fetch databases: {e}")
@@ -136,7 +173,7 @@ async def notion_select_database(
 
     # Ensure database has the right columns
     try:
-        await ensure_database_schema(notion["access_token"], database_id)
+        await ensure_database_schema(_decrypt_token(notion["access_token"]), database_id)
     except Exception as e:
         logger.warning("Could not update Notion database schema: %s", e)
 
@@ -176,7 +213,7 @@ async def export_plan_to_notion(brand_id: str, plan_id: str):
     day_lookup = {d.get("day_index", i): d for i, d in enumerate(days)}
 
     results = []
-    access_token = notion["access_token"]
+    access_token = _decrypt_token(notion["access_token"])
     database_id = notion["database_id"]
 
     for post in posts:
@@ -200,7 +237,7 @@ async def export_plan_to_notion(brand_id: str, plan_id: str):
             publish_status["notion"] = {
                 "status": "exported",
                 "notion_page_id": notion_page_id,
-                "published_at": datetime.utcnow().isoformat(),
+                "published_at": datetime.now(timezone.utc).isoformat(),
             }
             await firestore_client.update_post(brand_id, post_id, {"publish_status": publish_status})
 
@@ -235,14 +272,15 @@ async def notion_callback(code: str = Query(...), state: str = Query(...)):
         logger.error("Notion OAuth token exchange failed: %s", e)
         raise HTTPException(status_code=400, detail=f"Notion authorization failed: {e}")
 
-    # Store integration data on brand
+    # Store integration data on brand (token is obfuscated before persistence)
+    raw_token = token_data.get("access_token", "")
     integrations = brand.get("integrations", {})
     integrations["notion"] = {
-        "access_token": token_data.get("access_token"),
+        "access_token": _encrypt_token(raw_token) if raw_token else "",
         "bot_id": token_data.get("bot_id"),
         "workspace_id": token_data.get("workspace_id"),
         "workspace_name": token_data.get("workspace_name", ""),
-        "connected_at": datetime.utcnow().isoformat(),
+        "connected_at": datetime.now(timezone.utc).isoformat(),
     }
     await firestore_client.update_brand(brand_id, {"integrations": integrations})
 

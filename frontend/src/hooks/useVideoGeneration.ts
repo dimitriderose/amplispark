@@ -58,6 +58,11 @@ export function useVideoGeneration(postId: string, brandId: string, existingVide
 
   // Reset state when postId or existingVideoUrl changes (navigating between posts)
   useEffect(() => {
+    // Clear any in-flight polling from the previous post
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current)
+      intervalRef.current = null
+    }
     if (existingVideoUrl) {
       setStatus('complete')
       setVideoUrl(existingVideoUrl)

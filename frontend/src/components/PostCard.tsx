@@ -198,10 +198,10 @@ export default function PostCard({ post, brandId, onApproved, onDismiss, onView 
           <button
             onClick={async () => {
               try {
-                const res = await api.regeneratePost(post.post_id, brandId)
+                const res = await api.regeneratePost(brandId, post.post_id)
                 navigate(res.generate_url)
               } catch {
-                navigate(`/generate/${post.plan_id}/${post.day_index}?brand_id=${brandId}`)
+                navigate(`/generate/${post.plan_id}/${post.brief_index ?? post.day_index}?brand_id=${brandId}`)
               }
             }}
             style={{

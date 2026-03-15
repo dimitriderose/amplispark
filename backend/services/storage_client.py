@@ -97,7 +97,22 @@ async def get_signed_url(gcs_uri: str) -> str:
     return await _get_serving_url(blob, blob_path, expiration=timedelta(hours=1))
 
 async def download_from_gcs(url: str) -> bytes:
-    """Download bytes from a GCS signed URL. Only storage.googleapis.com URLs accepted."""
+    """Download bytes from a GCS signed URL or backend proxy URL.
+
+    Accepts:
+      - ``https://storage.googleapis.com/...`` (signed URLs)
+      - ``/api/storage/serve/...`` (backend proxy URLs — resolved via GCS client directly)
+    """
+    _PROXY_PREFIX = "/api/storage/serve/"
+    if url.startswith(_PROXY_PREFIX):
+        blob_path = url[len(_PROXY_PREFIX):]
+        if ".." in blob_path:
+            raise ValueError(f"Invalid blob path (path traversal): {blob_path}")
+        bucket = get_bucket()
+        blob = bucket.blob(blob_path)
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, blob.download_as_bytes)
+
     import httpx
     if not url.startswith("https://storage.googleapis.com/"):
         raise ValueError(f"Refusing to fetch non-GCS URL: {url!r}")

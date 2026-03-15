@@ -1,7 +1,7 @@
 import asyncio
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from google import genai
 from google.genai import types
 from backend.config import GOOGLE_API_KEY, GEMINI_MODEL
@@ -287,7 +287,7 @@ async def _research_visual_trends(platform: str, industry: str) -> dict | None:
 
     # Fetch from Gemini with Google Search grounding
     try:
-        month_year = datetime.now().strftime('%B %Y')
+        month_year = datetime.now(timezone.utc).strftime('%B %Y')
         prompt = (
             f"Research what image styles and visual content formats are currently driving the\n"
             f"highest engagement for {industry} brands on {platform} in {month_year}.\n"
@@ -350,7 +350,7 @@ async def _research_video_trends(platform: str, industry: str) -> dict | None:
 
     # Fetch from Gemini with Google Search grounding
     try:
-        month_year = datetime.now().strftime('%B %Y')
+        month_year = datetime.now(timezone.utc).strftime('%B %Y')
         prompt = (
             f"Research what short-form video formats and hook patterns are driving the highest\n"
             f"engagement for {industry} brands on {platform} in {month_year}.\n"
@@ -639,7 +639,7 @@ async def run_strategy(
         )
 
     # Temporal awareness
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     _month = now.month
     _season = (
         "Winter" if _month in (12, 1, 2) else
@@ -895,7 +895,7 @@ Return ONLY a valid JSON array of {total_briefs} objects. No markdown, no extra 
         # Platform concentration no longer needed — frequency research handles distribution
 
         trend_summary = {
-            "researched_at": datetime.now().isoformat(),
+            "researched_at": datetime.now(timezone.utc).isoformat(),
             "platform_trends": platform_trends_map,
             "visual_trends": visual_trends,
             "video_trends": video_trends,
@@ -1124,7 +1124,7 @@ async def refresh_research(
                 platform_trends_map[p] = r
 
     return {
-        "researched_at": datetime.now().isoformat(),
+        "researched_at": datetime.now(timezone.utc).isoformat(),
         "platform_trends": platform_trends_map,
         "visual_trends": visual_result if isinstance(visual_result, dict) else None,
         "video_trends": video_result if isinstance(video_result, dict) else None,

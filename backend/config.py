@@ -24,7 +24,12 @@ X_CLIENT_SECRET = os.environ.get("X_CLIENT_SECRET", "")
 # Notion OAuth (public integration)
 NOTION_CLIENT_ID = os.environ.get("NOTION_CLIENT_ID", "")
 NOTION_CLIENT_SECRET = os.environ.get("NOTION_CLIENT_SECRET", "")
-NOTION_REDIRECT_URI = os.environ.get("NOTION_REDIRECT_URI", "http://localhost:5173/auth/notion/callback")
+NOTION_REDIRECT_URI = os.environ.get("NOTION_REDIRECT_URI", "")
+if not NOTION_REDIRECT_URI:
+    import logging as _logging
+    _logging.getLogger(__name__).warning(
+        "NOTION_REDIRECT_URI is not set. Notion OAuth integration will not work until this is configured."
+    )
 
 # Budget constants
 IMAGE_COST_PER_UNIT = 0.039   # ~$0.039 per generated image
