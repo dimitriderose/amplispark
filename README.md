@@ -10,6 +10,8 @@ An AI-powered creative director that analyzes your brand and produces complete, 
 
 Amplifi uses Gemini's interleaved text + image output to generate copy and visuals together in one coherent stream. Describe your business (or paste your website URL for deeper analysis), and get a full week of social media content tailored to your brand, across every platform.
 
+- **3-step onboarding wizard** — a guided wizard replaces the old single-form onboarding. Step 1: business name, description, website URL, industry. Step 2: tone, audience, colors, logo upload (skippable). Step 3: platform selection (AI or manual). SessionStorage persistence survives refresh; brand creation is deferred to the final step.
+- **Interactive guided tour** — an 11-step tooltip tour with spotlight overlay on first dashboard visit. Covers brand summary, edit brand, calendar, generate, style picker, new plan, tabs, posts, connections, video, and voice coach. Auto-switches tabs, supports Back/Next/Skip and Escape key. Re-accessible via "Take a tour" button in the brand summary bar.
 - **Smart brand analysis** — describe your business or paste your website URL. Amplifi extracts your colors, tone, audience, visual style, and competitive positioning automatically.
 - **Weekly content calendar** — a full 7-day content plan with AI-researched posting frequency, optimal posting times, and pillar-based strategy (education-first for new brands, data-forward for established ones).
 - **11 platforms** — Instagram, LinkedIn, X, TikTok, Facebook, Threads, Pinterest, YouTube Shorts, Mastodon, Bluesky, and more. Each post is tailored to the platform's format, character limits, hashtag conventions, and algorithm preferences.
@@ -31,8 +33,8 @@ Amplifi uses Gemini's interleaved text + image output to generate copy and visua
 ## How it works
 
 1. **Sign in with Google** — one-click Google Sign-In to link your brands to your account.
-2. **Describe your brand** — tell us about your business in a few sentences. Optionally add your website URL for deeper analysis.
-3. **AI builds your brand** — colors, tone, audience, competitors, style directives — all editable.
+2. **Complete the onboarding wizard** — a 3-step wizard collects your business info, brand preferences, and platform selection. Skip what you want; finalize with "Create My Brand."
+3. **AI builds your brand** — colors, tone, audience, competitors, style directives — all editable. A guided tour walks you through the dashboard on your first visit.
 4. **Get your week** — watch as a multi-platform 7-day content calendar streams in live, with AI-researched posting frequency and suggested posting times per platform.
 5. **Review and export** — approve posts, download ZIPs, export to Notion, or copy all captions to clipboard.
 
@@ -91,7 +93,7 @@ See the full [architecture diagram](docs/architecture.mermaid) for agent interac
 
 | Document | Description |
 |---|---|
-| [Product Requirements (PRD)](docs/PRD.md) | v1.6 — Full product spec with security hardening, multiplicative scoring, responsive design, modular architecture, AI media editor |
+| [Product Requirements (PRD)](docs/PRD.md) | v1.7 — Full product spec with 3-step onboarding wizard, guided tour, security hardening, multiplicative scoring, responsive design, modular architecture, AI media editor |
 | [Technical Design (TDD)](docs/TDD.md) | v1.6 — Implementation spec covering Cloud Build CI/CD, SPA routing, Google Sign-In, Brands page, Platform Registry, integrations, calibrated review scoring |
 | [Deployment Guide](docs/DEPLOYMENT.md) | Complete deployment guide — local dev, Cloud Build CI/CD (`deploy.sh`), manual Cloud Run deploy, Terraform IaC, environment variables, troubleshooting |
 | [Architecture Diagram](docs/architecture.mermaid) | Mermaid diagram — full agent pipeline, CI/CD infrastructure, Google Auth, Brands page, Notion/Email services, GCP data flows |

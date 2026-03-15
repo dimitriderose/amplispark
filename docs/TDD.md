@@ -4,7 +4,7 @@
 **Category:** ✍️ Creative Storyteller
 **Author:** Software Architecture Team
 **Companion Document:** PRD — Amplifi v1.5
-**Version:** 1.7 | March 15, 2026 (updated from v1.6 March 13)
+**Version:** 1.8 | March 15, 2026 (updated from v1.7 — added NUX: onboarding wizard + guided tour)
 
 ---
 
@@ -12,7 +12,7 @@
 
 This Technical Design Document specifies the implementation architecture for Amplifi, an AI-powered creative director that produces complete social media content packages using Gemini's interleaved text and image output. It translates the PRD's product requirements into concrete engineering decisions, API contracts, data models, code structure, and deployment specifications.
 
-**Scope:** All P0 and P1 features from the PRD, plus shipped P2 features: brand analysis from URL (with deterministic analysis at temperature 0.15), content calendar generation with event integration and social proof tier system, interleaved post generation with carousel support, image fallback, video_first pipeline, and brand reference image injection, multiplicative two-step review scoring with platform-specific weights (15 profiles: 11 platforms + 4 derivative overrides), React dashboard with tab-based navigation and Edit Brand page, image/video storage, streaming UI, Firebase Google Sign-In with account dropdown and Firebase ID token verification middleware, dedicated Brands page with pagination (5 per page), tier-aware Gemini Live voice coaching with content calendar context, Veo 3.1 video generation, full ZIP export with media, Platform Registry (11 platforms), Notion integration (OAuth + Fernet-encrypted tokens + database export), calendar .ics export with email delivery, platform-specific caption/hashtag enforcement, Cloud Build CI/CD pipeline with `deploy.sh`, SPA catch-all routing for deep links on Cloud Run with path traversal prevention, AI-researched posting frequency with Google Search grounding, multi-platform calendar generation with brief_index/day_index separation, modular backend architecture (7 FastAPI routers, 5 content creator sub-modules, shared constants/clients/middleware), and centralized frontend type system with generic hooks.
+**Scope:** All P0 and P1 features from the PRD, plus shipped P2 features: brand analysis from URL (with deterministic analysis at temperature 0.15), content calendar generation with event integration and social proof tier system, interleaved post generation with carousel support, image fallback, video_first pipeline, and brand reference image injection, multiplicative two-step review scoring with platform-specific weights (15 profiles: 11 platforms + 4 derivative overrides), React dashboard with tab-based navigation and Edit Brand page, image/video storage, streaming UI, Firebase Google Sign-In with account dropdown and Firebase ID token verification middleware, dedicated Brands page with pagination (5 per page), tier-aware Gemini Live voice coaching with content calendar context, Veo 3.1 video generation, full ZIP export with media, Platform Registry (11 platforms), Notion integration (OAuth + Fernet-encrypted tokens + database export), calendar .ics export with email delivery, platform-specific caption/hashtag enforcement, Cloud Build CI/CD pipeline with `deploy.sh`, SPA catch-all routing for deep links on Cloud Run with path traversal prevention, AI-researched posting frequency with Google Search grounding, multi-platform calendar generation with brief_index/day_index separation, modular backend architecture (7 FastAPI routers, 5 content creator sub-modules, shared constants/clients/middleware), centralized frontend type system with generic hooks, 3-step onboarding wizard with deferred brand creation and sessionStorage persistence, and 11-step SVG-based guided tour with per-brand completion tracking.
 
 **Out of scope (unspecified):** Post analytics dashboard (P3). Remaining P2 features are specified in §14.1. P3 features are additive and do not affect core architecture.
 
@@ -2072,15 +2072,23 @@ App (React Router)
 │       ├── EmptyState ("No brands yet — create your first brand")
 │       └── Pagination (Previous | Page X of Y | Next)
 │
-├── OnboardPage (/onboard)
-│   └── BrandWizard
-│       ├── URLInput (website URL — hidden in no-website mode)
-│       ├── DescriptionInput (free-text textarea, min 20 chars, always visible)
-│       ├── NoWebsiteToggle ("No website? Describe your business instead →")
-│       ├── AssetUploadZone (optional drag-drop for images/PDFs, max 3 files)
-│       │   └── UploadedFileList (filename, type icon, remove button)
-│       └── AnalysisProgress (step-by-step with adaptive steps based on mode)
-│           └── FinalizingRow (pulsing "Finalizing your brand profile..." after all steps complete)
+├── OnboardPage (/onboard) — thin shell, delegates to OnboardWizard
+│   └── OnboardWizard (732 lines, 3-step deferred-creation flow)
+│       ├── Step 1: "Tell us about your brand"
+│       │   ├── URLInput (website URL — hidden in no-website mode)
+│       │   ├── DescriptionInput (free-text textarea, min 20 chars, always visible)
+│       │   └── NoWebsiteToggle ("No website? Describe your business instead →")
+│       ├── Step 2: "Upload brand assets"
+│       │   └── AssetUploadZone (optional drag-drop for images/PDFs, max 3 files)
+│       │       └── UploadedFileList (filename, type icon, remove button)
+│       ├── Step 3: "Analyzing your brand"
+│       │   └── AnalysisProgress (step-by-step with adaptive steps based on mode)
+│       │       └── FinalizingRow (pulsing "Finalizing your brand profile..." after all steps complete)
+│       ├── useWizardState (85 lines — state machine for 3-step flow)
+│       │   ├── SessionStorage persistence for text fields across refresh
+│       │   └── 2-minute timeout safety net (auto-error if analysis hangs)
+│       └── Deferred creation: brand created only on final step
+│           └── API chain: createBrand → updateBrand → uploadBrandAsset → setBrandLogo → analyzeBrand
 │
 ├── DashboardPage (/dashboard/{brandId})
 │   ├── BrandProfileCard (editable brand profile summary — inline save with loading state and error feedback)
@@ -2173,10 +2181,21 @@ App (React Router)
 │       ├── DownloadImageButton
 │       └── CopyCaptionButton
 │
-└── ExportPage (/export/{brandId}?plan_id={planId} — linked from NavBar when plan is active)
-    ├── PageSubtitle ("Copy captions to clipboard, download individual posts, or export as ZIP")
-    └── PostLibrary (reused — defaultFilter="approved", CopyAllButton, filter tabs, PostCard grid)
-        // Export is also integrated into Dashboard's Export tab — no separate page required
+├── ExportPage (/export/{brandId}?plan_id={planId} — linked from NavBar when plan is active)
+│   ├── PageSubtitle ("Copy captions to clipboard, download individual posts, or export as ZIP")
+│   └── PostLibrary (reused — defaultFilter="approved", CopyAllButton, filter tabs, PostCard grid)
+│       // Export is also integrated into Dashboard's Export tab — no separate page required
+│
+└── GuidedTour (436 lines — 11-step interactive product tour, rendered at app root)
+    ├── SVG spotlight overlay (full-viewport mask with cutout around target element)
+    ├── Tooltip (positioned relative to spotlight, step counter, Next/Back/Skip controls)
+    ├── useTour (84 lines — tour step state machine)
+    │   ├── data-tour-id attribute targeting (querySelector("[data-tour-id='...']"))
+    │   ├── onBeforeShow callback (e.g., auto-switch dashboard tab before highlighting)
+    │   ├── rAF-throttled scroll/resize handlers for responsive repositioning
+    │   ├── Async skip for missing DOM targets with loop prevention
+    │   └── Per-brand localStorage completion tracking (tour not re-shown once finished)
+    └── Tour triggers on first dashboard visit for a brand (if not previously completed)
 ```
 
 ## 9.2 Key UI Interactions
@@ -2291,6 +2310,53 @@ function PostGenerator({ planId, dayIndex }: Props) {
   );
 }
 ```
+
+## 9.3 New User Experience (NUX) Design
+
+The NUX consists of two complementary systems: the **Onboarding Wizard** (brand creation) and the **Guided Tour** (dashboard orientation). Together they form a deferred-creation funnel: the wizard collects all inputs before touching the backend, and the tour teaches the dashboard after the brand exists.
+
+### 9.3.1 Onboarding Wizard (OnboardWizard.tsx, useWizardState.ts)
+
+**Pattern: Deferred Creation.** Unlike the original single-page onboard flow, the 3-step wizard collects all user input (URL, description, assets) across multiple screens before making any API calls. The brand document is created only when the user reaches the final analysis step. This eliminates orphaned brand records from abandoned onboarding.
+
+**Step progression:**
+
+| Step | Title | User Action | Backend Calls |
+|------|-------|------------|---------------|
+| 1 | Tell us about your brand | Enter URL and/or description | None |
+| 2 | Upload brand assets | Drag-drop images/PDFs (optional) | None |
+| 3 | Analyzing your brand | Wait for analysis pipeline | `createBrand` → `updateBrand` → `uploadBrandAsset` (per file) → `setBrandLogo` → `analyzeBrand` |
+
+**State management (`useWizardState.ts`, 85 lines):**
+- Tracks current step, input values, validation state, and analysis progress.
+- Text fields (URL, description) are persisted to `sessionStorage` on every change, surviving accidental page refreshes. Asset file references are not persisted (File objects are not serializable).
+- A 2-minute timeout safety net fires if the analysis step does not complete, surfacing an error state rather than leaving the user on an infinite spinner.
+
+**Key design decisions:**
+- No plan generation in the wizard. Plan generation was moved to the dashboard to keep onboarding focused on brand creation. Users land on their new dashboard with a clear "Generate Calendar" CTA.
+- `OnboardPage.tsx` was simplified to a thin shell that renders `<OnboardWizard />` and handles the post-completion redirect to `/dashboard/:id`.
+
+### 9.3.2 Guided Tour (GuidedTour.tsx, useTour.ts)
+
+**Pattern: SVG Spotlight Overlay.** The tour renders a full-viewport SVG with a `<mask>` element that creates a darkened overlay with a transparent cutout around the target element. This approach avoids z-index wars with the existing UI — the overlay is a single SVG layer, and the spotlight is a mask hole, not a repositioned element.
+
+**11 tour steps** cover the core dashboard workflow: brand profile, calendar tab, event input, day card, generate button, posts tab, post card, approve button, export tab, voice coach, and edit brand. Steps are defined declaratively with `targetId`, `title`, `body`, `placement`, and optional `onBeforeShow`.
+
+**Targeting pattern:**
+- Each tourable element in the dashboard has a `data-tour-id` attribute (e.g., `data-tour-id="calendar-tab"`).
+- `useTour` uses `document.querySelector('[data-tour-id="..."]')` to locate targets at render time, not at mount time. This handles elements that appear conditionally (e.g., after tab switch).
+- If a target element is not found in the DOM, the step is skipped asynchronously with a loop counter to prevent infinite skip cycles if multiple consecutive targets are missing.
+
+**Tab auto-switching:**
+- Steps targeting elements on non-active tabs provide an `onBeforeShow` callback that programmatically switches the dashboard tab (e.g., switch to "Posts" before highlighting the post card). The tour waits one animation frame after the callback before measuring target position.
+
+**Scroll and resize handling:**
+- `scroll` and `resize` event listeners recompute spotlight position and tooltip placement.
+- Both handlers are throttled via `requestAnimationFrame` to avoid layout thrashing.
+
+**Completion tracking:**
+- Tour completion is stored in `localStorage` keyed by brand ID (`tour_completed_{brandId}`).
+- The tour auto-triggers on the first dashboard visit for a given brand. It is not shown again once marked complete (via finishing all steps or clicking "Skip Tour").
 
 ---
 
@@ -2550,7 +2616,7 @@ amplifi-hackaton/
 │   │   ├── pages/                 # Route-level page components
 │   │   │   ├── LandingPage.tsx    # Marketing landing page (hero, features, CTA)
 │   │   │   ├── BrandsPage.tsx     # Brand list with pagination + "Create" CTA
-│   │   │   ├── OnboardPage.tsx    # Brand creation wizard
+│   │   │   ├── OnboardPage.tsx    # Brand creation wizard (thin shell → OnboardWizard)
 │   │   │   ├── DashboardPage.tsx  # Brand dashboard (calendar, posts, export tabs)
 │   │   │   ├── EditBrandPage.tsx  # Brand profile editor + asset management
 │   │   │   ├── GeneratePage.tsx   # Per-day content generation with SSE
@@ -2559,6 +2625,8 @@ amplifi-hackaton/
 │   │   │   ├── TermsPage.tsx      # Terms of Service
 │   │   │   └── PrivacyPage.tsx    # Privacy Policy
 │   │   ├── components/            # Reusable UI components
+│   │   │   ├── OnboardWizard.tsx  # 3-step onboarding wizard (732 lines, deferred creation)
+│   │   │   ├── GuidedTour.tsx     # 11-step SVG spotlight tour (436 lines)
 │   │   │   ├── ui/                # Shared primitives (v1.7)
 │   │   │   │   ├── PageContainer.tsx  # Consistent page wrapper (max-width, padding)
 │   │   │   │   ├── ErrorBanner.tsx    # Dismissible error display
@@ -2580,6 +2648,8 @@ amplifi-hackaton/
 │   │   ├── hooks/
 │   │   │   ├── useAuth.ts        # Firebase Google Auth hook (signIn, signOut, uid, user)
 │   │   │   ├── useFetch.ts       # Generic data fetching hook useFetch<T> (v1.7)
+│   │   │   ├── useWizardState.ts # Onboarding wizard state machine (85 lines, sessionStorage)
+│   │   │   ├── useTour.ts        # Guided tour step state machine (84 lines, localStorage)
 │   │   │   ├── useIsMobile.ts    # Mobile breakpoint hook (useMediaQuery helper) (v1.7)
 │   │   │   └── useIsTablet.ts    # Tablet breakpoint hook (v1.7)
 │   │   ├── api/

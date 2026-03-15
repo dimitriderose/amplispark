@@ -3,6 +3,8 @@ graph TB
         FE["Frontend<br/>React 19 + TypeScript<br/>Vite 7<br/>React Router"]
         AUTH["Firebase Google Auth<br/>signInWithPopup<br/>ID Token → Bearer Header<br/>Account Dropdown"]
         PAGES["Pages<br/>Landing (marketing)<br/>Brands (paginated list)<br/>Dashboard / Generate<br/>Post History<br/>Export / Edit Brand"]
+        WIZARD["Onboard Wizard<br/>OnboardWizard.tsx (732 lines)<br/>3-Step Deferred Creation<br/>useWizardState.ts<br/>sessionStorage persistence<br/>2-min timeout safety"]
+        TOUR["Guided Tour<br/>GuidedTour.tsx (436 lines)<br/>11-Step SVG Spotlight<br/>useTour.ts<br/>data-tour-id targeting<br/>Per-brand localStorage"]
         FE_HOOKS["Shared Hooks & Types<br/>useFetch&lt;T&gt; · useIsMobile · useIsTablet<br/>types/index.ts · types/api.ts<br/>constants/statusMaps.ts<br/>utils/downloads.ts<br/>ui/PageContainer · ErrorBanner · Spinner"]
     end
 
@@ -90,7 +92,11 @@ graph TB
     FE <-->|"REST + SSE<br/>/api/*<br/>Authorization: Bearer token"| APP
     AUTH <-->|"Google Sign-In<br/>UID + ID Token"| FA
     FE --- PAGES
+    FE --- WIZARD
+    FE --- TOUR
     FE --- FE_HOOKS
+    WIZARD -->|"createBrand → updateBrand<br/>uploadBrandAsset → setBrandLogo<br/>→ analyzeBrand"| APP
+    TOUR -->|"data-tour-id targeting<br/>dashboard elements"| PAGES
 
     %% App → Middleware → Routers
     APP --> MW
@@ -205,7 +211,7 @@ graph TB
 
     class FE browser
     class AUTH auth
-    class PAGES,FE_HOOKS pages
+    class PAGES,FE_HOOKS,WIZARD,TOUR pages
     class APP cloud
     class MW middleware
     class R_BRANDS,R_PLANS,R_POSTS,R_GEN,R_MEDIA,R_INT,R_VOICE router

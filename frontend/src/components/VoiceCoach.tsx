@@ -19,6 +19,7 @@ export default function VoiceCoach({ brandId, brandName, planId }: Props) {
   return (
     <div
       className="vc-container"
+      data-tour-id="voice-coach"
       style={{
         position: 'fixed',
         bottom: isMobile ? 12 : 28,

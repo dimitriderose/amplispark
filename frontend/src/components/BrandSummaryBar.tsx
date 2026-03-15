@@ -16,9 +16,10 @@ interface Props {
   brand: BrandProfile
   onNavigateEdit: () => void
   onNavigateNew: () => void
+  onTakeTour?: () => void
 }
 
-export default function BrandSummaryBar({ brand, onNavigateEdit, onNavigateNew }: Props) {
+export default function BrandSummaryBar({ brand, onNavigateEdit, onNavigateNew, onTakeTour }: Props) {
   const isMobile = useIsMobile()
   const connectedPlatforms = brand.connected_platforms ?? []
   const notionConnected = !!brand.integrations?.notion?.access_token
@@ -26,7 +27,7 @@ export default function BrandSummaryBar({ brand, onNavigateEdit, onNavigateNew }
   const isAnalyzing = brand.analysis_status === 'analyzing'
 
   return (
-    <div style={{
+    <div data-tour-id="brand-summary" style={{
       padding: '16px 20px',
       borderRadius: 12,
       background: A.surface,
@@ -92,6 +93,7 @@ export default function BrandSummaryBar({ brand, onNavigateEdit, onNavigateNew }
         {/* Action buttons */}
         <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
           <button
+            data-tour-id="brand-edit-btn"
             onClick={onNavigateEdit}
             style={{
               padding: '6px 14px', borderRadius: 7, border: `1px solid ${A.indigo}40`,
@@ -110,6 +112,21 @@ export default function BrandSummaryBar({ brand, onNavigateEdit, onNavigateNew }
           >
             + New Brand
           </button>
+          {onTakeTour && (
+            <button
+              onClick={onTakeTour}
+              style={{
+                padding: '6px 12px', borderRadius: 7, border: `1px solid ${A.border}`,
+                background: 'transparent', cursor: 'pointer', fontSize: 13, color: A.textSoft,
+                fontWeight: 400, transition: 'all 0.2s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.color = A.indigo; e.currentTarget.style.borderColor = A.indigo + '40' }}
+              onMouseLeave={e => { e.currentTarget.style.color = A.textSoft; e.currentTarget.style.borderColor = A.border }}
+              title="Take a guided tour of the dashboard"
+            >
+              Take a tour
+            </button>
+          )}
         </div>
       </div>
 

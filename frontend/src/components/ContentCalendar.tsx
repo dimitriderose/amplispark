@@ -100,6 +100,19 @@ export default function ContentCalendar({ plan, brandId, posts, defaultImageStyl
   const isMultiPlatform = totalPosts > numDays
   const uniquePlatforms = new Set(plan.days.map(d => d.platform)).size
 
+  // Pre-compute which card is the first ungenerated (for tour targeting)
+  let firstUngeneratedKey = ''
+  for (const dayIdx of uniqueDayIndices) {
+    for (const day of dayGroups[dayIdx]) {
+      const key = `${dayIdx}_${day.platform || ''}`
+      const p = postsByDayPlatform[key] ?? postsByDayPlatform[`${dayIdx}_`]
+      const gen = p && (p.status === 'complete' || p.status === 'approved')
+      const ing = p?.status === 'generating'
+      if (!gen && !ing) { firstUngeneratedKey = key; break }
+    }
+    if (firstUngeneratedKey) break
+  }
+
   return (
     <div>
       {/* Calendar header */}
@@ -180,7 +193,7 @@ export default function ContentCalendar({ plan, brandId, posts, defaultImageStyl
       )}
 
       {/* Day-column grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : isTablet ? 'repeat(auto-fill, minmax(200px, 1fr))' : `repeat(${numDays}, 1fr)`, gap: 8 }}>
+      <div data-tour-id="calendar-grid" style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : isTablet ? 'repeat(auto-fill, minmax(200px, 1fr))' : `repeat(${numDays}, 1fr)`, gap: 8 }}>
         {uniqueDayIndices.map((dayIdx, colIndex) => {
           const days = dayGroups[dayIdx]
           return (
@@ -189,6 +202,10 @@ export default function ContentCalendar({ plan, brandId, posts, defaultImageStyl
                 const seriesColor = day.pillar_id ? seriesColorMap[day.pillar_id] : undefined
                 const dayPost = postsByDayPlatform[`${dayIdx}_${day.platform || ''}`]
                   ?? postsByDayPlatform[`${dayIdx}_`]
+                const isGenerated = dayPost && (dayPost.status === 'complete' || dayPost.status === 'approved')
+                const isGenerating = dayPost?.status === 'generating'
+                const cardKey = `${dayIdx}_${day.platform || ''}`
+                const isFirstUngenerated = !isGenerated && !isGenerating && cardKey === firstUngeneratedKey
                 return (
                   <DayCard
                     key={`${dayIdx}_${day.platform || j}`}
@@ -200,6 +217,7 @@ export default function ContentCalendar({ plan, brandId, posts, defaultImageStyl
                     seriesColor={seriesColor}
                     post={dayPost}
                     defaultImageStyle={defaultImageStyle}
+                    isFirstUngenerated={isFirstUngenerated}
                     onGenerate={(imageStyle) => onGeneratePost?.(plan.plan_id, day._arrayIndex, imageStyle)}
                     onViewPost={dayPost && onViewPost
                       ? () => onViewPost(plan.plan_id, day._arrayIndex, dayPost.post_id)
@@ -229,9 +247,10 @@ interface DayCardProps {
   onGenerate: (imageStyle?: string) => void
   onViewPost?: () => void
   onPhotoUploaded: (photoUrl: string | null) => void
+  isFirstUngenerated?: boolean
 }
 
-function DayCard({ day, dayName, brandId, planId, arrayIndex, seriesColor, post, defaultImageStyle, onGenerate, onViewPost, onPhotoUploaded }: DayCardProps) {
+function DayCard({ day, dayName, brandId, planId, arrayIndex, seriesColor, post, defaultImageStyle, onGenerate, onViewPost, onPhotoUploaded, isFirstUngenerated }: DayCardProps) {
   const pillarColor = PILLAR_COLORS[day.pillar] || A.indigo
   const platformSpec = getPlatform(day.platform)
   const PlatformIcon = platformSpec.icon
@@ -484,6 +503,7 @@ function DayCard({ day, dayName, brandId, planId, arrayIndex, seriesColor, post,
           <div>
             {/* Generate button — always one-click */}
             <button
+              {...(isFirstUngenerated ? { 'data-tour-id': 'generate-button' } : {})}
               onClick={() => onGenerate(selectedStyle || undefined)}
               style={{
                 width: '100%',
@@ -502,7 +522,7 @@ function DayCard({ day, dayName, brandId, planId, arrayIndex, seriesColor, post,
             </button>
 
             {/* Visual Style button — opens dropdown */}
-            <div ref={styleMenuRef} style={{ position: 'relative' }}>
+            <div ref={styleMenuRef} style={{ position: 'relative' }} {...(isFirstUngenerated ? { 'data-tour-id': 'style-picker' } : {})}>
               <button
                 onClick={() => setShowStyleMenu(prev => !prev)}
                 aria-haspopup="listbox"

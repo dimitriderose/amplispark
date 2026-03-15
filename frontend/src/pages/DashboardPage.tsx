@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { A } from '../theme'
 import { api } from '../api/client'
@@ -16,7 +16,12 @@ import SocialConnect from '../components/SocialConnect'
 import IntegrationConnect from '../components/IntegrationConnect'
 import VideoRepurpose from '../components/VideoRepurpose'
 import Spinner from '../components/Spinner'
+import GuidedTour from '../components/GuidedTour'
+import type { TourStep } from '../components/GuidedTour'
+import { useTour } from '../hooks/useTour'
 import { useIsMobile } from '../hooks/useIsMobile'
+
+// Tour steps are defined inside the component to access setActiveTab
 
 type Tab = 'calendar' | 'posts' | 'connections' | 'video'
 
@@ -38,6 +43,81 @@ export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<Tab>('calendar')
   const [postsSubTab, setPostsSubTab] = useState<'weekly' | 'history'>('weekly')
   const [trendSummaryOverride, setTrendSummaryOverride] = useState<any | null>(null)
+
+  // Tour steps — memoized to prevent effect cascade on every render
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const tourSteps: TourStep[] = useMemo(() => [
+    {
+      targetSelector: 'brand-summary',
+      title: 'Your Brand',
+      description: "This is your brand profile. You can see your name, industry, tone, and colors at a glance.",
+      onBeforeShow: () => setActiveTab('calendar'),
+    },
+    {
+      targetSelector: 'brand-edit-btn',
+      title: 'Edit Brand',
+      description: "Click here to update your brand profile — name, colors, tone, audience, or platform selection.",
+      onBeforeShow: () => setActiveTab('calendar'),
+    },
+    {
+      targetSelector: 'calendar-grid',
+      title: 'Content Calendar',
+      description: 'Your weekly content plan. Each card is a day with a platform, topic, and format.',
+      onBeforeShow: () => setActiveTab('calendar'),
+    },
+    {
+      targetSelector: 'generate-button',
+      title: 'Generate a Post',
+      description: 'Click Generate to create the actual post — caption, image, and hashtags.',
+      onBeforeShow: () => setActiveTab('calendar'),
+    },
+    {
+      targetSelector: 'style-picker',
+      title: 'Visual Style',
+      description: 'Choose a visual style for your images, or let AI pick the best one.',
+      onBeforeShow: () => setActiveTab('calendar'),
+    },
+    {
+      targetSelector: 'new-plan-button',
+      title: 'New Plan',
+      description: 'Need a fresh week? Click here to create a new content plan with business events.',
+      onBeforeShow: () => setActiveTab('calendar'),
+    },
+    {
+      targetSelector: 'tab-bar',
+      title: 'Navigation Tabs',
+      description: 'Switch between Calendar, Posts, Connections, and Video sections.',
+      onBeforeShow: () => setActiveTab('calendar'),
+    },
+    {
+      targetSelector: 'posts-tab',
+      title: 'Posts & Export',
+      description: 'View all your generated posts. Export them — copy captions, download ZIPs, or sync to Notion.',
+      onBeforeShow: () => setActiveTab('posts'),
+    },
+    {
+      targetSelector: 'connections-tab',
+      title: 'Connections',
+      description: 'Connect your Notion workspace to export your content calendar directly to a database.',
+      onBeforeShow: () => setActiveTab('connections'),
+    },
+    {
+      targetSelector: 'video-tab',
+      title: 'Video Repurpose',
+      description: 'Upload a video and AI will find the best clip-worthy moments for each platform.',
+      onBeforeShow: () => setActiveTab('video'),
+    },
+    {
+      targetSelector: 'voice-coach',
+      title: 'Voice Coach',
+      description: 'Talk to your AI creative director anytime. Ask about strategy, specific days, or get caption writing help.',
+      onBeforeShow: () => setActiveTab('calendar'),
+    },
+  ], [setActiveTab])
+
+  // Guided tour — auto-starts when plan exists and not previously completed
+  const tourReady = !planLoading && !brandLoading && !!plan
+  const tour = useTour(brandId, tourSteps.length, tourReady)
 
   const handleRefreshResearch = async () => {
     if (!brandId || !plan?.plan_id) return
@@ -178,10 +258,11 @@ export default function DashboardPage() {
         brand={brand}
         onNavigateEdit={() => navigate(`/edit/${brandId}`)}
         onNavigateNew={() => navigate('/onboard')}
+        onTakeTour={!tour.isActive ? tour.start : undefined}
       />
 
       {/* Tab bar */}
-      <div style={{
+      <div data-tour-id="tab-bar" style={{
         display: 'flex', gap: 2,
         marginBottom: 20,
         background: A.surfaceAlt,
@@ -191,6 +272,7 @@ export default function DashboardPage() {
         {TABS.map(tab => (
           <button
             key={tab.key}
+            {...(tab.key === 'posts' ? { 'data-tour-id': 'posts-tab' } : tab.key === 'connections' ? { 'data-tour-id': 'connections-tab' } : tab.key === 'video' ? { 'data-tour-id': 'video-tab' } : {})}
             onClick={() => setActiveTab(tab.key)}
             style={{
               flex: 1,
@@ -228,6 +310,7 @@ export default function DashboardPage() {
           <div style={{ padding: 24, borderRadius: 12, background: A.surface, border: `1px solid ${A.border}` }}>
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
               <button
+                data-tour-id="new-plan-button"
                 onClick={() => {
                   if (window.confirm('This will clear your current plan. Are you sure?')) {
                     clearPlan()
@@ -356,6 +439,16 @@ export default function DashboardPage() {
       {brandId && (
         <VoiceCoach brandId={brandId} brandName={brand.business_name} planId={plan?.plan_id} />
       )}
+
+      {/* Guided Tour Overlay */}
+      <GuidedTour
+        steps={tourSteps}
+        isActive={tour.isActive}
+        currentStep={tour.currentStep}
+        onNext={tour.next}
+        onPrev={tour.prev}
+        onSkip={tour.skip}
+      />
     </PageContainer>
   )
 }
