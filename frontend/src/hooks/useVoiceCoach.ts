@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, type MutableRefObject } from 'react'
+import { getFreshIdToken } from '../api/firebase'
 
 export type VoiceCoachStatus = 'idle' | 'connecting' | 'active' | 'error'
 
@@ -130,7 +131,7 @@ export function useVoiceCoach(): UseVoiceCoachResult {
   }, [teardownConnection])
 
   // Wire up a WebSocket to a given mic stream + audio contexts
-  const connectWebSocket = useCallback((
+  const connectWebSocket = useCallback(async (
     brandId: string,
     stream: MediaStream,
     contextStr: string,
@@ -146,13 +147,24 @@ export function useVoiceCoach(): UseVoiceCoachResult {
     playbackCtxRef.current = playbackCtx
     playNextTimeRef.current = playbackCtx.currentTime
 
+    // Get fresh Firebase ID token for WebSocket auth via Sec-WebSocket-Protocol.
+    // forceRefresh ensures we don't send a near-expired cached token.
+    // Token fetch MUST happen before WebSocket construction.
+    const idToken = await getFreshIdToken()
+    if (!idToken) {
+      setError('Not authenticated. Please sign in and try again.')
+      setStatus('error')
+      stopSession()
+      return
+    }
+
     const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
     const params = new URLSearchParams()
     if (contextStr) params.set('context', contextStr)
     if (planId) params.set('plan_id', planId)
     const qs = params.toString() ? `?${params.toString()}` : ''
     const wsUrl = `${proto}://${window.location.host}/api/brands/${brandId}/voice-coaching${qs}`
-    const ws = new WebSocket(wsUrl)
+    const ws = new WebSocket(wsUrl, [`auth.${idToken}`])
     ws.binaryType = 'arraybuffer'
     wsRef.current = ws
 
@@ -230,6 +242,10 @@ export function useVoiceCoach(): UseVoiceCoachResult {
               if (userStoppedRef.current || !streamRef.current) return
               const history = conversationHistoryRef.current.slice(-10).join('\n')
               connectWebSocket(brandId, streamRef.current!, history, planIdRef.current)
+                .catch(err => {
+                  setError(`Reconnect failed: ${err?.message || 'Unknown error'}`)
+                  setStatus('error')
+                })
             }, 500)
           } else if (msg.type === 'session_complete') {
             // AI decided to end the conversation (user said goodbye etc.)
@@ -285,7 +301,7 @@ export function useVoiceCoach(): UseVoiceCoachResult {
     }
     streamRef.current = stream
 
-    connectWebSocket(brandId, stream, '', planId)
+    await connectWebSocket(brandId, stream, '', planId)
   }, [status, connectWebSocket])
 
   return { status, isAISpeaking, transcript, error, startSession, stopSession }

@@ -89,6 +89,20 @@ IaC:    terraform apply provisions all GCP resources in one command
 
 See the full [architecture diagram](docs/architecture.mermaid) for agent interactions and data flows.
 
+## Quick Start
+
+1. **Go to** [https://amplifi-seimyaykpa-uc.a.run.app](https://amplifi-seimyaykpa-uc.a.run.app)
+2. **Sign in** with Google (one-click)
+3. **Complete the onboarding wizard** — enter your business name, description, and optionally paste your website URL for automatic brand analysis
+4. **Choose your platforms** — select which social media platforms you want content for
+5. **Create a plan** — click "New Plan" on the dashboard, select a visual style, and hit "Create Plan." The AI researches optimal posting frequency per platform and builds a 7-day content calendar with time slots and content pillars
+6. **Generate content** — click the "Generate" button on any day in the calendar. Captions and images stream in together via Gemini's interleaved output — you'll see the text and matching visuals appear in real time
+7. **Review and edit** — click any post to see its score breakdown, edit the caption, regenerate images, or generate a video clip
+7. **Talk to your Voice Coach** — click the microphone to have a live conversation about your content strategy
+8. **Export** — sync to Notion, email the calendar, or bulk-download as ZIP
+
+For local development and deployment instructions, see the [Deployment Guide](docs/DEPLOYMENT.md).
+
 ## Documentation
 
 | Document | Description |
@@ -100,14 +114,10 @@ See the full [architecture diagram](docs/architecture.mermaid) for agent interac
 | [UI Mockup](docs/amplifi-ui.jsx) | Interactive React prototype — 6 screens (Landing, Onboard, Brand, Calendar, Content, Dashboard) |
 | [Integration Plan](docs/buffer-notion-integration-plan.md) | Buffer + Notion integration design — OAuth flows, database export, .ics calendar, email delivery |
 
-## Roadmap
-
-- **Buffer integration** — Buffer is currently in closed beta for their new API and not accepting new developer applications. We plan to integrate Buffer for scheduled publishing once API access becomes available. Full design is documented in [buffer-notion-integration-plan.md](docs/buffer-notion-integration-plan.md).
-
 ## Hackathon
 
 Built for the **Gemini Live Agent Challenge** hackathon ($80K prize pool, Google DeepMind / Devpost).
 
-- **Category:** Creative Storyteller
+- **Category:** Creative Storytellers
 - **Deadline:** March 16, 2026 at 5:00 PM PDT
 - **Prize Target:** $10K (category) + $5K (subcategory)

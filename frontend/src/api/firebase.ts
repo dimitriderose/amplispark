@@ -45,6 +45,16 @@ export async function getIdToken(): Promise<string | null> {
   }
 }
 
+export async function getFreshIdToken(): Promise<string | null> {
+  const user = auth.currentUser
+  if (!user) return null
+  try {
+    return await user.getIdToken(/* forceRefresh */ true)
+  } catch {
+    return null
+  }
+}
+
 export function getCurrentUser(): {
   displayName: string | null
   photoURL: string | null

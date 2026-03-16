@@ -41,7 +41,9 @@ app.include_router(posts.router, prefix="/api", dependencies=[Depends(verify_bra
 app.include_router(generation.router, prefix="/api", dependencies=[Depends(verify_brand_owner)])
 app.include_router(media.router, prefix="/api", dependencies=[Depends(verify_brand_owner)])
 app.include_router(integrations.router, prefix="/api", dependencies=[Depends(verify_brand_owner)])
-app.include_router(voice.router, prefix="/api", dependencies=[Depends(verify_brand_owner)])
+# Voice router uses WebSocket — auth injected at endpoint level (not router-level)
+# because WebSocket Depends() requires a WebSocket object, not an HTTP Request
+app.include_router(voice.router, prefix="/api")
 
 # ── Static frontend (production) ──────────────────────────────
 frontend_dist = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")

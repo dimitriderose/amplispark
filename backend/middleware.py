@@ -10,11 +10,12 @@ Usage::
         ...
 """
 
+import asyncio
 import logging
 
 import firebase_admin
 from firebase_admin import auth as firebase_auth
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, HTTPException, Request, WebSocket, WebSocketException, status
 
 from backend.services import firestore_client
 
@@ -89,3 +90,69 @@ async def verify_brand_owner(
         )
 
     return user_uid
+
+
+# ── WebSocket authentication via Sec-WebSocket-Protocol header ──────────
+
+
+async def get_ws_authenticated_uid(websocket: WebSocket) -> str:
+    """Extract and verify a Firebase ID token from the Sec-WebSocket-Protocol header.
+
+    The browser WebSocket API cannot set custom headers, so the token is sent
+    as a subprotocol in the format ``auth.<firebase_id_token>``.  Validation
+    runs *before* ``websocket.accept()`` so unauthenticated connections never
+    consume server resources.
+
+    Raises WebSocketException (1008 Policy Violation) on failure.
+    """
+    protocols = websocket.headers.get("sec-websocket-protocol", "")
+    token: str | None = None
+    for proto in protocols.split(","):
+        proto = proto.strip()
+        if proto.startswith("auth."):
+            token = proto[5:]  # strip "auth." prefix
+            break
+
+    if not token:
+        logger.debug("WS auth: no auth token in Sec-WebSocket-Protocol")
+        raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason="Missing auth token")
+
+    try:
+        loop = asyncio.get_running_loop()
+        decoded = await loop.run_in_executor(None, firebase_auth.verify_id_token, token)
+        return decoded["uid"]
+    except firebase_auth.ExpiredIdTokenError:
+        logger.debug("WS auth: token expired")
+        raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason="Token expired")
+    except firebase_auth.InvalidIdTokenError:
+        logger.debug("WS auth: invalid token")
+        raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid token")
+    except Exception as e:
+        logger.warning("WebSocket Firebase token verification failed: %s", e)
+        raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason="Auth failed")
+
+
+async def verify_ws_brand_owner(
+    websocket: WebSocket,
+    user_uid: str = Depends(get_ws_authenticated_uid),
+) -> dict:
+    """Verify authenticated user owns the brand in the WebSocket path.
+
+    Returns the brand document (avoids a second Firestore read in the handler).
+    Raises WebSocketException (1008) on failure.
+    """
+    brand_id = websocket.path_params.get("brand_id")
+    if not brand_id:
+        raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason="Missing brand_id")
+
+    brand = await firestore_client.get_brand(brand_id)
+    if not brand:
+        raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason="Brand not found")
+
+    owner = brand.get("owner_uid")
+    if owner and user_uid != owner:
+        raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason="Access denied")
+
+    # Attach UID to brand dict so handler has both
+    brand["_authenticated_uid"] = user_uid
+    return brand

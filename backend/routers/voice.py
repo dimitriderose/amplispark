@@ -1,9 +1,10 @@
 import asyncio
 import logging
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
 from backend.config import GOOGLE_API_KEY
+from backend.middleware import verify_ws_brand_owner
 from backend.services import firestore_client
 from backend.agents.voice_coach import build_coaching_prompt
 
@@ -19,7 +20,13 @@ router = APIRouter()
 
 
 @router.websocket("/brands/{brand_id}/voice-coaching")
-async def voice_coaching_ws(websocket: WebSocket, brand_id: str, context: str = "", plan_id: str = ""):
+async def voice_coaching_ws(
+    websocket: WebSocket,
+    brand_id: str,
+    context: str = "",
+    plan_id: str = "",
+    brand: dict = Depends(verify_ws_brand_owner),
+):
     """Bidirectional voice coaching via Gemini Live API.
 
     Frontend sends PCM audio (16kHz, 16-bit, mono) as binary WebSocket frames.
@@ -34,23 +41,26 @@ async def voice_coaching_ws(websocket: WebSocket, brand_id: str, context: str = 
       { "type": "session_ended" }       -- Gemini session ended naturally
       { "type": "error", "message" }    -- fatal error
     """
-    await websocket.accept()
+    # Echo back the exact subprotocol the client proposed (RFC 6455 §4.2.2)
+    protocols = websocket.headers.get("sec-websocket-protocol", "")
+    selected_proto = next(
+        (p.strip() for p in protocols.split(",") if p.strip().startswith("auth.")),
+        None,
+    )
+    await websocket.accept(subprotocol=selected_proto)
 
-    # Parallel load: brand + plan (+ posts when plan_id known)
+    # Brand already verified by verify_ws_brand_owner dependency — no second fetch needed.
+    # Load plan + posts in parallel.
     plan_data = None
     posts = []
     try:
         if plan_id:
-            brand, plan_data, posts = await asyncio.gather(
-                firestore_client.get_brand(brand_id),
+            plan_data, posts = await asyncio.gather(
                 firestore_client.get_plan(plan_id, brand_id),
                 firestore_client.list_posts(brand_id, plan_id=plan_id),
             )
         else:
-            brand, plans_list = await asyncio.gather(
-                firestore_client.get_brand(brand_id),
-                firestore_client.list_plans(brand_id),
-            )
+            plans_list = await firestore_client.list_plans(brand_id)
             plan_data = plans_list[0] if plans_list else None
             if plan_data:
                 posts = await firestore_client.list_posts(
@@ -58,11 +68,6 @@ async def voice_coaching_ws(websocket: WebSocket, brand_id: str, context: str = 
                 )
     except Exception as e:
         logger.warning("Voice coaching data load error for %s: %s", brand_id, e)
-        brand = await firestore_client.get_brand(brand_id)
-
-    if not brand:
-        await websocket.close(code=1008, reason="Brand not found")
-        return
 
     # Cap context size to prevent prompt bloat
     if len(context) > 4000:
