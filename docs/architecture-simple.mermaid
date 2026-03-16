@@ -1,0 +1,75 @@
+graph TB
+    subgraph Browser["Browser"]
+        FE["React 19 + TypeScript<br/>Firebase Google Auth"]
+    end
+
+    subgraph CloudRun["Google Cloud Run"]
+        API["FastAPI + Auth Middleware<br/>7 Modular Routers"]
+
+        subgraph Pipeline["ADK Sequential Pipeline"]
+            BA["Brand Analyst<br/>URL → Brand DNA"]
+            STR["Strategy Agent<br/>Google Search Grounding<br/>7-Day Calendar"]
+            CC["Content Creator<br/>Interleaved Text + Image<br/>Carousels · Hashtags"]
+            RA["Review Agent<br/>Multiplicative Scoring<br/>5 Dimensions × 15 Profiles"]
+        end
+
+        VC["Voice Coach<br/>Gemini Live API<br/>Real-Time Audio"]
+        VID["Video Creator<br/>Veo 3.1"]
+        ME["Media Editor<br/>Natural Language Editing"]
+    end
+
+    subgraph Gemini["Google Gemini API"]
+        GFlash["Gemini 3 Flash<br/>Text + Interleaved Image"]
+        GLive["Gemini Live<br/>Bidirectional Audio"]
+        VEO["Veo 3.1<br/>Video Generation"]
+    end
+
+    subgraph GCP["Google Cloud"]
+        FS[("Firestore<br/>Brands · Plans · Posts")]
+        GCS[("Cloud Storage<br/>Images · Videos")]
+        FAUTH["Firebase Auth"]
+    end
+
+    subgraph CICD["CI/CD"]
+        CB["Cloud Build + Terraform"]
+    end
+
+    FE <-->|"REST + SSE"| API
+    FE <-->|"Google Sign-In"| FAUTH
+
+    API --> BA
+    BA --> STR
+    STR --> CC
+    CC --> RA
+
+    API --> VC
+    API --> VID
+    API --> ME
+
+    BA -->|"Brand Analysis"| GFlash
+    STR -->|"Research + Frequency"| GFlash
+    CC -->|"Interleaved<br/>Text + Image"| GFlash
+    RA -->|"Scoring"| GFlash
+    ME -->|"Edit Prompts"| GFlash
+    VC -->|"Voice Sessions"| GLive
+    VID -->|"Video Gen"| VEO
+
+    API --> FS
+    API --> GCS
+    CB -->|"Deploy"| API
+
+    classDef browser fill:#1a1a2e,stroke:#e94560,color:#fff
+    classDef cloud fill:#0f3460,stroke:#16213e,color:#fff
+    classDef pipeline fill:#533483,stroke:#e94560,color:#fff
+    classDef gemini fill:#1e88e5,stroke:#1565c0,color:#fff
+    classDef gcp fill:#4285f4,stroke:#1a73e8,color:#fff
+    classDef infra fill:#2e7d32,stroke:#1b5e20,color:#fff
+    classDef support fill:#2d4059,stroke:#ea5455,color:#fff
+
+    class FE browser
+    class API cloud
+    class BA,STR,CC,RA pipeline
+    class VC,VID,ME support
+    class GFlash,GLive,VEO gemini
+    class FS,GCS,FAUTH gcp
+    class CB infra

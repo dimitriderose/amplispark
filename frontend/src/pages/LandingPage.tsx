@@ -119,7 +119,7 @@ export default function LandingPage() {
           marginBottom: 28,
           letterSpacing: 0.3,
         }}>
-          ✨ Built for Google's Gemini API Developer Competition
+          ✨ Built for the Gemini Live Agent Challenge — Creative Storyteller
         </div>
 
         <h1 style={{
@@ -149,7 +149,7 @@ export default function LandingPage() {
           lineHeight: 1.65,
         }}>
           Amplifi analyzes your brand, plans your strategy, and streams captions &amp; images
-          together in real time — powered by Gemini 2.5 Flash's interleaved multimodal output.
+          together in real time — powered by Gemini 3 Flash's interleaved multimodal output.
         </p>
 
         <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -431,7 +431,7 @@ export default function LandingPage() {
           Get Started Free →
         </button>
         <p style={{ fontSize: 12, color: A.textMuted, marginTop: 16 }}>
-          Powered by Gemini 2.5 Flash · Google Cloud
+          Powered by Gemini 3 Flash · Google Cloud
         </p>
       </section>
 

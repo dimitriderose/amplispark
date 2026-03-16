@@ -3,6 +3,7 @@
 **Your AI creative director. One brand. Infinite content.**
 
 **Live Demo:** [https://amplifi-seimyaykpa-uc.a.run.app](https://amplifi-seimyaykpa-uc.a.run.app)
+
 **Demo Video:** [https://youtu.be/GjT25bDIGtA](https://youtu.be/GjT25bDIGtA)
 
 An AI-powered creative director that analyzes your brand and produces complete, ready-to-post social media content packages — captions, images, hashtags, and posting schedules — all generated together in a single interleaved output stream.
@@ -88,7 +89,7 @@ CI/CD:  deploy.sh → Cloud Build → Docker build → Artifact Registry → Clo
 IaC:    terraform apply provisions all GCP resources in one command
 ```
 
-See the full [architecture diagram](docs/architecture.mermaid) for agent interactions and data flows.
+See the [architecture diagram](docs/architecture-simple.mermaid) for the high-level overview, or the [complete architecture](docs/architecture-complete.mermaid) for the full system with all sub-modules and data flows.
 
 ## Quick Start
 
@@ -111,7 +112,8 @@ For local development and deployment instructions, see the [Deployment Guide](do
 | [Product Requirements (PRD)](docs/PRD.md) | v1.7 — Full product spec with 3-step onboarding wizard, guided tour, security hardening, multiplicative scoring, responsive design, modular architecture, AI media editor |
 | [Technical Design (TDD)](docs/TDD.md) | v1.6 — Implementation spec covering Cloud Build CI/CD, SPA routing, Google Sign-In, Brands page, Platform Registry, integrations, calibrated review scoring |
 | [Deployment Guide](docs/DEPLOYMENT.md) | Complete deployment guide — local dev, Cloud Build CI/CD (`deploy.sh`), manual Cloud Run deploy, Terraform IaC, environment variables, troubleshooting |
-| [Architecture Diagram](docs/architecture.mermaid) | Mermaid diagram — full agent pipeline, CI/CD infrastructure, Google Auth, Brands page, Notion/Email services, GCP data flows |
+| [Architecture Diagram](docs/architecture-simple.mermaid) | High-level system architecture — ADK pipeline, Gemini APIs, GCP services |
+| [Architecture (Complete)](docs/architecture-complete.mermaid) | Full detailed diagram — all sub-modules, routers, services, data flows |
 | [UI Mockup](docs/amplifi-ui.jsx) | Interactive React prototype — 6 screens (Landing, Onboard, Brand, Calendar, Content, Dashboard) |
 | [Integration Plan](docs/buffer-notion-integration-plan.md) | Buffer + Notion integration design — OAuth flows, database export, .ics calendar, email delivery |
 
@@ -119,6 +121,6 @@ For local development and deployment instructions, see the [Deployment Guide](do
 
 Built for the **Gemini Live Agent Challenge** hackathon ($80K prize pool, Google DeepMind / Devpost).
 
-- **Category:** Creative Storytellers
+- **Category:** Creative Storyteller
 - **Deadline:** March 16, 2026 at 5:00 PM PDT
 - **Prize Target:** $10K (category) + $5K (subcategory)
