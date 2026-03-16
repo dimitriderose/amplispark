@@ -3,6 +3,7 @@
 **Your AI creative director. One brand. Infinite content.**
 
 **Live Demo:** [https://amplifi-seimyaykpa-uc.a.run.app](https://amplifi-seimyaykpa-uc.a.run.app)
+**Demo Video:** [https://youtu.be/GjT25bDIGtA](https://youtu.be/GjT25bDIGtA)
 
 An AI-powered creative director that analyzes your brand and produces complete, ready-to-post social media content packages — captions, images, hashtags, and posting schedules — all generated together in a single interleaved output stream.
 
