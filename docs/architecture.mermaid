@@ -14,7 +14,7 @@ graph TB
         end
 
         subgraph Middleware["Auth Middleware Layer"]
-            MW["middleware.py<br/>verify_firebase_token()<br/>firebase_admin.verify_id_token()<br/>verify_brand_owner()<br/>Depends() on all routers"]
+            MW["middleware.py<br/>verify_firebase_token()<br/>firebase_admin.verify_id_token()<br/>verify_brand_owner()<br/>Depends() on HTTP routers<br/>verify_ws_brand_owner()<br/>Sec-WebSocket-Protocol auth<br/>for WebSocket endpoints"]
         end
 
         subgraph Routers["FastAPI Routers (7 modules)"]
@@ -24,7 +24,7 @@ graph TB
             R_GEN["generation.py<br/>/api/generate/*<br/>SSE Stream"]
             R_MEDIA["media.py<br/>/api/storage/*<br/>/api/export/*"]
             R_INT["integrations.py<br/>/api/brands/*/integrations/*<br/>Notion OAuth · Email · .ics"]
-            R_VOICE["voice.py<br/>/api/voice/*<br/>WebSocket Proxy"]
+            R_VOICE["voice.py<br/>/api/voice/*<br/>WebSocket Proxy<br/>Sec-WebSocket-Protocol Auth"]
         end
 
         subgraph Pipeline["ADK Sequential Pipeline"]
@@ -106,7 +106,7 @@ graph TB
     MW --> R_GEN
     MW --> R_MEDIA
     MW --> R_INT
-    MW --> R_VOICE
+    R_VOICE -->|"verify_ws_brand_owner()\nSec-WebSocket-Protocol"| MW
 
     %% Middleware verifies against Firebase Auth
     MW -->|"verify_id_token()"| FA

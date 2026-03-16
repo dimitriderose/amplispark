@@ -840,6 +840,8 @@ strategy_context = (
 )
 ```
 
+**WebSocket Authentication (v1.8):** The Voice Coach WebSocket endpoint is authenticated via the `Sec-WebSocket-Protocol` header — the only mechanism the browser WebSocket API supports for sending credentials during the handshake. The frontend sends `auth.<firebase_id_token>` as a subprotocol; the backend's `verify_ws_brand_owner` dependency extracts and verifies the token via `firebase_admin.verify_id_token()` (run in a thread executor to avoid blocking the event loop) *before* calling `websocket.accept()`. The server echoes back the exact subprotocol string per RFC 6455 §4.2.2. This ensures unauthenticated connections never consume server resources (no pre-auth DoS vector) and the token never appears in Cloud Run URL logs.
+
 **Content Calendar Context Injection (v1.7):** The Voice Coach now receives the full content calendar context when invoked from the Dashboard. The `plan_id` is passed from `DashboardPage` → `VoiceCoach` → `useVoiceCoach` → WebSocket URL. The backend loads the plan and injects:
 - Calendar days (themes, platforms, derivative types)
 - Review scores for already-generated posts
@@ -1106,7 +1108,7 @@ app.include_router(posts.router, prefix="/api")        # /api/posts/*
 app.include_router(generation.router, prefix="/api")   # /api/generate/*
 app.include_router(media.router, prefix="/api")        # /api/storage/*, /api/export/*
 app.include_router(integrations.router, prefix="/api") # /api/brands/*/integrations/*
-app.include_router(voice.router, prefix="/api")        # /api/voice/*
+app.include_router(voice.router, prefix="/api")        # /api/voice/* — WS auth via Sec-WebSocket-Protocol (verify_ws_brand_owner)
 
 # SPA catch-all with path traversal prevention
 frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
