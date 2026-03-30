@@ -55,9 +55,9 @@ export default function NavBar() {
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}
            onClick={() => navigate('/')}>
-        <img src="/logo.svg" alt="Amplifi" style={{ width: 28, height: 28, borderRadius: 7 }} />
+        <img src="/logo.svg" alt="Amplispark" style={{ width: 28, height: 28, borderRadius: 7 }} />
         <span style={{ fontSize: 17, fontWeight: 700, color: A.text, letterSpacing: -0.3 }}>
-          Amplifi
+          Amplispark
         </span>
       </div>
       <div style={{ display: 'flex', gap: 2 }}>

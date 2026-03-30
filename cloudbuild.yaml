@@ -1,5 +1,5 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# Amplifi — Cloud Build Pipeline
+# Amplispark — Cloud Build Pipeline
 # Builds the Docker image (with Firebase config baked in at build time),
 # pushes to Artifact Registry, and deploys to Cloud Run.
 #

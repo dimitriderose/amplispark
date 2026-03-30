@@ -8,7 +8,7 @@ export default function PrivacyPage() {
 
       <div style={{ fontSize: 14, color: A.textSoft, lineHeight: 1.8 }}>
         <Section title="1. Overview">
-          Amplifi ("we", "our", "the Service") is committed to protecting your privacy. This policy explains what data we collect, how we use it, and your rights.
+          Amplispark ("we", "our", "the Service") is committed to protecting your privacy. This policy explains what data we collect, how we use it, and your rights.
         </Section>
 
         <Section title="2. Data We Collect">
@@ -46,7 +46,7 @@ export default function PrivacyPage() {
         </Section>
 
         <Section title="5. Third-Party Services">
-          We use the following third-party services to operate Amplifi:
+          We use the following third-party services to operate Amplispark:
           <ul style={{ paddingLeft: 20, marginTop: 8 }}>
             <li><strong>Google Cloud / Gemini API:</strong> AI content generation, data storage, and video generation</li>
             <li><strong>Firebase:</strong> Anonymous authentication</li>
@@ -76,7 +76,7 @@ export default function PrivacyPage() {
         </Section>
 
         <Section title="9. Cookies">
-          Amplifi uses minimal browser storage (localStorage and sessionStorage) to maintain your session and brand preferences. We do not use tracking cookies or third-party analytics cookies.
+          Amplispark uses minimal browser storage (localStorage and sessionStorage) to maintain your session and brand preferences. We do not use tracking cookies or third-party analytics cookies.
         </Section>
 
         <Section title="10. Children's Privacy">

@@ -319,7 +319,7 @@ export default function SocialConnect({
           Social Voice Analysis
         </h3>
         <p style={{ fontSize: 12, color: A.textSoft, margin: 0, lineHeight: 1.5 }}>
-          Connect a social account so Amplifi can match your existing writing style when generating captions.
+          Connect a social account so Amplispark can match your existing writing style when generating captions.
         </p>
       </div>
 

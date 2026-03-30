@@ -1,4 +1,4 @@
-# Amplifi
+# Amplispark
 
 **Your AI creative director. One brand. Infinite content.**
 
@@ -12,18 +12,18 @@ An AI-powered creative director that analyzes your brand and produces complete, 
 
 ## What is this?
 
-Amplifi uses Gemini's interleaved text + image output to generate copy and visuals together in one coherent stream. Describe your business (or paste your website URL for deeper analysis), and get a full week of social media content tailored to your brand, across every platform.
+Amplispark uses Gemini's interleaved text + image output to generate copy and visuals together in one coherent stream. Describe your business (or paste your website URL for deeper analysis), and get a full week of social media content tailored to your brand, across every platform.
 
 - **3-step onboarding wizard** — a guided wizard replaces the old single-form onboarding. Step 1: business name, description, website URL, industry. Step 2: tone, audience, colors, logo upload (skippable). Step 3: platform selection (AI or manual). SessionStorage persistence survives refresh; brand creation is deferred to the final step.
 - **Interactive guided tour** — an 11-step tooltip tour with spotlight overlay on first dashboard visit. Covers brand summary, edit brand, calendar, generate, style picker, new plan, tabs, posts, connections, video, and voice coach. Auto-switches tabs, supports Back/Next/Skip and Escape key. Re-accessible via "Take a tour" button in the brand summary bar.
-- **Smart brand analysis** — describe your business or paste your website URL. Amplifi extracts your colors, tone, audience, visual style, and competitive positioning automatically.
+- **Smart brand analysis** — describe your business or paste your website URL. Amplispark extracts your colors, tone, audience, visual style, and competitive positioning automatically.
 - **Weekly content calendar** — a full 7-day content plan with AI-researched posting frequency, optimal posting times, and pillar-based strategy (education-first for new brands, data-forward for established ones).
 - **11 platforms** — Instagram, LinkedIn, X, TikTok, Facebook, Threads, Pinterest, YouTube Shorts, Mastodon, Bluesky, and more. Each post is tailored to the platform's format, character limits, hashtag conventions, and algorithm preferences.
 - **Captions and images generated together** — text and matching visuals are created in a single AI pass, ensuring they complement each other. Automatic fallback if image generation fails.
 - **Instagram carousels** — multi-slide carousel posts with parallel image generation per slide, open-loop swipe drivers, and named technique headlines.
 - **AI video clips** — generate Reels and TikTok clips from your post's hero image or from text prompts via Veo 3.1.
 - **AI media editor** — edit generated images and videos with natural language ("make the background warmer", "add more contrast"). Trend-researched style suggestions and 35 visual styles to choose from.
-- **Bring your own photos** — upload your own product shots or brand photos. Amplifi writes captions tailored to your images.
+- **Bring your own photos** — upload your own product shots or brand photos. Amplispark writes captions tailored to your images.
 - **Voice strategy coach** — talk to your AI creative director in real time. Discusses your content calendar, explains strategy decisions, advises on specific days, and coaches on caption writing — all in a live voice conversation.
 - **Intelligent content scoring** — every post is scored across 5 dimensions (hook strength, relevance, CTA effectiveness, platform fit, teaching depth) with platform-specific weighting. Structural issues reduce the score proportionally, never catastrophically.
 - **Multiple brands** — manage multiple brands from one account. Each brand has its own profile, calendar, and content library.

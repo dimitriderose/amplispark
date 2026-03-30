@@ -9,7 +9,7 @@
   <!-- Stylized A -->
   <path d="M256 108L370 404H314L296 350H216L198 404H142L256 108Z" fill="white"/>
   <path d="M228 306H284L256 218Z" fill="url(#bg)"/>
-  <!-- Amplification arcs -->
+  <!-- Amplispark arcs -->
   <path d="M216 90 A56 56 0 0 1 296 90" stroke="white" stroke-width="10" fill="none" stroke-linecap="round" opacity="0.6"/>
   <path d="M196 72 A80 80 0 0 1 316 72" stroke="white" stroke-width="8" fill="none" stroke-linecap="round" opacity="0.35"/>
 </svg>

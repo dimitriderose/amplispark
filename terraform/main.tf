@@ -1,5 +1,5 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# Amplifi — Terraform IaC
+# Amplispark — Terraform IaC
 # One-command deployment: enables APIs, provisions Firestore + Cloud Storage,
 # builds + deploys the Docker image to Cloud Run with SSE timeout.
 # ──────────────────────────────────────────────────────────────────────────────
@@ -73,7 +73,7 @@ resource "google_artifact_registry_repository" "docker" {
   repository_id = "amplifi"
   location      = var.region
   format        = "DOCKER"
-  description   = "Amplifi container images"
+  description   = "Amplispark container images"
 
   depends_on = [google_project_service.apis]
 }

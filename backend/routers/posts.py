@@ -450,7 +450,7 @@ def _build_ics(plan: dict, posts: list[dict], brand_name: str) -> str:
     lines = [
         "BEGIN:VCALENDAR",
         "VERSION:2.0",
-        "PRODID:-//Amplifi//Content Plan//EN",
+        "PRODID:-//Amplispark//Content Plan//EN",
         "CALSCALE:GREGORIAN",
         "METHOD:PUBLISH",
         f"X-WR-CALNAME:{brand_name} Content Plan",

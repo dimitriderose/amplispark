@@ -233,7 +233,7 @@ async def _download_website_logo(brand_id: str, logo_url: str) -> str | None:
     try:
         async with httpx.AsyncClient(follow_redirects=True, timeout=10) as client:
             resp = await client.get(logo_url, headers={
-                "User-Agent": "Mozilla/5.0 (compatible; AmplifiBot/1.0)"
+                "User-Agent": "Mozilla/5.0 (compatible; AmplisparkBot/1.0)"
             })
             resp.raise_for_status()
 
