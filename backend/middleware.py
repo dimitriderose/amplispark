@@ -146,7 +146,9 @@ async def get_ws_authenticated_uid(websocket: WebSocket) -> str:
     try:
         loop = asyncio.get_running_loop()
         decoded = await loop.run_in_executor(None, firebase_auth.verify_id_token, token)
-        return decoded["uid"]
+        uid = decoded["uid"]
+        user_uid_var.set(uid)
+        return uid
     except firebase_auth.ExpiredIdTokenError:
         logger.debug("WS auth: token expired")
         logger.info("metric", extra={

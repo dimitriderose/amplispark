@@ -1,7 +1,7 @@
 import logging
 import os
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pythonjsonlogger.json import JsonFormatter
@@ -40,6 +40,9 @@ app.add_middleware(
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
+    # HTTPException is already handled by FastAPI's default handler, so skip it
+    if isinstance(exc, HTTPException):
+        raise exc
     logger.error("unhandled_exception", extra={
         "path": request.url.path,
         "method": request.method,
