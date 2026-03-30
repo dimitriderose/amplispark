@@ -24,6 +24,7 @@ async def stream_generate(
     brand_id: str = Query(...),
     instructions: str | None = Query(None),
     image_style: str | None = Query(None),
+    regen_mode: str | None = Query(None),
 ):
     """SSE endpoint: streams interleaved caption + image generation events."""
 
@@ -57,12 +58,26 @@ async def stream_generate(
     # Delete any existing post for this plan+day+platform (regeneration replaces, not duplicates)
     brief_platform = day_brief.get("platform", "instagram")
     existing_posts = await firestore_client.list_posts(brand_id, plan_id)
+    existing_images: dict | None = None
     for ep in existing_posts:
         if ep.get("brief_index") == day_index and ep.get("platform", "") == brief_platform:
-            try:
-                await firestore_client.delete_post(brand_id, ep["post_id"])
-            except Exception as e:
-                logger.warning("Best-effort cleanup failed for post %s: %s", ep.get("post_id"), e)
+            if regen_mode == "text_only":
+                # Capture existing image fields for reuse, skip deletion
+                existing_images = {
+                    "image_url": ep.get("image_url"),
+                    "image_gcs_uri": ep.get("image_gcs_uri"),
+                    "image_urls": ep.get("image_urls", []),
+                    "image_gcs_uris": ep.get("image_gcs_uris", []),
+                }
+                try:
+                    await firestore_client.delete_post(brand_id, ep["post_id"])
+                except Exception as e:
+                    logger.warning("Best-effort cleanup failed for post %s: %s", ep.get("post_id"), e)
+            else:
+                try:
+                    await firestore_client.delete_post(brand_id, ep["post_id"])
+                except Exception as e:
+                    logger.warning("Best-effort cleanup failed for post %s: %s", ep.get("post_id"), e)
 
     # Extract prior hooks from already-generated posts for deduplication
     prior_hooks = [
@@ -91,7 +106,7 @@ async def stream_generate(
 
     # Run generation as a background task so it completes (and saves to
     # Firestore) even if the user navigates away and the SSE stream closes.
-    event_queue: asyncio.Queue = asyncio.Queue()
+    event_queue: asyncio.Queue = asyncio.Queue(maxsize=200)
 
     async def _run_generation():
         final_caption = ""
@@ -109,10 +124,13 @@ async def stream_generate(
                 while True:
                     await asyncio.sleep(15)
                     if asyncio.get_event_loop().time() - _last_event_time > 12:
-                        await event_queue.put({
-                            "event": "status",
-                            "data": {"message": "Still working..."},
-                        })
+                        try:
+                            event_queue.put_nowait({
+                                "event": "status",
+                                "data": {"message": "Still working..."},
+                            })
+                        except asyncio.QueueFull:
+                            logger.warning("SSE event queue full, dropping event")
 
             gen_hb = asyncio.create_task(_gen_heartbeat())
             try:
@@ -123,6 +141,7 @@ async def stream_generate(
                     instructions=instructions,
                     prior_hooks=prior_hooks,
                     image_style_key=image_style,
+                    existing_images=existing_images,
                 ):
                     _last_event_time = asyncio.get_event_loop().time()
                     event_name = event["event"]
@@ -173,7 +192,10 @@ async def stream_generate(
                         except Exception as fs_err:
                             logger.error("Firestore error-update failed for post %s: %s", post_id, fs_err)
 
-                    await event_queue.put(event)
+                    try:
+                        event_queue.put_nowait(event)
+                    except asyncio.QueueFull:
+                        logger.warning("SSE event queue full, dropping event")
             finally:
                 gen_hb.cancel()
 
@@ -184,18 +206,27 @@ async def stream_generate(
                 if _veo_gate_score < 7:
                     logger.warning("Skipping Veo -- review score %d < 7 for video_first post %s",
                                    _veo_gate_score, post_id)
-                    await event_queue.put({
-                        "event": "video_error",
-                        "data": {"message": f"Video skipped -- caption scored {_veo_gate_score}/10. Regenerate for a higher-quality result."},
-                    })
+                    try:
+                        event_queue.put_nowait({
+                            "event": "video_error",
+                            "data": {"message": f"Video skipped -- caption scored {_veo_gate_score}/10. Regenerate for a higher-quality result."},
+                        })
+                    except asyncio.QueueFull:
+                        logger.warning("SSE event queue full, dropping event")
                 else:
-                    await event_queue.put({"event": "status", "data": {"message": "Generating video..."}})
+                    try:
+                        event_queue.put_nowait({"event": "status", "data": {"message": "Generating video..."}})
+                    except asyncio.QueueFull:
+                        logger.warning("SSE event queue full, dropping event")
 
                     # Heartbeat keeps SSE alive during long Veo generation (avg 2-5 min)
                     async def _heartbeat():
                         while True:
                             await asyncio.sleep(15)
-                            await event_queue.put({"event": "status", "data": {"message": "Generating video..."}})
+                            try:
+                                event_queue.put_nowait({"event": "status", "data": {"message": "Generating video..."}})
+                            except asyncio.QueueFull:
+                                logger.warning("SSE event queue full, dropping event")
 
                     heartbeat_task = asyncio.create_task(_heartbeat())
                     try:
@@ -220,20 +251,26 @@ async def stream_generate(
                                 "model": video_result.get("model", "veo-3.1"),
                             },
                         })
-                        await event_queue.put({
-                            "event": "video_complete",
-                            "data": {
-                                "video_url": video_result["video_url"],
-                                "video_gcs_uri": video_result.get("video_gcs_uri"),
-                                "audio_note": "Add trending audio before publishing -- silent video underperforms on this platform.",
-                            },
-                        })
+                        try:
+                            event_queue.put_nowait({
+                                "event": "video_complete",
+                                "data": {
+                                    "video_url": video_result["video_url"],
+                                    "video_gcs_uri": video_result.get("video_gcs_uri"),
+                                    "audio_note": "Add trending audio before publishing -- silent video underperforms on this platform.",
+                                },
+                            })
+                        except asyncio.QueueFull:
+                            logger.warning("SSE event queue full, dropping event")
                     except Exception as video_err:
                         logger.error("Video generation failed for video_first post %s: %s", post_id, video_err)
-                        await event_queue.put({
-                            "event": "video_error",
-                            "data": {"message": str(video_err)},
-                        })
+                        try:
+                            event_queue.put_nowait({
+                                "event": "video_error",
+                                "data": {"message": str(video_err)},
+                            })
+                        except asyncio.QueueFull:
+                            logger.warning("SSE event queue full, dropping event")
                     finally:
                         heartbeat_task.cancel()
 
@@ -243,7 +280,10 @@ async def stream_generate(
                 await firestore_client.update_post(brand_id, post_id, {"status": "failed"})
             except Exception as e:
                 logger.warning("Failed to mark post %s as failed: %s", post_id, e)
-            await event_queue.put({"event": "error", "data": {"message": str(exc)}})
+            try:
+                event_queue.put_nowait({"event": "error", "data": {"message": str(exc)}})
+            except asyncio.QueueFull:
+                logger.warning("SSE event queue full, dropping event")
         finally:
             await event_queue.put(None)  # sentinel: end of stream
 

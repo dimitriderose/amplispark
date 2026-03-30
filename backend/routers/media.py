@@ -247,7 +247,7 @@ async def _run_video_generation(
             content_theme=post.get("content_theme", ""),
             pillar=post.get("pillar", ""),
         )
-        bt.budget_tracker.record_video(tier)
+        await bt.budget_tracker.record_video(tier)
         await firestore_client.update_video_job(job_id, "complete", result)
         # Also update the post with video metadata
         await firestore_client.update_post(brand_id, post_id, {
@@ -262,6 +262,10 @@ async def _run_video_generation(
     except Exception as e:
         logger.error(f"Video generation failed for job {job_id}: {e}")
         await firestore_client.update_video_job(job_id, "failed", {"error": str(e)})
+        try:
+            await firestore_client.update_post(brand_id, post_id, {"status": "failed"})
+        except Exception as post_err:
+            logger.error("Failed to mark post %s as failed after video error: %s", post_id, post_err)
 
 
 @router.post("/posts/{post_id}/generate-video")
@@ -272,7 +276,7 @@ async def start_video_generation(
 ):
     """Queue async Veo video generation for a post that has a hero image."""
     # Check budget
-    if not bt.budget_tracker.can_generate_video():
+    if not await bt.budget_tracker.can_generate_video():
         return JSONResponse(
             status_code=429,
             content={
@@ -416,11 +420,20 @@ async def upload_video_for_repurpose(
     if ext not in ("mp4", "mov"):
         raise HTTPException(status_code=400, detail="Only .mp4 and .mov files are accepted")
 
-    video_bytes = await file.read()
+    MAX_VIDEO_UPLOAD = 100 * 1024 * 1024  # 100MB
+    chunks = []
+    total = 0
+    while True:
+        chunk = await file.read(8192)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > MAX_VIDEO_UPLOAD:
+            raise HTTPException(status_code=413, detail="Video exceeds 100MB limit")
+        chunks.append(chunk)
+    video_bytes = b"".join(chunks)
     if len(video_bytes) == 0:
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
-    if len(video_bytes) > _MAX_VIDEO_BYTES:
-        raise HTTPException(status_code=413, detail="Video must be under 500 MB")
     if not _is_valid_video_header(video_bytes):
         raise HTTPException(status_code=400, detail="File does not appear to be a valid MP4/MOV video")
 

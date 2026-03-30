@@ -200,7 +200,7 @@ export default function DashboardPage() {
             Retry
           </button>
           <button
-            onClick={() => navigate('/onboard')}
+            onClick={() => navigate('/onboard?new=true')}
             style={{
               padding: '8px 16px', borderRadius: 8, border: `1px solid ${A.border}`,
               background: 'transparent', cursor: 'pointer', fontSize: 13, color: A.textSoft,
@@ -257,7 +257,7 @@ export default function DashboardPage() {
       <BrandSummaryBar
         brand={brand}
         onNavigateEdit={() => navigate(`/edit/${brandId}`)}
-        onNavigateNew={() => navigate('/onboard')}
+        onNavigateNew={() => navigate('/onboard?new=true')}
         onTakeTour={!tour.isActive ? tour.start : undefined}
       />
 

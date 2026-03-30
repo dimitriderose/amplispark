@@ -1,3 +1,4 @@
+import hmac
 import logging
 import base64
 import os
@@ -25,9 +26,9 @@ if _TOKEN_KEY:
 
 
 def _encrypt_token(token: str) -> str:
-    """Encrypt a token using Fernet. Falls back to plaintext if no key configured."""
+    """Encrypt a token using Fernet. Raises if no key configured."""
     if not _fernet:
-        return token
+        raise RuntimeError("TOKEN_ENCRYPT_KEY is required for storing OAuth tokens")
     return "enc:" + _fernet.encrypt(token.encode("utf-8")).decode("ascii")
 
 
@@ -43,6 +44,7 @@ def _decrypt_token(stored: str) -> str:
     if stored.startswith("obf:"):
         # Legacy XOR obfuscation — decode and re-encrypt on next write
         return stored  # return as-is; caller should re-encrypt
+    logger.warning("Legacy plaintext token found — should be re-encrypted")
     return stored  # legacy plaintext
 
 router = APIRouter()
@@ -108,13 +110,20 @@ async def notion_auth_url(brand_id: str):
     if not NOTION_CLIENT_ID:
         raise HTTPException(status_code=500, detail="Notion integration not configured")
 
+    hmac_sig = hmac.new(
+        _TOKEN_KEY.encode() if _TOKEN_KEY else b"fallback",
+        brand_id.encode(),
+        "sha256",
+    ).hexdigest()[:16]
+    state = f"{brand_id}:{hmac_sig}"
+
     url = (
         f"https://api.notion.com/v1/oauth/authorize"
         f"?client_id={NOTION_CLIENT_ID}"
         f"&response_type=code"
         f"&owner=user"
         f"&redirect_uri={NOTION_REDIRECT_URI}"
-        f"&state={brand_id}"
+        f"&state={state}"
     )
     return {"auth_url": url}
 
@@ -261,7 +270,18 @@ async def notion_callback(code: str = Query(...), state: str = Query(...)):
     from backend.config import NOTION_CLIENT_ID, NOTION_CLIENT_SECRET, NOTION_REDIRECT_URI
     from backend.services.notion_client import exchange_code
 
-    brand_id = state
+    # Validate CSRF state parameter
+    if ":" not in state:
+        raise HTTPException(status_code=400, detail="Invalid state parameter")
+    brand_id, sig = state.split(":", 1)
+    expected_sig = hmac.new(
+        _TOKEN_KEY.encode() if _TOKEN_KEY else b"fallback",
+        brand_id.encode(),
+        "sha256",
+    ).hexdigest()[:16]
+    if not hmac.compare_digest(sig, expected_sig):
+        raise HTTPException(status_code=400, detail="Invalid state parameter")
+
     brand = await firestore_client.get_brand(brand_id)
     if not brand:
         raise HTTPException(status_code=404, detail="Brand not found")

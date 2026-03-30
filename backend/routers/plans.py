@@ -46,7 +46,7 @@ async def create_plan(brand_id: str, body: CreatePlanBody = Body(CreatePlanBody(
         days, trend_summary = await run_strategy(brand_id, brand, num_days, business_events=body.business_events, platforms=platforms)
     except Exception as e:
         logger.error(f"Strategy agent error for brand {brand_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
     plan_data = {
         "brand_id": brand_id,
@@ -61,7 +61,7 @@ async def create_plan(brand_id: str, body: CreatePlanBody = Body(CreatePlanBody(
         plan_id = await firestore_client.create_plan(brand_id, plan_data)
     except Exception as e:
         logger.error(f"Failed to persist plan for brand {brand_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
     return {"plan_id": plan_id, "status": "complete", "days": days, "trend_summary": trend_summary}
 
@@ -124,7 +124,7 @@ async def update_plan_day(
         await firestore_client.update_plan_day(brand_id, plan_id, day_index, safe_data)
     except Exception as e:
         logger.error(f"Failed to update day {day_index} for plan {plan_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
     updated_plan = await firestore_client.get_plan(plan_id, brand_id)
     return {"plan_profile": updated_plan}
@@ -184,7 +184,7 @@ async def upload_day_photo(
         )
     except Exception as e:
         logger.error("BYOP upload failed for brand %s plan %s day %s: %s", brand_id, plan_id, day_index, e)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
     await firestore_client.update_plan_day(brand_id, plan_id, day_index, {
         "custom_photo_url": signed_url,

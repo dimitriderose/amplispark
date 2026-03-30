@@ -38,3 +38,8 @@ VIDEO_COST_STD = 3.20          # $3.20 per 8-sec Veo Standard clip
 TOTAL_BUDGET = 100.0
 IMAGE_BUDGET = 70.0
 VIDEO_BUDGET = 30.0
+
+import logging as _logging
+_logger = _logging.getLogger(__name__)
+if not GOOGLE_API_KEY:
+    _logger.error("GOOGLE_API_KEY is not set — AI features will not work")

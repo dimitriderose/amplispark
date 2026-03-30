@@ -1,6 +1,8 @@
 import { initializeApp } from 'firebase/app'
 import {
   getAuth,
+  setPersistence,
+  browserLocalPersistence,
   GoogleAuthProvider,
   signInWithPopup,
   signOut,
@@ -19,6 +21,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig)
 export const auth = getAuth(app)
+setPersistence(auth, browserLocalPersistence).catch(() => {})
 
 const googleProvider = new GoogleAuthProvider()
 

@@ -84,7 +84,7 @@ async def analyze_brand(brand_id: str, data: BrandProfileCreate):
     except Exception as e:
         logger.error(f"Brand analysis error for {brand_id}: {e}")
         await firestore_client.update_brand(brand_id, {"analysis_status": "failed"})
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/brands/{brand_id}")
