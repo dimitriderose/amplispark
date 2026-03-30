@@ -1,5 +1,5 @@
 # Product Requirements Document
-## Amplifi
+## Amplispark
 
 **Category:** ✍️ Creative Storyteller
 **Tagline:** Your AI creative director. One brand. Infinite content.
@@ -13,9 +13,9 @@ Prize Target: $10K (category) + $5K (subcategory)
 
 # Executive Summary
 
-Amplifi is an AI-powered creative director that analyzes a brand and produces complete, ready-to-post social media content packages — captions, images, hashtags, and posting schedules — all generated together in a single interleaved output stream. Built for the Gemini Live Agent Challenge hackathon ($80K prize pool, Google DeepMind / Devpost).
+Amplispark is an AI-powered creative director that analyzes a brand and produces complete, ready-to-post social media content packages — captions, images, hashtags, and posting schedules — all generated together in a single interleaved output stream. Built for the Gemini Live Agent Challenge hackathon ($80K prize pool, Google DeepMind / Devpost).
 
-The key innovation: copy and visuals are born together. Unlike every existing tool that generates text and images separately, Amplifi uses Gemini's interleaved output to produce captions and matching product images in one coherent stream. This directly matches the Creative Storyteller category's core requirement and two of the example use cases listed in the rules (marketing asset generator, social media content creator).
+The key innovation: copy and visuals are born together. Unlike every existing tool that generates text and images separately, Amplispark uses Gemini's interleaved output to produce captions and matching product images in one coherent stream. This directly matches the Creative Storyteller category's core requirement and two of the example use cases listed in the rules (marketing asset generator, social media content creator).
 
 Built on Gemini 3 Flash, Google ADK, and Google Cloud.
 
@@ -42,18 +42,18 @@ Small businesses face a content creation bottleneck that directly impacts their 
 
 # Solution
 
-Amplifi is an AI creative director that analyzes your brand and produces complete social media content packages — captions, images, hashtags, and posting schedules — all generated together in a single interleaved output stream. The copy and visuals are born together, ensuring every post feels cohesive and on-brand.
+Amplispark is an AI creative director that analyzes your brand and produces complete social media content packages — captions, images, hashtags, and posting schedules — all generated together in a single interleaved output stream. The copy and visuals are born together, ensuring every post feels cohesive and on-brand.
 
 ## Core Experience
 
-- **Brand-first intelligence:** Upload your website URL or product photos. Amplifi's Brand Analyst agent builds a complete brand profile — colors, tone, target audience, competitive positioning — that informs every piece of content it creates. No more generic AI outputs.
+- **Brand-first intelligence:** Upload your website URL or product photos. Amplispark's Brand Analyst agent builds a complete brand profile — colors, tone, target audience, competitive positioning — that informs every piece of content it creates. No more generic AI outputs.
 - **Interleaved content generation:** Watch as captions and matching images stream together in real-time. Monday's post appears with its custom product photo, then Tuesday's story graphic — all flowing as one cohesive output. This is Gemini's interleaved output in action.
 - **Full content packages:** Not individual assets but complete weekly content plans. Each post includes caption + product/lifestyle image + platform-appropriate hashtags (8–12 for IG, 3–5 for LinkedIn, 1–2 for X) + optimal posting time + platform-specific formatting. Instagram carousel posts generate 3 slides with parallel image generation. If interleaved image generation fails, an automatic fallback generates the image separately — no manual retry needed.
 - **Multi-agent quality pipeline:** Four specialized agents work in sequence — Brand Analyst, Strategist, Content Creator, Reviewer — ensuring every post passes brand consistency checks before delivery.
 
 ## What Makes This Different
 
-The Creative Storyteller category specifically asks for projects that "leverage Gemini's interleaved text and image output." Amplifi doesn't just use interleaved output as a feature — it IS the product. The entire value proposition depends on text and images being generated together:
+The Creative Storyteller category specifically asks for projects that "leverage Gemini's interleaved text and image output." Amplispark doesn't just use interleaved output as a feature — it IS the product. The entire value proposition depends on text and images being generated together:
 
 - Captions reference visual elements that are simultaneously being created
 - Images reflect the mood, tone, and messaging of the accompanying copy
@@ -94,7 +94,7 @@ The Creative Storyteller category specifically asks for projects that "leverage 
 
 ### Social Proof Tier System
 
-Amplifi automatically categorizes each brand into one of three social proof tiers based on the `years_in_business` and `client_count` fields in the brand profile:
+Amplispark automatically categorizes each brand into one of three social proof tiers based on the `years_in_business` and `client_count` fields in the brand profile:
 
 | Tier | Condition | Strategy Impact |
 |---|---|---|
@@ -229,11 +229,11 @@ brands/{brandId}/
 
 # Judging Criteria Alignment
 
-| Criterion | Weight | How Amplifi Addresses It | Target |
+| Criterion | Weight | How Amplispark Addresses It | Target |
 |---|---|---|---|
 | **Innovation & Multimodal UX** | 40% | Interleaved output IS the product, not a bolt-on feature. Directly matches two example use cases from the rules (marketing asset generator + social content creator). Copy and visuals generated together for contextual coherence. Full-week content packages in one stream. | 5/5 |
 | **Technical Implementation** | 30% | 4-agent ADK pipeline with specialized roles (Analyst→Strategy→Creator→Review). Gemini interleaved output for simultaneous text+image generation. Cloud Run + Firestore + Cloud Storage. SSE streaming for progressive UI updates. Automated IaC deployment. | 4–5/5 |
-| **Demo & Presentation** | 30% | Show a real small business URL being analyzed in real-time, then watch an entire week's content materialize — captions and images streaming together. Before/after comparison of the manual 5-tool workflow vs. Amplifi's single stream. Under 4 minutes. | 5/5 |
+| **Demo & Presentation** | 30% | Show a real small business URL being analyzed in real-time, then watch an entire week's content materialize — captions and images streaming together. Before/after comparison of the manual 5-tool workflow vs. Amplispark's single stream. Under 4 minutes. | 5/5 |
 
 ---
 
@@ -278,7 +278,7 @@ brands/{brandId}/
 | Engagement prediction scoring | **P2 — SHIPPED** | Multiplicative scoring system: platform-weighted engagement across 5 dimensions (hook_strength, relevance, cta_effectiveness, platform_fit, teaching_depth) combined with structural modifiers. Engagement prediction returns low/medium/high/viral. Platform-specific checks (Instagram fold, LinkedIn external links, TikTok capitalization, Mastodon CamelCase, etc.). Thin-profile social proof check deducts 3 points for fabricated client claims. Carousel safety validation and video topic awareness integrated into review pipeline. |
 | Existing social media voice analysis | **P2 — Nice to Have** | "Learn my voice from my last 50 posts" — ingest a user's existing LinkedIn, X, or Instagram content to build a more accurate brand voice profile than website scraping alone. The website version of most solopreneurs is polished and corporate; their social media voice is casual and opinionated. Requires social media API integrations (LinkedIn API, X API) with OAuth flows, rate limits, and approval processes. High value but weeks of integration work. The frontend includes an OAuth-ready Social Connect UI with per-platform cards and built-in per-platform demo voice data — LinkedIn (authoritative B2B, no emoji, long-form), Instagram (warm artisanal lifestyle), X (punchy hot-take, short-form) — so users can preview the voice analysis workflow without connecting a real account. |
 | Platform meta intelligence | **P2 — Nice to Have** | Dynamic, data-driven understanding of what content formats perform best on each platform right now. "LinkedIn rewards personal stories on Tuesday mornings" changes every quarter and varies by niche. Would require a data pipeline analyzing trending content patterns per platform, updated regularly. Current Strategy Agent uses static best practices; this would make recommendations dynamic and seasonally aware. |
-| Video repurposing / smart editing | **P2 — Nice to Have** | User uploads raw video (up to 5 minutes, .mp4/.mov) and Amplifi automatically produces platform-ready short-form clips. **User flow:** (1) User uploads a raw video from Content Detail or Calendar screen via "Upload your video" button alongside the existing BYOP photo upload. (2) AI analyzes the video: speech-to-text transcription, speaker identification, topic segmentation, engagement-peak detection (moments with emphasis, laughter, key statements). (3) AI proposes 2–3 clip options with timestamps, each optimized for a different platform — a 15-second hook for Reels/TikTok, a 30-second highlight for LinkedIn, a 60-second version for YouTube Shorts. (4) User previews clips with auto-generated captions overlay, selects/edits, and exports. **Processing pipeline:** Gemini handles transcription + content analysis (which moments are most compelling). Clip extraction uses FFmpeg server-side. Caption overlay uses a simple text rendering layer. Platform formatting (aspect ratio, duration limits) is rule-based per platform. **Agent design:** New `VideoEditor` agent in the SequentialAgent pipeline, activated only when user uploads raw video. Sits after Content Creator, uses the brand profile's tone and style to write caption overlays that match the brand voice. The `content_type` field on calendar days already distinguishes "reel" from "photo" — a "user_video" type triggers this path. **Key differentiator from Veo (P1):** Veo generates synthetic video from scratch. Video repurposing takes the user's authentic footage and makes it platform-ready. For solopreneurs recording face-to-camera content, this is often more valuable than synthetic video because authenticity drives engagement. **Input constraints:** Max 5 minutes, max 500MB, .mp4 or .mov. Server-side processing via Cloud Run job (not in the request path — upload triggers async processing, user gets notified when clips are ready). |
+| Video repurposing / smart editing | **P2 — Nice to Have** | User uploads raw video (up to 5 minutes, .mp4/.mov) and Amplispark automatically produces platform-ready short-form clips. **User flow:** (1) User uploads a raw video from Content Detail or Calendar screen via "Upload your video" button alongside the existing BYOP photo upload. (2) AI analyzes the video: speech-to-text transcription, speaker identification, topic segmentation, engagement-peak detection (moments with emphasis, laughter, key statements). (3) AI proposes 2–3 clip options with timestamps, each optimized for a different platform — a 15-second hook for Reels/TikTok, a 30-second highlight for LinkedIn, a 60-second version for YouTube Shorts. (4) User previews clips with auto-generated captions overlay, selects/edits, and exports. **Processing pipeline:** Gemini handles transcription + content analysis (which moments are most compelling). Clip extraction uses FFmpeg server-side. Caption overlay uses a simple text rendering layer. Platform formatting (aspect ratio, duration limits) is rule-based per platform. **Agent design:** New `VideoEditor` agent in the SequentialAgent pipeline, activated only when user uploads raw video. Sits after Content Creator, uses the brand profile's tone and style to write caption overlays that match the brand voice. The `content_type` field on calendar days already distinguishes "reel" from "photo" — a "user_video" type triggers this path. **Key differentiator from Veo (P1):** Veo generates synthetic video from scratch. Video repurposing takes the user's authentic footage and makes it platform-ready. For solopreneurs recording face-to-camera content, this is often more valuable than synthetic video because authenticity drives engagement. **Input constraints:** Max 5 minutes, max 500MB, .mp4 or .mov. Server-side processing via Cloud Run job (not in the request path — upload triggers async processing, user gets notified when clips are ready). |
 | Instagram grid visual consistency | **P2 — SHIPPED** | Brand Assets Service fetches logo, product photos, and style reference image from GCS and injects them as inline image data into every Gemini generation call. Visual context ensures color matching, style reference, and logo inclusion across all posts. Priority order: logo → product photos → style reference → uploaded assets. In-memory cache per brand_id. |
 | Multi-platform formatting | **P2 — SHIPPED** | Platform Registry (`backend/platforms.py`) provides per-platform PlatformSpec with character limits, hashtag caps, fold positions, aspect ratios, and derivative types for all 10 platforms. Content Creator and Review Agent consume platform-specific prompts and guidelines from the registry. Frontend mirrors the registry in `platformRegistry.ts` with icons, colors, and UI helpers. |
 | Content editing/regeneration | **P2 — Nice to Have** | User can request "regenerate image" or "make caption shorter" for individual posts. |
@@ -323,7 +323,7 @@ brands/{brandId}/
 3. **Bring Your Own Photos + AI fallback** — upload real product photos and get AI-crafted captions, or let AI generate both when you don't have a photo. No other tool seamlessly blends user photos with AI-generated content in one calendar
 4. **Instagram carousels** — 3-slide carousel posts with parallel image generation per slide, each following the brand's visual identity seed
 5. **Pillar content repurposing** — one idea becomes a LinkedIn post, an X thread, an Instagram carousel, and a TikTok caption. Coherent weekly narrative, not 7 disconnected posts
-6. **Event-aware calendar** — tell Amplifi what's actually happening at your business this week and the calendar builds around real events, not generic themes
+6. **Event-aware calendar** — tell Amplispark what's actually happening at your business this week and the calendar builds around real events, not generic themes
 7. **Visual + textual identity seeds** — every generated image shares a consistent brand aesthetic AND every caption follows the same writing rhythm, because the Brand Analyst creates persistent style directives for both
 8. **Full content packages** — a week's worth of posts in one generation, not individual assets. Export as ZIP with images, videos, and captions
 9. **Brand analysis from URL** — paste your website, AI builds your brand profile automatically. Deterministic (temperature 0.15) with constrained enums for consistency
@@ -439,7 +439,7 @@ Engagement prediction scoring (with multiplicative system) and Instagram grid vi
 
 | Bonus | Points | Plan | Effort |
 |---|---|---|---|
-| YouTube video | +0.6 | "How I Built Amplifi" — 3–5 min covering interleaved output + multi-agent pipeline + Cloud Run. Include #GeminiLiveAgentChallenge. | 2–3 hours |
+| YouTube video | +0.6 | "How I Built Amplispark" — 3–5 min covering interleaved output + multi-agent pipeline + Cloud Run. Include #GeminiLiveAgentChallenge. | 2–3 hours |
 | Automated deployment | +0.2 | Terraform + Cloud Build in public repo. Push-to-main deploys to Cloud Run. (Shared with Fireside setup.) | 30 min (reuse) |
 | GDG Membership | +0.2 | Sign up at developers.google.com/community/gdg. Link public profile in submission. | 10 minutes |
 | **Total bonus** | **+1.0** | Maximum possible on 1–5 scale (20% boost) | |

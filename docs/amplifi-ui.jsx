@@ -30,7 +30,7 @@ const NavBar = ({ screen, setScreen }) => (
   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 24px", borderBottom: `1px solid ${A.border}`, background: A.surface, position: "sticky", top: 0, zIndex: 50 }}>
     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
       <div style={{ width: 28, height: 28, borderRadius: 7, background: `linear-gradient(135deg, ${A.indigo}, ${A.violet})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color: "white", fontWeight: 700 }}>A</div>
-      <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 17, fontWeight: 700, color: A.text, letterSpacing: -0.3 }}>Amplifi</span>
+      <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 17, fontWeight: 700, color: A.text, letterSpacing: -0.3 }}>Amplispark</span>
     </div>
     <div style={{ display: "flex", gap: 2 }}>
       {[["landing","Home"],["onboard","Onboard"],["brand","Brand"],["calendar","Calendar"],["detail","Content"],["video","Video"],["dashboard","Dashboard"]].map(([k,l]) => (
@@ -506,7 +506,7 @@ const LandingPage = ({ onStart }) => {
             <br /><span style={{ background: `linear-gradient(135deg, ${A.indigo}, ${A.violet})`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>One click.</span>
           </h1>
           <p style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontSize: 18, color: A.textSoft, margin: "0 0 32px", lineHeight: 1.6, maxWidth: 480, marginLeft: "auto", marginRight: "auto", animation: "fadeUp 0.5s 0.2s both" }}>
-            Amplifi is your AI creative director. Paste your URL, get a full week of captions, images, and video — tailored to your brand, across every platform.
+            Amplispark is your AI creative director. Paste your URL, get a full week of captions, images, and video — tailored to your brand, across every platform.
           </p>
           <div style={{ display: "flex", gap: 12, justifyContent: "center", animation: "fadeUp 0.5s 0.3s both" }}>
             <button onClick={onStart} style={{ padding: "14px 32px", borderRadius: 10, background: `linear-gradient(135deg, ${A.indigo}, ${A.indigoDark})`, border: "none", color: "white", fontFamily: "'DM Sans', sans-serif", fontSize: 15, fontWeight: 600, cursor: "pointer", boxShadow: `0 4px 20px ${A.indigo}30`, transition: "transform 0.15s", letterSpacing: 0.2 }}>
@@ -552,7 +552,7 @@ const LandingPage = ({ onStart }) => {
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 20 }}>
           {[
-            { step: "01", icon: "🔗", title: "Paste your URL", desc: "Or describe your business. Amplifi crawls your site, extracts your brand identity, colors, tone, and audience." },
+            { step: "01", icon: "🔗", title: "Paste your URL", desc: "Or describe your business. Amplispark crawls your site, extracts your brand identity, colors, tone, and audience." },
             { step: "02", icon: "🧠", title: "AI builds your brand", desc: "Get an editable brand profile with caption and image style directives. Every piece of content stays on-brand." },
             { step: "03", icon: "📅", title: "Get your week", desc: "A full calendar of platform-specific content streams in live. Captions, images, video — all ready to post." },
           ].map((s, i) => (
@@ -579,7 +579,7 @@ const LandingPage = ({ onStart }) => {
             { icon: "📷", title: "Bring your own photos", desc: "Upload your product photos and get AI-written captions tailored specifically to each image." },
             { icon: "🎬", title: "AI video with Veo", desc: "Generate short-form video from your content plan. No filming, no editing, no equipment." },
             { icon: "📚", title: "Smart content pillars", desc: "Educate, Engage, Promote, Connect — automatic content mix so you never post the same type twice." },
-            { icon: "📅", title: "Event-aware calendar", desc: "Tell Amplifi about your real events — launches, holidays, promotions — and content adapts around them." },
+            { icon: "📅", title: "Event-aware calendar", desc: "Tell Amplispark about your real events — launches, holidays, promotions — and content adapts around them." },
           ].map((f, i) => (
             <div key={i} style={{ display: "flex", gap: 14, padding: "18px 20px", borderRadius: 12, background: A.surface, border: `1px solid ${A.border}` }}>
               <div style={{ fontSize: 22, flexShrink: 0, marginTop: 2 }}>{f.icon}</div>
@@ -597,7 +597,7 @@ const LandingPage = ({ onStart }) => {
         <div style={{ padding: "32px 28px", borderRadius: 14, background: A.surface, border: `1px solid ${A.border}` }}>
           <div style={{ fontSize: 32, marginBottom: 12 }}>💬</div>
           <p style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontSize: 15, color: A.text, lineHeight: 1.7, fontStyle: "italic", margin: "0 0 12px" }}>
-            "I used to spend 4 hours every Sunday planning social media. Amplifi does it in 2 minutes and the content is better than what I was writing."
+            "I used to spend 4 hours every Sunday planning social media. Amplispark does it in 2 minutes and the content is better than what I was writing."
           </p>
           <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 13, fontWeight: 600, color: A.text }}>Sarah Chen</div>
           <div style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontSize: 11, color: A.textSoft }}>Owner, Verde Kitchen · Brooklyn, NY</div>
@@ -725,7 +725,7 @@ const VideoRepurposeScreen = ({ onBack }) => {
               <button onClick={() => setPhase("upload")} style={{ padding: "4px 10px", borderRadius: 6, background: "none", border: `1px solid ${A.border}`, cursor: "pointer", fontFamily: "'IBM Plex Sans', sans-serif", fontSize: 11, color: A.textSoft }}>Change</button>
             </div>
             <div style={{ margin: "16px 0", height: 1, background: A.border }} />
-            <div style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontSize: 12, color: A.textSoft, marginBottom: 16 }}>Amplifi will extract 2–3 highlight clips, add captions, and format them for Reels, LinkedIn, and YouTube Shorts.</div>
+            <div style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontSize: 12, color: A.textSoft, marginBottom: 16 }}>Amplispark will extract 2–3 highlight clips, add captions, and format them for Reels, LinkedIn, and YouTube Shorts.</div>
             <div style={{ display: "flex", gap: 10 }}>
               <button onClick={() => setPhase("upload")} style={{ flex: 1, padding: "12px", borderRadius: 10, background: A.surface, border: `1px solid ${A.border}`, fontFamily: "'DM Sans', sans-serif", fontSize: 13, fontWeight: 500, color: A.text, cursor: "pointer" }}>Cancel</button>
               <button onClick={startProcessing} style={{ flex: 2, padding: "12px", borderRadius: 10, background: `linear-gradient(135deg, ${A.indigo}, ${A.indigoDark})`, border: "none", color: "white", fontFamily: "'DM Sans', sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer", boxShadow: `0 2px 12px ${A.indigo}25` }}>Start Processing →</button>
@@ -861,7 +861,7 @@ const VideoRepurposeScreen = ({ onBack }) => {
 
 // ─── Main ────────────────────────────────────────────────────
 
-export default function AmplifiApp() {
+export default function AmplisparkApp() {
   const [screen, setScreen] = useState("landing");
   return (
     <div style={{ maxWidth: 960, margin: "0 auto", minHeight: "100vh", background: A.bg }}>

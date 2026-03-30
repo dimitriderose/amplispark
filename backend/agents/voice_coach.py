@@ -309,7 +309,7 @@ def build_coaching_prompt(brand_profile: dict, plan: dict = None,
     # Calendar context (plan + post statuses)
     calendar_block = _build_calendar_block(plan, posts)
 
-    return f"""You are Amplifi's AI brand strategist and creative director — a warm, expert advisor \
+    return f"""You are Amplispark's AI brand strategist and creative director — a warm, expert advisor \
 personally assigned to {business_name}.
 
 BRAND PROFILE:

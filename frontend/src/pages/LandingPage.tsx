@@ -148,7 +148,7 @@ export default function LandingPage() {
           margin: '0 auto 40px',
           lineHeight: 1.65,
         }}>
-          Amplifi analyzes your brand, plans your strategy, and streams captions &amp; images
+          Amplispark analyzes your brand, plans your strategy, and streams captions &amp; images
           together in real time — powered by Gemini 3 Flash's interleaved multimodal output.
         </p>
 
@@ -446,7 +446,7 @@ export default function LandingPage() {
         flexWrap: 'wrap',
       }}>
         <span style={{ fontSize: 12, color: A.textMuted }}>
-          © 2026 Amplifi
+          © 2026 Amplispark
         </span>
         <a href="/terms" style={{ fontSize: 12, color: A.textSoft, textDecoration: 'none' }}
            onMouseEnter={e => (e.currentTarget.style.color = A.indigo)}

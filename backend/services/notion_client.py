@@ -73,7 +73,7 @@ def _extract_title(db: dict) -> str:
 
 
 def _build_post_properties(post: dict, day_index: int, platform: str) -> dict:
-    """Build Notion database page properties from an Amplifi post."""
+    """Build Notion database page properties from an Amplispark post."""
     theme = post.get("theme", "")
     caption = post.get("caption", "")
     hashtags = post.get("hashtags", [])

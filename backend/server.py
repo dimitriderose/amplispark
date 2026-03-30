@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="Amplifi API",
+    title="Amplispark API",
     description="AI-powered social media content generation",
     version="1.0.0",
 )

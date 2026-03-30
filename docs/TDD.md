@@ -1,16 +1,16 @@
 # Technical Design Document
-## Amplifi
+## Amplispark
 
 **Category:** ✍️ Creative Storyteller
 **Author:** Software Architecture Team
-**Companion Document:** PRD — Amplifi v1.5
+**Companion Document:** PRD — Amplispark v1.5
 **Version:** 1.8 | March 15, 2026 (updated from v1.7 — added NUX: onboarding wizard + guided tour)
 
 ---
 
 # 1. Overview
 
-This Technical Design Document specifies the implementation architecture for Amplifi, an AI-powered creative director that produces complete social media content packages using Gemini's interleaved text and image output. It translates the PRD's product requirements into concrete engineering decisions, API contracts, data models, code structure, and deployment specifications.
+This Technical Design Document specifies the implementation architecture for Amplispark, an AI-powered creative director that produces complete social media content packages using Gemini's interleaved text and image output. It translates the PRD's product requirements into concrete engineering decisions, API contracts, data models, code structure, and deployment specifications.
 
 **Scope:** All P0 and P1 features from the PRD, plus shipped P2 features: brand analysis from URL (with deterministic analysis at temperature 0.15), content calendar generation with event integration and social proof tier system, interleaved post generation with carousel support, image fallback, video_first pipeline, and brand reference image injection, multiplicative two-step review scoring with platform-specific weights (15 profiles: 11 platforms + 4 derivative overrides), React dashboard with tab-based navigation and Edit Brand page, image/video storage, streaming UI, Firebase Google Sign-In with account dropdown and Firebase ID token verification middleware, dedicated Brands page with pagination (5 per page), tier-aware Gemini Live voice coaching with content calendar context, Veo 3.1 video generation, full ZIP export with media, Platform Registry (11 platforms), Notion integration (OAuth + Fernet-encrypted tokens + database export), calendar .ics export with email delivery, platform-specific caption/hashtag enforcement, Cloud Build CI/CD pipeline with `deploy.sh`, SPA catch-all routing for deep links on Cloud Run with path traversal prevention, AI-researched posting frequency with Google Search grounding, multi-platform calendar generation with brief_index/day_index separation, modular backend architecture (7 FastAPI routers, 5 content creator sub-modules, shared constants/clients/middleware), centralized frontend type system with generic hooks, 3-step onboarding wizard with deferred brand creation and sessionStorage persistence, and 11-step SVG-based guided tour with per-brand completion tracking.
 
@@ -99,7 +99,7 @@ This Technical Design Document specifies the implementation architecture for Amp
 ## 2.2 Key Architectural Decisions
 
 **Decision 1: REST + SSE (Not WebSocket)**
-Unlike Fireside which requires bidirectional real-time communication, Amplifi uses standard REST APIs for all CRUD operations and Server-Sent Events (SSE) for the content generation stream. The frontend opens an SSE connection to `/api/generate/{planId}/{day}` and receives interleaved text and image data as the model produces it.
+Unlike Fireside which requires bidirectional real-time communication, Amplispark uses standard REST APIs for all CRUD operations and Server-Sent Events (SSE) for the content generation stream. The frontend opens an SSE connection to `/api/generate/{planId}/{day}` and receives interleaved text and image data as the model produces it.
 
 Rationale: Interleaved output uses the standard `generateContent` API (not Live API). SSE is the natural fit for a unidirectional server-to-client stream. It's simpler than WebSocket, doesn't require session affinity on Cloud Run, and works through CDNs and proxies.
 
@@ -953,7 +953,7 @@ POST /api/brands/{brandId}/plans/{planId}/calendar/email
 Body: { email: string }
 Response: { status: "sent" }
   // Sends the .ics calendar file as an email attachment via Resend API
-  // Subject: "Your {brand_name} Content Calendar — Amplifi"
+  // Subject: "Your {brand_name} Content Calendar — Amplispark"
 ```
 
 ### Content Planning
@@ -2054,7 +2054,7 @@ function VideoGenerateButton({ postId, contentType }: Props) {
 ```
 App (React Router)
 ├── NavBar (sticky top bar)
-│   ├── Logo + "Amplifi" brand (click → /)
+│   ├── Logo + "Amplispark" brand (click → /)
 │   ├── StaticLinks (Home | My Brands or Get Started — dynamic based on auth)
 │   ├── ExportLink (shown when activeBrandId is detected from URL)
 │   └── AccountDropdown (signed in: profile photo + name + sign out | not signed in: "Sign in" button)
@@ -2366,7 +2366,7 @@ The NUX consists of two complementary systems: the **Onboarding Wizard** (brand 
 
 ## 10.1 Deployment Architecture
 
-Amplifi deploys as a single Docker container on Google Cloud Run. The multi-stage Dockerfile builds the React frontend (TypeScript + Vite 7) inside the image, then serves the compiled static assets alongside the FastAPI backend. This same-origin strategy eliminates CORS complexity in production — all requests hit a single Cloud Run URL.
+Amplispark deploys as a single Docker container on Google Cloud Run. The multi-stage Dockerfile builds the React frontend (TypeScript + Vite 7) inside the image, then serves the compiled static assets alongside the FastAPI backend. This same-origin strategy eliminates CORS complexity in production — all requests hit a single Cloud Run URL.
 
 **Production topology:**
 
@@ -3540,7 +3540,7 @@ brands/{brandId}/
 
 **Effort:** 1–2 weeks | **Type:** New agent + async processing pipeline + FFmpeg integration
 
-User uploads raw video (up to 5 min, .mp4/.mov). Amplifi produces 2–3 platform-ready short-form clips with auto-generated captions.
+User uploads raw video (up to 5 min, .mp4/.mov). Amplispark produces 2–3 platform-ready short-form clips with auto-generated captions.
 
 **New endpoint — Upload raw video:**
 ```python
@@ -3837,7 +3837,7 @@ VITE_FIREBASE_APP_ID=
 
 For engineers working on both projects, here is a comparison of the key architectural differences:
 
-| Dimension | Fireside — Betrayal | Amplifi |
+| Dimension | Fireside — Betrayal | Amplispark |
 |---|---|---|
 | **Primary API** | Gemini Live API (WebSocket, bidirectional) | Gemini generateContent (REST, unidirectional) |
 | **Transport** | WebSocket (persistent, multiplayer) | REST + SSE (stateless, single user) |
@@ -4002,7 +4002,7 @@ Interleaved output (TEXT + IMAGE) requests are computationally expensive and may
 
 **Hackathon:** Generate → download. No scheduling, no publishing, no calendar sync.
 
-**Why this is debt:** Amplifi generates a 7-day calendar but can't schedule posts. Users manually copy captions and upload images to each platform — defeating the "AI creative director" promise.
+**Why this is debt:** Amplispark generates a 7-day calendar but can't schedule posts. Users manually copy captions and upload images to each platform — defeating the "AI creative director" promise.
 
 **Migration:**
 - Social media API integrations: Instagram Graph API, X API v2, LinkedIn Marketing API, TikTok API

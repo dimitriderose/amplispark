@@ -106,7 +106,7 @@ export default function IntegrationConnect({ brandId, notion, onUpdate }: Props)
           Publish & Export
         </h3>
         <p style={{ fontSize: 12, color: A.textSoft, margin: 0, lineHeight: 1.5 }}>
-          Connect integrations to publish content directly from Amplifi.
+          Connect integrations to publish content directly from Amplispark.
         </p>
       </div>
 

@@ -150,7 +150,7 @@ export default function VideoRepurpose({ brandId }: Props) {
           Video Repurposing
         </h3>
         <p style={{ fontSize: 12, color: A.textSoft, margin: 0, lineHeight: 1.5 }}>
-          Upload a raw video (mp4 / mov, up to 500 MB) and Amplifi will extract 2–3 platform-ready short clips.
+          Upload a raw video (mp4 / mov, up to 500 MB) and Amplispark will extract 2–3 platform-ready short clips.
         </p>
       </div>
 

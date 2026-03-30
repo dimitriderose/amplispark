@@ -1,8 +1,8 @@
-# Amplifi — Playtest Personas
+# Amplispark — Playtest Personas
 
 ## Overview
 
-Two small business personas reviewed the Amplifi codebase and UI across 5 rounds, followed by a specialist review from a professional Social Media Content Specialist. The panel evaluated UX fixes incrementally as they were merged to `main`, reviewed live AI-generated output in Round 3, watched a full live website recording in Round 4, then navigated the full live website hands-on in Round 5 — covering Notion OAuth integration, Export & Share dropdown, Video Repurposing tab, Edit Brand page, and dedicated Export page. The specialist review (Priya) assessed Amplifi from a professional content operations perspective.
+Two small business personas reviewed the Amplispark codebase and UI across 5 rounds, followed by a specialist review from a professional Social Media Content Specialist. The panel evaluated UX fixes incrementally as they were merged to `main`, reviewed live AI-generated output in Round 3, watched a full live website recording in Round 4, then navigated the full live website hands-on in Round 5 — covering Notion OAuth integration, Export & Share dropdown, Video Repurposing tab, Edit Brand page, and dedicated Export page. The specialist review (Priya) assessed Amplispark from a professional content operations perspective.
 
 | Round | Composite | Delta | HEAD Commit |
 |-------|-----------|-------|-------------|
@@ -61,7 +61,7 @@ Two small business personas reviewed the Amplifi codebase and UI across 5 rounds
 | Key Constraint | Scalability. She doesn't need help writing *one* caption. She needs a system that maintains brand consistency across 25+ posts/week while she manages a team, reports to a CMO, and executes campaigns with measurable KPIs. |
 | Evaluator Bias | Skeptical of AI content tools. Has tried Jasper, Copy.ai, Lately, and Hootsuite's AI features. All produced generic output that required more editing than writing from scratch. "If I have to rewrite every caption, the AI isn't saving me time — it's wasting it." |
 
-**Why Priya matters:** Maria and Jason are end users — small business owners doing their own social media. Priya is the professional who does this for a living. She manages content at scale, reports on performance metrics, and has tried every AI content tool on the market. Her assessment reveals whether Amplifi is a toy for solopreneurs or a tool that can serve working content professionals.
+**Why Priya matters:** Maria and Jason are end users — small business owners doing their own social media. Priya is the professional who does this for a living. She manages content at scale, reports on performance metrics, and has tried every AI content tool on the market. Her assessment reveals whether Amplispark is a toy for solopreneurs or a tool that can serve working content professionals.
 
 ---
 
@@ -214,7 +214,7 @@ Two small business personas reviewed the Amplifi codebase and UI across 5 rounds
 
 ## Round 3 — Live Output Review (AI-Generated Content)
 
-**Context:** Both personas watched a screen recording of Amplifi generating real content for a CPA firm (Derose & Associates). This is the first time either persona has seen actual AI-generated output — captions, images, video, and brand review — not just the UI shell.
+**Context:** Both personas watched a screen recording of Amplispark generating real content for a CPA firm (Derose & Associates). This is the first time either persona has seen actual AI-generated output — captions, images, video, and brand review — not just the UI shell.
 
 **What the recording shows:**
 1. Instagram post: "Essential Tax Season Checklist for Businesses" — full caption mentioning Derose & Associates, NYC and Long Island, tax deadlines
@@ -270,7 +270,7 @@ Two small business personas reviewed the Amplifi codebase and UI across 5 rounds
 
 ## Round 4 — Live Website Recording Review
 
-**Context:** Both personas watched a 2:55 screen recording of the live Amplifi website running end-to-end in a browser. This is the first time they've seen the complete app flow — landing page, dashboard with live data, content generation, Voice Coach live conversation, Veo 3.1 video, and AI Brand Review — as a continuous real-time experience.
+**Context:** Both personas watched a 2:55 screen recording of the live Amplispark website running end-to-end in a browser. This is the first time they've seen the complete app flow — landing page, dashboard with live data, content generation, Voice Coach live conversation, Veo 3.1 video, and AI Brand Review — as a continuous real-time experience.
 
 **What the recording shows (timestamp map):**
 
@@ -332,7 +332,7 @@ Two small business personas reviewed the Amplifi codebase and UI across 5 rounds
 
 ## Round 5 — Live Website Demo Review (10 Screens)
 
-**Context:** Both personas navigated the full live Amplifi website running on localhost — every screen, every interaction, every feature. This is the first time they've explored the complete app hands-on rather than watching a recording. New since Round 4: Notion OAuth integration (live and connected), Export & Share dropdown with 4 export paths, Video Repurposing tab, full Edit Brand page with Content Strategy section, and dedicated Export page.
+**Context:** Both personas navigated the full live Amplispark website running on localhost — every screen, every interaction, every feature. This is the first time they've explored the complete app hands-on rather than watching a recording. New since Round 4: Notion OAuth integration (live and connected), Export & Share dropdown with 4 export paths, Video Repurposing tab, full Edit Brand page with Content Strategy section, and dedicated Export page.
 
 **What the demo covers (10 screens):**
 
@@ -362,11 +362,11 @@ Two small business personas reviewed the Amplifi codebase and UI across 5 rounds
 | Export | 9.5 | **10** | +0.5 | "The Export & Share dropdown is everything. Four paths: ZIP with media for when I want to save everything offline, .ics Calendar for Google/Apple/Outlook, Export to Notion for my planning system, and Email calendar to send the schedule to my business partner. I don't have to choose one workflow — I can use all of them depending on the situation." |
 | Video | 9 | **9.5** | +0.5 | "Video Repurposing as its own tab — upload a raw video and get 2-3 platform-ready clips. That's different from the Veo 3 generation on individual posts. This is for repurposing my existing content. Upload my farm delivery video, get an Instagram Reel and a TikTok out of it. Sunday night just got even more efficient." |
 | Voice Coach | 9 | 9 | — | |
-| Connections | — | **10** | NEW | "This is the screen that changes the product. Left side: connect my real LinkedIn, Instagram, X accounts so Amplifi can match my writing style. Right side: Notion already connected to 'Dimitri DeRose's Notion' with a selected database and a 'change' option. The 'try demo' links next to each social account lower the barrier — I can see what voice analysis looks like before connecting my real accounts." |
+| Connections | — | **10** | NEW | "This is the screen that changes the product. Left side: connect my real LinkedIn, Instagram, X accounts so Amplispark can match my writing style. Right side: Notion already connected to 'Dimitri DeRose's Notion' with a selected database and a 'change' option. The 'try demo' links next to each social account lower the barrier — I can see what voice analysis looks like before connecting my real accounts." |
 | Edit Brand | — | **9.5** | NEW | "Eight content themes the AI generated — tax planning, IRS resolution, year-round bookkeeping, financial consulting for entrepreneurs, payroll, local success stories, tax law updates, financial audits. Plus three competitors identified: KPMG local branch, H&R Block, Local CPA Firms NYC. All removable with X buttons, all editable with Add fields. And the Re-Analyze Brand button means if I change my description, the AI rebuilds everything. This isn't a static profile — it's a living brand analysis." |
 | **Overall** | **9.5** | **9.75** | **+0.25** | |
 
-**Maria's key quote:** "The Connections tab is the feature I've been waiting for without knowing it. Connecting my Instagram so Amplifi learns how I actually write — not how a generic restaurant writes, but how *Verde Kitchen* writes — that closes the last gap between AI-generated and Maria-generated content. And the fact that Notion is already connected with one click, not buried behind API keys or developer docs, means Jason's workflow is now my workflow too. Generate, review, export to Notion, done."
+**Maria's key quote:** "The Connections tab is the feature I've been waiting for without knowing it. Connecting my Instagram so Amplispark learns how I actually write — not how a generic restaurant writes, but how *Verde Kitchen* writes — that closes the last gap between AI-generated and Maria-generated content. And the fact that Notion is already connected with one click, not buried behind API keys or developer docs, means Jason's workflow is now my workflow too. Generate, review, export to Notion, done."
 
 **Maria's remaining flag:** "No Buffer integration yet, but honestly? With Notion connected and Copy All still there, I have two solid export paths. Buffer can wait."
 
@@ -378,17 +378,17 @@ Two small business personas reviewed the Amplifi codebase and UI across 5 rounds
 | Onboard | 8.5 | **9** | +0.5 | "The onboarding form is minimal — describe your business, optionally upload brand assets, optionally paste a website. Three inputs. That's the right level of friction for a tool that promises content in under 2 minutes. The 'Build My Brand Profile →' CTA is the only button. No distractions." |
 | Dashboard | 10 | 10 | — | |
 | Generate | 10 | 10 | — | |
-| Review | 10 | 10 | — | "Still a 10. The Suggested Improvements on the Day 1 post — 'the transition in Slide 3 from the specific rule to proactive year-round planning could be more explicitly tied to identifying opportunities like the De Minimis election' — that's not generic AI feedback. That's a content strategist who read the caption and understands the logical flow of the argument. This is what differentiates Amplifi from every 'AI caption generator' on the market." |
-| Export | 9 | **10** | +1.0 | "Four export paths in one dropdown. This is the feature that turns Amplifi from a content generator into a content operations platform. ZIP with media for archival. .ics Calendar for scheduling visibility across Google/Outlook. Export to Notion for my editing workflow. Email calendar for team coordination. The per-post Copy/Export/Approve buttons on every card in the Posts Library mean I can also handle individual posts without going to the detail view. Batch and granular — both supported." |
+| Review | 10 | 10 | — | "Still a 10. The Suggested Improvements on the Day 1 post — 'the transition in Slide 3 from the specific rule to proactive year-round planning could be more explicitly tied to identifying opportunities like the De Minimis election' — that's not generic AI feedback. That's a content strategist who read the caption and understands the logical flow of the argument. This is what differentiates Amplispark from every 'AI caption generator' on the market." |
+| Export | 9 | **10** | +1.0 | "Four export paths in one dropdown. This is the feature that turns Amplispark from a content generator into a content operations platform. ZIP with media for archival. .ics Calendar for scheduling visibility across Google/Outlook. Export to Notion for my editing workflow. Email calendar for team coordination. The per-post Copy/Export/Approve buttons on every card in the Posts Library mean I can also handle individual posts without going to the detail view. Batch and granular — both supported." |
 | Video | 9 | 9 | — | |
 | Voice Coach | 9.5 | 9.5 | — | |
-| Connections | — | **10** | NEW | "This is the architecture I've been evaluating since Round 1. Social Voice Analysis: connect LinkedIn, and Amplifi learns my actual writing patterns — no emoji, long-form, authoritative. That's the Brand Analyst agent ingesting real data instead of relying solely on my description. The 'try demo' links prove the team already built per-platform demo data (the Round 2 fix). And on the right: Notion ✓ Connected to my actual workspace with a selected database and a 'change' option. My workflow is now: generate → review → one click Export to Notion → edit in Notion → schedule in Buffer when that API launches. The clipboard step is eliminated." |
+| Connections | — | **10** | NEW | "This is the architecture I've been evaluating since Round 1. Social Voice Analysis: connect LinkedIn, and Amplispark learns my actual writing patterns — no emoji, long-form, authoritative. That's the Brand Analyst agent ingesting real data instead of relying solely on my description. The 'try demo' links prove the team already built per-platform demo data (the Round 2 fix). And on the right: Notion ✓ Connected to my actual workspace with a selected database and a 'change' option. My workflow is now: generate → review → one click Export to Notion → edit in Notion → schedule in Buffer when that API launches. The clipboard step is eliminated." |
 | Edit Brand | — | **10** | NEW | "The Content Strategy section is what an enterprise content tool charges $500/month for. Eight AI-generated content themes specific to a CPA firm — not generic 'share tips and tricks' but 'Navigating IRS resolution and tax relief' and 'Local NYC/Long Island business financial success stories.' Three competitors auto-identified: KPMG local branch, H&R Block business services, Local CPA Firms NYC. All editable. The Image Style Directive and Caption Style Directive give me control over the AI's creative direction without needing to understand prompt engineering. And the Re-Analyze Brand button means I can iterate — change my description, hit re-analyze, and the entire strategy rebuilds. This is brand intelligence, not a form." |
 | **Overall** | **9.75** | **9.875** | **+0.125** | |
 
 **Jason's key quote:** "Three things moved the needle in this walkthrough. First, the Connections tab proves the Notion integration is real — not a mockup, not a spec, it's connected to my actual workspace with my actual database selected. Second, the Export & Share dropdown gives me four export paths where Round 1 had one (ZIP). Third, the Edit Brand page with Content Strategy, image/caption directives, and Re-Analyze Brand turns the brand profile from a static form into an iterative intelligence layer. This is now a content operations platform that happens to use AI, not an AI tool that happens to generate content."
 
-**Jason's remaining flag:** "Buffer integration is the last piece. When their new API launches, Amplifi should be first in line. The architecture is ready — Connections tab already has the Publish & Export section. Adding a Buffer card next to Notion is a one-sprint feature. Until then, the Notion → Buffer manual workflow is acceptable."
+**Jason's remaining flag:** "Buffer integration is the last piece. When their new API launches, Amplispark should be first in line. The architecture is ready — Connections tab already has the Publish & Export section. Adding a Buffer card next to Notion is a one-sprint feature. Until then, the Notion → Buffer manual workflow is acceptable."
 
 ### New Features Assessed (Round 5)
 
@@ -432,7 +432,7 @@ Priya's original claim: "Social connections are vaporware." Reality: This is a h
 
 **Correction 3: Buffer Scheduling Metadata Is Architecturally Ready**
 
-Priya's original claim: "Content without timing is just drafts." Reality: Amplifi already has everything for Buffer integration except `suggested_publish_time`. The Strategy Agent adding platform-optimal publish times is a small feature addition, not an architecture change. Score impact: No change — the gap is real, but small.
+Priya's original claim: "Content without timing is just drafts." Reality: Amplispark already has everything for Buffer integration except `suggested_publish_time`. The Strategy Agent adding platform-optimal publish times is a small feature addition, not an architecture change. Score impact: No change — the gap is real, but small.
 
 ### Priya's Updated Screen-by-Screen Assessment — 7.875/10 (was 7.75)
 
@@ -455,19 +455,19 @@ Priya's original claim: "Content without timing is just drafts." Reality: Amplif
 
 **1. AI Brand Review — "The actual differentiator"**
 
-"I've used Jasper, Copy.ai, Lately, and ChatGPT for content generation. None of them review their own work. They all produce output and leave the quality assessment entirely to me. Amplifi's Review Agent with engagement prediction scores and specific improvement suggestions is a fundamentally different architecture. It's not just generating content — it's quality-checking content against my brand and telling me *why* a post scores 8 instead of 10. That feedback loop is what makes AI useful at scale. Without it, AI content generation is just a more expensive way to produce first drafts I'm going to rewrite anyway."
+"I've used Jasper, Copy.ai, Lately, and ChatGPT for content generation. None of them review their own work. They all produce output and leave the quality assessment entirely to me. Amplispark's Review Agent with engagement prediction scores and specific improvement suggestions is a fundamentally different architecture. It's not just generating content — it's quality-checking content against my brand and telling me *why* a post scores 8 instead of 10. That feedback loop is what makes AI useful at scale. Without it, AI content generation is just a more expensive way to produce first drafts I'm going to rewrite anyway."
 
 **2. Edit Brand with Content Strategy — "Finally, brand intelligence"**
 
-"The Content Strategy section with AI-generated themes, competitor identification, and style directives is the closest thing I've seen to an AI that understands content strategy rather than just content creation. The Re-Analyze Brand button makes it living strategy. Every other tool I've used treats the brand profile as a static form you fill out once and forget. Amplifi treats it as an intelligence layer that evolves."
+"The Content Strategy section with AI-generated themes, competitor identification, and style directives is the closest thing I've seen to an AI that understands content strategy rather than just content creation. The Re-Analyze Brand button makes it living strategy. Every other tool I've used treats the brand profile as a static form you fill out once and forget. Amplispark treats it as an intelligence layer that evolves."
 
 **3. Notion Export — "The right integration choice"**
 
-"Every content professional I know uses Notion for editorial planning. Not Airtable, not Monday, not Asana — Notion. Shipping a native Notion OAuth integration that pushes a structured database is a better strategic decision than trying to build direct-publish to Instagram or LinkedIn, which are API nightmares with constantly changing policies. Let Notion be the staging ground, let me edit there, and I'll publish through Sprout or Buffer. Amplifi made the right integration choice."
+"Every content professional I know uses Notion for editorial planning. Not Airtable, not Monday, not Asana — Notion. Shipping a native Notion OAuth integration that pushes a structured database is a better strategic decision than trying to build direct-publish to Instagram or LinkedIn, which are API nightmares with constantly changing policies. Let Notion be the staging ground, let me edit there, and I'll publish through Sprout or Buffer. Amplispark made the right integration choice."
 
 **4. Pillar-Based Calendar — "Thinks like a strategist"**
 
-"Color-coded content pillars on the calendar — education, promotion, inspiration, behind the scenes — map to how content strategists actually plan. This isn't 'Monday: motivational quote, Tuesday: product photo.' It's a strategic distribution model. That tells me the team behind Amplifi understands content marketing, not just content creation."
+"Color-coded content pillars on the calendar — education, promotion, inspiration, behind the scenes — map to how content strategists actually plan. This isn't 'Monday: motivational quote, Tuesday: product photo.' It's a strategic distribution model. That tells me the team behind Amplispark understands content marketing, not just content creation."
 
 ### What Priya Would Kill (The Brutal Assessment — Updated)
 
@@ -500,7 +500,7 @@ Priya's original claim: "Content without timing is just drafts." Reality: Amplif
 
 ### Priya's Verdict
 
-**"Amplifi is the most architecturally intelligent AI content tool I've evaluated. The Review Agent alone makes it worth watching. Multi-brand support being already built changes the story — this isn't locked into solopreneur mode. The remaining gaps are professional workflow features, not fundamental architecture problems."**
+**"Amplispark is the most architecturally intelligent AI content tool I've evaluated. The Review Agent alone makes it worth watching. Multi-brand support being already built changes the story — this isn't locked into solopreneur mode. The remaining gaps are professional workflow features, not fundamental architecture problems."**
 
 **Updated upgrade roadmap (with corrections):**
 
@@ -579,6 +579,6 @@ Priya (Specialist — cold R5 review only):            7.875
 
 **Maria:** "Remember that AI content tool I told you about? It just got better. I connected my Notion workspace with one click — no API keys, no developer stuff. Now I generate a week of posts, click 'Export to Notion,' and my entire content calendar appears as a database I can edit. The Voice Coach is still the killer feature — I asked it about promoting our farm delivery special and it gave me a full strategy in my brand voice while I was looking at my calendar. But the new thing is the Connections tab. When I connect my real Instagram account, it'll learn how *I* actually write, not just what I described. For Sunday night batch sessions, this is now a 20-minute job instead of 2 hours. And if my business partner needs the schedule, I can email them a calendar invite directly from the app."
 
-**Jason:** "Amplifi isn't a content generator anymore — it's a content operations platform. Here's what changed: Notion OAuth integration is live. I connect my workspace, click 'Export to Notion,' and all 7 days of content land in a database with columns for platform, caption, hashtags, image URL, brand score, and approval status. I edit in Notion, schedule in Buffer when their API launches. The Edit Brand page shows me the AI's content strategy — eight specific themes like 'Navigating IRS resolution and tax relief,' three competitors it identified, image style directives, caption style directives — and I can re-analyze the whole thing if I change my positioning. The Export & Share dropdown gives me four paths: ZIP, calendar invite, Notion sync, or email. And the Connections tab is ready for LinkedIn voice analysis — when I connect, the AI learns my actual writing patterns. This is the tool I'd pay $50/month for. The only missing piece is Buffer direct-publish, and the architecture is already there waiting for their API."
+**Jason:** "Amplispark isn't a content generator anymore — it's a content operations platform. Here's what changed: Notion OAuth integration is live. I connect my workspace, click 'Export to Notion,' and all 7 days of content land in a database with columns for platform, caption, hashtags, image URL, brand score, and approval status. I edit in Notion, schedule in Buffer when their API launches. The Edit Brand page shows me the AI's content strategy — eight specific themes like 'Navigating IRS resolution and tax relief,' three competitors it identified, image style directives, caption style directives — and I can re-analyze the whole thing if I change my positioning. The Export & Share dropdown gives me four paths: ZIP, calendar invite, Notion sync, or email. And the Connections tab is ready for LinkedIn voice analysis — when I connect, the AI learns my actual writing patterns. This is the tool I'd pay $50/month for. The only missing piece is Buffer direct-publish, and the architecture is already there waiting for their API."
 
-**Priya:** "If you're a solopreneur or SMB owner, stop what you're doing and try Amplifi. The AI Brand Review alone differentiates it from every Jasper and Copy.ai clone I've tested — it doesn't just generate content, it quality-checks against your brand and tells you why a post scores 8 instead of 10. The Notion integration is the right call — export your calendar, edit in Notion, publish through whatever scheduler you use. For professionals running multi-brand operations at scale, it's not there yet — I need 30-day calendars, A/B caption variants, and a campaign layer before I'm replacing Sprout Social. But the architecture is smart, the Review Agent is best-in-class, and the Content Strategy section on the Edit Brand page is the closest thing I've seen to AI that thinks like a strategist. Get items 2-3 on their roadmap and I'm a paying customer at $99/month."
+**Priya:** "If you're a solopreneur or SMB owner, stop what you're doing and try Amplispark. The AI Brand Review alone differentiates it from every Jasper and Copy.ai clone I've tested — it doesn't just generate content, it quality-checks against your brand and tells you why a post scores 8 instead of 10. The Notion integration is the right call — export your calendar, edit in Notion, publish through whatever scheduler you use. For professionals running multi-brand operations at scale, it's not there yet — I need 30-day calendars, A/B caption variants, and a campaign layer before I'm replacing Sprout Social. But the architecture is smart, the Review Agent is best-in-class, and the Content Strategy section on the Edit Brand page is the closest thing I've seen to AI that thinks like a strategist. Get items 2-3 on their roadmap and I'm a paying customer at $99/month."

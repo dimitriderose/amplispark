@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ──────────────────────────────────────────────────────────────────────────────
-# Amplifi — One-command deploy to Cloud Run
+# Amplispark — One-command deploy to Cloud Run
 #
 # Reads config from .env (gitignored), submits a Cloud Build job that builds
 # the Docker image, pushes to Artifact Registry, and deploys to Cloud Run
@@ -54,7 +54,7 @@ done
 
 REGION="${GCP_REGION:-us-central1}"
 
-echo "Deploying Amplifi to Cloud Run..."
+echo "Deploying Amplispark to Cloud Run..."
 echo "  Project:  $GCP_PROJECT_ID"
 echo "  Region:   $REGION"
 echo ""

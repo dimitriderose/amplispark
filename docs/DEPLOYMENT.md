@@ -1,4 +1,4 @@
-# Amplifi — Deployment Guide
+# Amplispark — Deployment Guide
 
 ## Prerequisites
 
@@ -139,7 +139,7 @@ cd backend
 uvicorn server:app --host 0.0.0.0 --port 8080 --reload
 ```
 
-**Note:** Amplifi's backend is `server.py` (not `main.py`) and runs on port **8080** (not 8000).
+**Note:** Amplispark's backend is `server.py` (not `main.py`) and runs on port **8080** (not 8000).
 
 Verify: `curl http://localhost:8080/health`
 
@@ -668,7 +668,7 @@ CORS is configured via the `CORS_ORIGINS` env var. The backend uses `allow_heade
 
 ## Key Differences from Fireside
 
-| Aspect | Fireside | Amplifi |
+| Aspect | Fireside | Amplispark |
 |--------|----------|---------|
 | Backend entry | `backend/main.py` | `backend/server.py` |
 | Backend port | 8000 | 8080 |

@@ -18,7 +18,7 @@ async def fetch_website(url: str) -> dict:
     try:
         async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
             response = await client.get(url, headers={
-                "User-Agent": "Mozilla/5.0 (compatible; AmplifiBot/1.0)"
+                "User-Agent": "Mozilla/5.0 (compatible; AmplisparkBot/1.0)"
             })
             response.raise_for_status()
     except Exception as e:
