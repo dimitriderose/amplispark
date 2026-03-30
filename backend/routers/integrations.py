@@ -307,5 +307,8 @@ async def notion_callback(code: str = Query(...), state: str = Query(...)):
     # Redirect to dashboard with success param
     return Response(
         status_code=302,
-        headers={"Location": f"/dashboard/{brand_id}?notion=connected"},
+        headers={
+            "Location": f"/dashboard/{brand_id}?notion=connected",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+        },
     )

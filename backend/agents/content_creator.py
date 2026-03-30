@@ -43,6 +43,8 @@ logger = logging.getLogger(__name__)
 
 def _validate_format(caption: str, derivative_type: str) -> bool:
     """Check if the caption follows the expected derivative format. Log warnings on mismatch."""
+    if not isinstance(caption, str):
+        return False
     if derivative_type == "carousel":
         ok = "Slide 1" in caption and "Slide 2" in caption
         if not ok:

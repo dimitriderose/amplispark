@@ -14,10 +14,14 @@ router = APIRouter()
 
 
 @router.get("/brands")
-async def list_brands(owner_uid: str = Query(...)):
+async def list_brands(
+    owner_uid: str = Query(...),
+    limit: int = Query(50),
+    offset: int = Query(0),
+):
     """List all brands owned by a given anonymous UID."""
     brands = await firestore_client.list_brands_by_owner(owner_uid)
-    return {"brands": brands}
+    return {"brands": brands[offset:offset + limit]}
 
 
 @router.post("/brands")

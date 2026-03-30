@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Body
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel as _PydanticBaseModel
 
-from backend.config import GCS_BUCKET_NAME, GOOGLE_API_KEY
+from backend.config import GCS_BUCKET_NAME
 from backend.services import firestore_client
 from backend.services.storage_client import (
     get_signed_url,
@@ -23,11 +23,13 @@ from backend.services.storage_client import (
 from backend.agents.video_creator import generate_video_clip
 import backend.services.budget_tracker as bt
 
-from google import genai as _genai
-
-_live_client = _genai.Client(api_key=GOOGLE_API_KEY)
+from backend.clients import get_genai_client
 
 logger = logging.getLogger(__name__)
+
+MAX_EDITS_PER_IMAGE = 8
+MAX_EDIT_HISTORY = 10
+MAX_VIDEO_UPLOAD_BYTES = 100 * 1024 * 1024  # 100MB
 
 router = APIRouter()
 
@@ -70,8 +72,8 @@ async def edit_post_media(brand_id: str, post_id: str, body: EditMediaBody):
 
     # Enforce 8-edit cap per image
     edit_count = post.get("edit_count", 0)
-    if edit_count >= 8:
-        raise HTTPException(status_code=422, detail="Edit limit reached (8 per image). Reset to start fresh.")
+    if edit_count >= MAX_EDITS_PER_IMAGE:
+        raise HTTPException(status_code=422, detail=f"Edit limit reached ({MAX_EDITS_PER_IMAGE} per image). Reset to start fresh.")
 
     # Determine which GCS URI to edit
     gcs_uri: str | None = None
@@ -116,7 +118,7 @@ async def edit_post_media(brand_id: str, post_id: str, body: EditMediaBody):
         except Exception as e:
             import traceback
             logger.error("edit_post_media video regen failed for post %s: %s\n%s", post_id, e, traceback.format_exc())
-            raise HTTPException(status_code=500, detail=f"Video re-generation failed: {e}")
+            raise HTTPException(status_code=500, detail="Internal server error")
 
         new_edit_count = edit_count + 1
         new_edit_history = post.get("edit_history", []) + [body.edit_prompt]
@@ -128,7 +130,7 @@ async def edit_post_media(brand_id: str, post_id: str, body: EditMediaBody):
             },
             "video_url": result["video_url"],
             "edit_count": new_edit_count,
-            "edit_history": new_edit_history[-10:],
+            "edit_history": new_edit_history[-MAX_EDIT_HISTORY:],
         })
         return {"image_url": result["video_url"], "edit_count": new_edit_count}
 
@@ -159,21 +161,21 @@ async def edit_post_media(brand_id: str, post_id: str, body: EditMediaBody):
             brand_profile=brand,
             edit_history=edit_history,
             gcs_bucket=gcs_bucket,
-            gemini_client=_live_client,
+            gemini_client=get_genai_client(),
             aspect_ratio=_aspect,
             platform=_platform,
         )
     except Exception as e:
         import traceback
         logger.error("edit_post_media failed for post %s: %s\n%s", post_id, e, traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Image editing failed: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
     # Update Firestore
     new_edit_count = edit_count + 1
     new_edit_history = edit_history + [body.edit_prompt]
     update_data: dict = {
         "edit_count": new_edit_count,
-        "edit_history": new_edit_history[-10:],  # keep last 10
+        "edit_history": new_edit_history[-MAX_EDIT_HISTORY:],  # keep last N
     }
     if body.target == "thumbnail":
         update_data["thumbnail_gcs_uri"] = new_gcs_uri
@@ -303,7 +305,7 @@ async def start_video_generation(
             hero_image_bytes = await download_gcs_uri(image_gcs_uri)
         except Exception as e:
             logger.error("Failed to download hero image for post %s: %s", post_id, e)
-            raise HTTPException(status_code=500, detail=f"Failed to fetch hero image: {e}")
+            raise HTTPException(status_code=500, detail="Internal server error")
 
     # Create job record in Firestore
     job_id = await firestore_client.create_video_job(post_id, tier)
@@ -420,7 +422,6 @@ async def upload_video_for_repurpose(
     if ext not in ("mp4", "mov"):
         raise HTTPException(status_code=400, detail="Only .mp4 and .mov files are accepted")
 
-    MAX_VIDEO_UPLOAD = 100 * 1024 * 1024  # 100MB
     chunks = []
     total = 0
     while True:
@@ -428,7 +429,7 @@ async def upload_video_for_repurpose(
         if not chunk:
             break
         total += len(chunk)
-        if total > MAX_VIDEO_UPLOAD:
+        if total > MAX_VIDEO_UPLOAD_BYTES:
             raise HTTPException(status_code=413, detail="Video exceeds 100MB limit")
         chunks.append(chunk)
     video_bytes = b"".join(chunks)

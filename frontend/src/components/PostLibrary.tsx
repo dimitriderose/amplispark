@@ -93,7 +93,7 @@ export default function PostLibrary({ brandId, planId, defaultFilter = 'all', no
   }
 
   const handleBulkExport = async () => {
-    if (!planId) return
+    if (!planId || exporting) return
     setMenuOpen(false)
     setExporting(true)
     setExportError(null)
@@ -107,7 +107,7 @@ export default function PostLibrary({ brandId, planId, defaultFilter = 'all', no
   }
 
   const handleDownloadCalendar = async () => {
-    if (!planId) return
+    if (!planId || calDownloading) return
     setMenuOpen(false)
     setCalDownloading(true)
     setExportError(null)
@@ -139,7 +139,7 @@ export default function PostLibrary({ brandId, planId, defaultFilter = 'all', no
   }
 
   const handleExportNotion = async () => {
-    if (!planId) return
+    if (!planId || notionExporting) return
     setMenuOpen(false)
     setNotionExporting(true)
     setExportError(null)

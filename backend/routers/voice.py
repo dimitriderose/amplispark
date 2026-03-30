@@ -3,15 +3,13 @@ import logging
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
-from backend.config import GOOGLE_API_KEY
+from backend.clients import get_genai_client
 from backend.middleware import verify_ws_brand_owner
 from backend.services import firestore_client
 from backend.agents.voice_coach import build_coaching_prompt
 
-from google import genai as _genai
 from google.genai import types as _gtypes
 
-_live_client = _genai.Client(api_key=GOOGLE_API_KEY)
 _LIVE_MODEL = "gemini-2.5-flash-native-audio-latest"
 
 logger = logging.getLogger(__name__)
@@ -96,7 +94,7 @@ async def voice_coaching_ws(
     )
 
     try:
-        async with _live_client.aio.live.connect(model=_LIVE_MODEL, config=config) as session:
+        async with get_genai_client().aio.live.connect(model=_LIVE_MODEL, config=config) as session:
             await websocket.send_json({"type": "connected"})
 
             async def recv_from_frontend():
@@ -116,8 +114,8 @@ async def voice_coaching_ws(
                                     ]
                                 )
                             )
-                except (WebSocketDisconnect, RuntimeError):
-                    pass  # normal client close or stale socket
+                except (WebSocketDisconnect, RuntimeError) as e:
+                    logger.debug("WebSocket cleanup: %s", type(e).__name__)
                 except Exception:
                     logger.exception("recv_from_frontend error for brand %s", brand_id)
                     raise
@@ -202,8 +200,8 @@ async def voice_coaching_ws(
                         task.cancel()
                         try:
                             await task
-                        except (asyncio.CancelledError, Exception):
-                            pass
+                        except (asyncio.CancelledError, Exception) as e:
+                            logger.debug("WebSocket cleanup: %s", type(e).__name__)
 
     except WebSocketDisconnect:
         pass

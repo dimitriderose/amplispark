@@ -74,6 +74,9 @@ async def _research_best_platforms(
             raw = parts[1] if len(parts) > 1 else raw
             if raw.startswith("json"):
                 raw = raw[4:]
+        if len(raw) > 500_000:
+            logger.warning("LLM output too large (%d bytes), truncating", len(raw))
+            raw = raw[:500_000]
         recommendations = json.loads(raw.strip())
 
         # Validate — only keep platforms from our available list
@@ -86,6 +89,9 @@ async def _research_best_platforms(
             pass
 
         return valid[:5]
+    except json.JSONDecodeError as jde:
+        logger.warning("Platform recommendation: invalid JSON from LLM (first 200 chars): %s — %s", raw[:200], jde)
+        return []
     except Exception as e:
         logger.warning("Platform recommendation research failed: %s", e)
         return []
@@ -145,6 +151,9 @@ async def _research_posting_frequency(
             raw = parts[1] if len(parts) > 1 else raw
             if raw.startswith("json"):
                 raw = raw[4:]
+        if len(raw) > 500_000:
+            logger.warning("LLM output too large (%d bytes), truncating", len(raw))
+            raw = raw[:500_000]
         freq = json.loads(raw.strip())
 
         # Validate — clamp to 1-7, only keep selected platforms
@@ -168,6 +177,9 @@ async def _research_posting_frequency(
         logger.info("Posting frequency researched for %s/%s: %s", industry, business_type,
                      {p: v["posts_per_week"] for p, v in result.items()})
         return result
+    except json.JSONDecodeError as jde:
+        logger.warning("Posting frequency: invalid JSON from LLM (first 200 chars): %s — %s", raw[:200], jde)
+        return {p: {"posts_per_week": 7, "best_times": []} for p in platforms}
     except Exception as e:
         logger.warning("Posting frequency research failed: %s", e)
         # Fallback: all platforms daily
@@ -220,6 +232,9 @@ async def _research_platform_trends(platform: str, industry: str) -> dict | None
             raw = parts[1] if len(parts) > 1 else raw
             if raw.startswith("json"):
                 raw = raw[4:]
+        if len(raw) > 500_000:
+            logger.warning("LLM output too large (%d bytes), truncating", len(raw))
+            raw = raw[:500_000]
         trends = json.loads(raw.strip())
 
         # Save to cache (best-effort)
@@ -229,6 +244,9 @@ async def _research_platform_trends(platform: str, industry: str) -> dict | None
             logger.warning("Trend cache write error: %s", ce)
 
         return trends
+    except json.JSONDecodeError as jde:
+        logger.warning("Platform trend research: invalid JSON from LLM (first 200 chars): %s — %s", raw[:200], jde)
+        return None
     except Exception as e:
         logger.warning("Platform trend research failed (%s/%s): %s", platform, industry, e)
         return None
@@ -319,6 +337,9 @@ async def _research_visual_trends(platform: str, industry: str) -> dict | None:
             raw = parts[1] if len(parts) > 1 else raw
             if raw.startswith("json"):
                 raw = raw[4:]
+        if len(raw) > 500_000:
+            logger.warning("LLM output too large (%d bytes), truncating", len(raw))
+            raw = raw[:500_000]
         result = json.loads(raw.strip())
 
         # Save to cache (best-effort)
@@ -328,6 +349,9 @@ async def _research_visual_trends(platform: str, industry: str) -> dict | None:
             logger.warning("Visual trend cache write error: %s", ce)
 
         return result
+    except json.JSONDecodeError as jde:
+        logger.warning("Visual trend research: invalid JSON from LLM (first 200 chars): %s — %s", raw[:200], jde)
+        return None
     except Exception as e:
         logger.warning("Visual trend research failed (%s/%s): %s", platform, industry, e)
         return None
@@ -377,6 +401,9 @@ async def _research_video_trends(platform: str, industry: str) -> dict | None:
             raw = parts[1] if len(parts) > 1 else raw
             if raw.startswith("json"):
                 raw = raw[4:]
+        if len(raw) > 500_000:
+            logger.warning("LLM output too large (%d bytes), truncating", len(raw))
+            raw = raw[:500_000]
         result = json.loads(raw.strip())
 
         # Save to cache (best-effort)
@@ -386,6 +413,9 @@ async def _research_video_trends(platform: str, industry: str) -> dict | None:
             logger.warning("Video trend cache write error: %s", ce)
 
         return result
+    except json.JSONDecodeError as jde:
+        logger.warning("Video trend research: invalid JSON from LLM (first 200 chars): %s — %s", raw[:200], jde)
+        return None
     except Exception as e:
         logger.warning("Video trend research failed (%s/%s): %s", platform, industry, e)
         return None
@@ -874,6 +904,9 @@ Return ONLY a valid JSON array of {total_briefs} objects. No markdown, no extra 
                 raw = raw[4:]
         raw = raw.strip()
 
+        if len(raw) > 500_000:
+            logger.warning("LLM output too large (%d bytes), truncating", len(raw))
+            raw = raw[:500_000]
         days = json.loads(raw)
         if not isinstance(days, list):
             raise ValueError(f"Expected JSON array, got {type(days)}")
@@ -902,6 +935,9 @@ Return ONLY a valid JSON array of {total_briefs} objects. No markdown, no extra 
         }
         return validated, trend_summary
 
+    except json.JSONDecodeError as jde:
+        logger.warning("Strategy agent: invalid JSON from LLM (first 200 chars): %s — %s", raw[:200], jde)
+        return _fallback_plan(num_days, brand_profile, platforms), {}
     except Exception as e:
         logger.error(f"Strategy agent failed for brand {brand_id}: {e}")
         return _fallback_plan(num_days, brand_profile, platforms), {}

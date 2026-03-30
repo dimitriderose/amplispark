@@ -260,6 +260,17 @@ function DayCard({ day, dayName, brandId, planId, arrayIndex, seriesColor, post,
   const [showStyleMenu, setShowStyleMenu] = useState(false)
   const [selectedStyle, setSelectedStyle] = useState(defaultImageStyle || '')
   const styleMenuRef = useRef<HTMLDivElement>(null)
+  // H8: Double-click protection on generate button
+  const [generateClicked, setGenerateClicked] = useState(false)
+  // Reset double-click guard when post status changes (generation completes or fails)
+  useEffect(() => {
+    if (post && post.status !== 'generating') {
+      setGenerateClicked(false)
+    }
+    if (!post) {
+      setGenerateClicked(false)
+    }
+  }, [post, post?.status])
   useEffect(() => { setSelectedStyle(defaultImageStyle || '') }, [defaultImageStyle])
   // Close style menu on click outside
   useEffect(() => {
@@ -504,21 +515,26 @@ function DayCard({ day, dayName, brandId, planId, arrayIndex, seriesColor, post,
             {/* Generate button — always one-click */}
             <button
               {...(isFirstUngenerated ? { 'data-tour-id': 'generate-button' } : {})}
-              onClick={() => onGenerate(selectedStyle || undefined)}
+              disabled={generateClicked}
+              onClick={() => {
+                if (generateClicked) return
+                setGenerateClicked(true)
+                onGenerate(selectedStyle || undefined)
+              }}
               style={{
                 width: '100%',
                 padding: '7px 0',
                 borderRadius: 6,
                 border: 'none',
-                background: `linear-gradient(135deg, ${A.indigo}, ${A.violet})`,
-                color: 'white',
+                background: generateClicked ? A.surfaceAlt : `linear-gradient(135deg, ${A.indigo}, ${A.violet})`,
+                color: generateClicked ? A.textMuted : 'white',
                 fontSize: 12,
                 fontWeight: 600,
-                cursor: 'pointer',
+                cursor: generateClicked ? 'not-allowed' : 'pointer',
                 marginBottom: 6,
               }}
             >
-              {day.custom_photo_url ? 'Generate with photo' : 'Generate'}
+              {generateClicked ? 'Generating...' : day.custom_photo_url ? 'Generate with photo' : 'Generate'}
             </button>
 
             {/* Visual Style button — opens dropdown */}

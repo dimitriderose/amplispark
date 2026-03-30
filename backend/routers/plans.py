@@ -98,12 +98,26 @@ async def refresh_plan_research(brand_id: str, plan_id: str):
     return {"trend_summary": trend_summary}
 
 
+class UpdatePlanDayBody(_PydanticBaseModel):
+    content_theme: str | None = None
+    platform: str | None = None
+    pillar: str | None = None
+    format: str | None = None
+    cta_type: str | None = None
+    posting_time: str | None = None
+    derivative_type: str | None = None
+    custom_photo_url: str | None = None
+    custom_photo_gcs_uri: str | None = None
+    custom_photo_mime: str | None = None
+    briefs: list[dict] | None = None
+
+
 @router.put("/brands/{brand_id}/plans/{plan_id}/days/{day_index}")
 async def update_plan_day(
     brand_id: str,
     plan_id: str,
     day_index: int,
-    data: dict = Body(...),
+    data: UpdatePlanDayBody = Body(...),
 ):
     """Update a specific day in a content plan."""
     plan = await firestore_client.get_plan(plan_id, brand_id)
@@ -118,7 +132,7 @@ async def update_plan_day(
         )
 
     # Remove protected fields from user-supplied data
-    safe_data = {k: v for k, v in data.items() if k not in ("day_index", "brand_id", "plan_id")}
+    safe_data = {k: v for k, v in data.model_dump(exclude_none=True).items() if k not in ("day_index", "brand_id", "plan_id")}
 
     try:
         await firestore_client.update_plan_day(brand_id, plan_id, day_index, safe_data)

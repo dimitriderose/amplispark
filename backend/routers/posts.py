@@ -79,6 +79,8 @@ class PatchPostBody(_PydanticBaseModel):
 async def list_posts_endpoint(
     brand_id: str = Query(...),
     plan_id: str | None = Query(None),
+    limit: int = Query(50),
+    offset: int = Query(0),
 ):
     """List all posts for a brand, optionally filtered by plan."""
     posts = await firestore_client.list_posts(brand_id, plan_id)
@@ -103,6 +105,7 @@ async def list_posts_endpoint(
             for pid in stale_ids
         ])
 
+    posts = posts[offset:offset + limit]
     await asyncio.gather(*[_refresh_signed_urls(p) for p in posts])
     return {"posts": posts}
 
@@ -564,7 +567,7 @@ async def download_calendar_ics(brand_id: str, plan_id: str):
     )
 
 
-_EMAIL_RE = re.compile(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$")
+_EMAIL_RE = re.compile(r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$')
 
 
 @router.post("/brands/{brand_id}/plans/{plan_id}/calendar/email")
@@ -596,6 +599,6 @@ async def email_calendar(
         await send_calendar_email(email, brand_name, ics_content)
     except Exception as e:
         logger.error("Failed to send calendar email to %s: %s", email, e)
-        raise HTTPException(status_code=500, detail=f"Failed to send email: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
     return {"status": "sent", "to": email}

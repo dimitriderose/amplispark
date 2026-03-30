@@ -34,7 +34,15 @@ async function handleResponse<T>(res: Response): Promise<T> {
   if (res.status === 204 || res.headers.get('content-length') === '0') {
     return undefined as T
   }
-  return res.json()
+  const data = await res.json()
+  // Runtime validation: ensure response is not null/undefined when an object is expected
+  if (data === null || data === undefined) {
+    throw new Error(`Unexpected empty response body from ${res.url || 'API'}`)
+  }
+  if (typeof data !== 'object' && typeof data !== 'boolean' && typeof data !== 'number' && typeof data !== 'string') {
+    throw new Error(`Unexpected response type "${typeof data}" from ${res.url || 'API'}`)
+  }
+  return data as T
 }
 
 async function handleBlobResponse(res: Response): Promise<Blob> {

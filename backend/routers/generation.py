@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import time
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -13,6 +14,9 @@ from backend.services import firestore_client
 from backend.services.storage_client import download_gcs_uri
 
 logger = logging.getLogger(__name__)
+
+# In-memory cache for brand profiles during generation (30s TTL)
+_brand_cache: dict[str, tuple[dict, float]] = {}
 
 router = APIRouter()
 
@@ -39,7 +43,12 @@ async def stream_generate(
 
     day_brief = days[day_index]
 
-    brand = await firestore_client.get_brand(brand_id)
+    if brand_id in _brand_cache and time.time() - _brand_cache[brand_id][1] < 30:
+        brand = _brand_cache[brand_id][0]
+    else:
+        brand = await firestore_client.get_brand(brand_id)
+        if brand:
+            _brand_cache[brand_id] = (brand, time.time())
     if not brand:
         raise HTTPException(status_code=404, detail="Brand not found")
 

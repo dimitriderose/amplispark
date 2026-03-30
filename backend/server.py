@@ -48,10 +48,10 @@ app.include_router(voice.router, prefix="/api")
 # ── Static frontend (production) ──────────────────────────────
 frontend_dist = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
 if os.path.exists(frontend_dist):
+    from pathlib import Path
     from starlette.responses import FileResponse as _FileResponse
 
     _index_html = os.path.join(frontend_dist, "index.html")
-    _resolved_dist = os.path.realpath(frontend_dist)
 
     # Static assets first (proper caching headers + content-type detection)
     app.mount("/assets", StaticFiles(directory=os.path.join(frontend_dist, "assets")), name="assets")
@@ -60,8 +60,11 @@ if os.path.exists(frontend_dist):
     @app.get("/{full_path:path}")
     async def _spa_fallback(full_path: str):
         file_path = os.path.join(frontend_dist, full_path)
-        resolved = os.path.realpath(file_path)
         # Prevent path traversal — only serve files within frontend_dist
-        if (resolved.startswith(_resolved_dist + os.sep) or resolved == _resolved_dist) and os.path.isfile(resolved):
-            return _FileResponse(resolved)
+        try:
+            Path(file_path).resolve().relative_to(Path(frontend_dist).resolve())
+            if os.path.isfile(file_path):
+                return _FileResponse(file_path)
+        except ValueError:
+            pass
         return _FileResponse(_index_html)
