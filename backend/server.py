@@ -4,13 +4,22 @@ import os
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from pythonjsonlogger.json import JsonFormatter
+from starlette.responses import JSONResponse
 
 from backend.config import CORS_ORIGINS
 from backend.middleware import verify_brand_owner  # noqa: F401 — exported for route-level Depends()
+from backend.middleware_logging import RequestContextMiddleware
 
 from backend.routers import brands, plans, posts, generation, media, integrations, voice
 
-logging.basicConfig(level=logging.INFO)
+_handler = logging.StreamHandler()
+_handler.setFormatter(JsonFormatter(
+    fmt="%(asctime)s %(levelname)s %(name)s %(message)s",
+    rename_fields={"asctime": "timestamp", "levelname": "severity"},
+))
+logging.root.handlers = [_handler]
+logging.root.setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
@@ -19,6 +28,7 @@ app = FastAPI(
     version="1.0.0",
 )
 
+app.add_middleware(RequestContextMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
@@ -26,6 +36,17 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Accept", "X-Requested-With", "X-User-UID"],
 )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    logger.error("unhandled_exception", extra={
+        "path": request.url.path,
+        "method": request.method,
+        "error": str(exc),
+        "type": type(exc).__name__,
+    })
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 # ── Health ────────────────────────────────────────────────────
 

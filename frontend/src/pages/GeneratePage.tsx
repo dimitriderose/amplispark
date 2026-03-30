@@ -39,7 +39,7 @@ export default function GeneratePage() {
         const idx = parseInt(dayIndex, 10)
         if (days[idx]) setDayBrief(days[idx])
       })
-      .catch(() => {})
+      .catch((e) => { console.error('Failed to load plan data:', e) })
   }, [planId, dayIndex, brandId])
 
   // Fetch brand to get image quality risk recommendation
@@ -55,7 +55,7 @@ export default function GeneratePage() {
           )
         }
       })
-      .catch(() => {})
+      .catch((e) => { console.error('Failed to load brand data:', e) })
   }, [brandId])
 
   // View mode: load existing post; Generate mode: start SSE generation
@@ -78,7 +78,7 @@ export default function GeneratePage() {
             videoUrl: post.video?.url || null,
           })
         })
-        .catch(() => {})
+        .catch((e) => { console.error('Failed to load post data:', e) })
     } else if (planId && dayIndex !== undefined && brandId) {
       // Guard against double-fire in React strict mode
       if (generatedRef.current) return

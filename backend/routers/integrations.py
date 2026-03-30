@@ -255,6 +255,12 @@ async def export_plan_to_notion(brand_id: str, plan_id: str):
             results.append({"post_id": post_id, "status": "failed", "error": str(e)})
 
     exported = sum(1 for r in results if r["status"] == "exported")
+    logger.info("metric", extra={
+        "metric_name": "notion_export",
+        "brand_id": brand_id,
+        "posts_exported": exported,
+        "total_posts": len(posts),
+    })
     return {
         "exported": exported,
         "total": len(posts),

@@ -31,7 +31,7 @@ export default function BrandsPage() {
     if (!uid) return
     api.listBrands(uid)
       .then((res) => setBrands((res as unknown as { brands: BrandSummary[] }).brands || []))
-      .catch(() => {})
+      .catch((e) => { console.error('Failed to load brands:', e) })
   }, [uid])
 
   if (loading) return null

@@ -67,6 +67,13 @@ class BudgetTracker:
         self.images_generated += num_images
         self.image_cost = self.images_generated * IMAGE_COST_PER_UNIT
         await self._persist()
+        logger.info("metric", extra={
+            "metric_name": "image_generated",
+            "images_generated": self.images_generated,
+            "image_cost": self.image_cost,
+            "total_cost": self.total_cost,
+            "budget_remaining": TOTAL_BUDGET - self.total_cost,
+        })
 
     async def record_video(self, tier: str = "fast"):
         await self._ensure_loaded()
@@ -74,6 +81,13 @@ class BudgetTracker:
         cost = VIDEO_COST_FAST if tier == "fast" else VIDEO_COST_STD
         self.video_cost += cost
         await self._persist()
+        logger.info("metric", extra={
+            "metric_name": "video_generated",
+            "videos_generated": self.videos_generated,
+            "video_cost": self.video_cost,
+            "total_cost": self.total_cost,
+            "budget_remaining": TOTAL_BUDGET - self.total_cost,
+        })
 
     def get_status(self) -> dict:
         return {

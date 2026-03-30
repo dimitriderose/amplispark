@@ -123,6 +123,7 @@ async def stream_generate(
         final_image_url = None
         final_image_gcs_uri = None
         gate_review = None
+        _gen_start = time.time()
 
         try:
             # Heartbeat: sends "Still working..." every 15s if no events flowed
@@ -195,6 +196,14 @@ async def stream_generate(
                             await firestore_client.update_post(brand_id, post_id, update_data)
                         except Exception as fs_err:
                             logger.error("Firestore update failed for post %s: %s", post_id, fs_err)
+                        logger.info("metric", extra={
+                            "metric_name": "generation_complete",
+                            "duration_ms": round((time.time() - _gen_start) * 1000),
+                            "platform": day_brief.get("platform", "unknown"),
+                            "derivative_type": day_brief.get("derivative_type", "original"),
+                            "post_id": post_id,
+                            "brand_id": brand_id,
+                        })
                     elif event_name == "error":
                         try:
                             await firestore_client.update_post(brand_id, post_id, {"status": "failed"})
@@ -285,6 +294,12 @@ async def stream_generate(
 
         except Exception as exc:
             logger.error("Generation task error for post %s: %s", post_id, exc)
+            logger.info("metric", extra={
+                "metric_name": "generation_failed",
+                "post_id": post_id,
+                "brand_id": brand_id,
+                "error": str(exc)[:200],
+            })
             try:
                 await firestore_client.update_post(brand_id, post_id, {"status": "failed"})
             except Exception as e:

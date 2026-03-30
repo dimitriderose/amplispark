@@ -17,6 +17,7 @@ import firebase_admin
 from firebase_admin import auth as firebase_auth
 from fastapi import Depends, HTTPException, Request, WebSocket, WebSocketException, status
 
+from backend.middleware_logging import user_uid_var
 from backend.services import firestore_client
 
 logger = logging.getLogger(__name__)
@@ -35,18 +36,38 @@ async def get_authenticated_uid(request: Request) -> str | None:
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
         # Fallback: check X-User-UID for backward compat during migration
-        return request.headers.get("X-User-UID") or None
+        uid = request.headers.get("X-User-UID") or None
+        if uid:
+            user_uid_var.set(uid)
+        return uid
 
     token = auth_header[len("Bearer "):]
     try:
         decoded = firebase_auth.verify_id_token(token)
-        return decoded["uid"]
+        uid = decoded["uid"]
+        user_uid_var.set(uid)
+        return uid
     except firebase_auth.ExpiredIdTokenError:
+        logger.info("metric", extra={
+            "metric_name": "auth_failure",
+            "reason": "expired_token",
+            "path": str(request.url.path),
+        })
         raise HTTPException(status_code=401, detail="Token expired — please sign in again")
     except firebase_auth.InvalidIdTokenError:
+        logger.info("metric", extra={
+            "metric_name": "auth_failure",
+            "reason": "invalid_token",
+            "path": str(request.url.path),
+        })
         raise HTTPException(status_code=401, detail="Invalid authentication token")
     except Exception as e:
         logger.warning("Firebase token verification failed: %s", e)
+        logger.info("metric", extra={
+            "metric_name": "auth_failure",
+            "reason": "unknown",
+            "path": str(request.url.path),
+        })
         raise HTTPException(status_code=401, detail="Authentication failed")
 
 
@@ -115,6 +136,11 @@ async def get_ws_authenticated_uid(websocket: WebSocket) -> str:
 
     if not token:
         logger.debug("WS auth: no auth token in Sec-WebSocket-Protocol")
+        logger.info("metric", extra={
+            "metric_name": "auth_failure",
+            "reason": "missing_token",
+            "path": str(websocket.url.path),
+        })
         raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason="Missing auth token")
 
     try:
@@ -123,12 +149,27 @@ async def get_ws_authenticated_uid(websocket: WebSocket) -> str:
         return decoded["uid"]
     except firebase_auth.ExpiredIdTokenError:
         logger.debug("WS auth: token expired")
+        logger.info("metric", extra={
+            "metric_name": "auth_failure",
+            "reason": "expired_token",
+            "path": str(websocket.url.path),
+        })
         raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason="Token expired")
     except firebase_auth.InvalidIdTokenError:
         logger.debug("WS auth: invalid token")
+        logger.info("metric", extra={
+            "metric_name": "auth_failure",
+            "reason": "invalid_token",
+            "path": str(websocket.url.path),
+        })
         raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid token")
     except Exception as e:
         logger.warning("WebSocket Firebase token verification failed: %s", e)
+        logger.info("metric", extra={
+            "metric_name": "auth_failure",
+            "reason": "unknown",
+            "path": str(websocket.url.path),
+        })
         raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason="Auth failed")
 
 
