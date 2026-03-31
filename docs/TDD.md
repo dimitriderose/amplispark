@@ -813,7 +813,7 @@ Review checks are loaded from the Platform Registry (`get_review_guidelines_bloc
 
 ### 3.5.4 Derivative-Specific Checks
 
-Additional checks are applied based on `derivative_type`: `video_first` (teaser length, curiosity-driven), `carousel` (3-slide structure, hook/teach/takeaway), `thread_hook` (3-7 posts, per-platform char limits, standalone value per post), `story` (≤50 words, single CTA), `blog_snippet` (150-200 words, bold opener), `pin` (title + description format, keyword-rich).
+Additional checks are applied based on `derivative_type`: `video_first` (teaser length, curiosity-driven), `carousel` (up to 7-slide structure, hook/teach/takeaway), `thread_hook` (3-7 posts, per-platform char limits, standalone value per post), `story` (≤50 words, single CTA), `blog_snippet` (150-200 words, bold opener), `pin` (title + description format, keyword-rich).
 
 ### 3.5.5 Thin-Profile Social Proof Check
 
@@ -1012,18 +1012,15 @@ Response: SSE stream of events:
   event: text
   data: {"content": "#coffee #morningroutine #espresso..."}
 
-  MODE A-CAROUSEL (Instagram carousel — 3 slides, parallel image gen):
+  MODE A-CAROUSEL (Instagram carousel — up to 7 slides, concurrent image gen):
   event: text
   data: {"content": "Swipe for the full story..."}
 
   event: image
   data: {"url": "/api/storage/serve/generated/.../slide_1.png", "mime_type": "image/png", "source": "generated"}
-
+  ...
   event: image
-  data: {"url": "/api/storage/serve/generated/.../slide_2.png", "mime_type": "image/png", "source": "generated"}
-
-  event: image
-  data: {"url": "/api/storage/serve/generated/.../slide_3.png", "mime_type": "image/png", "source": "generated"}
+  data: {"url": "/api/storage/serve/generated/.../slide_7.png", "mime_type": "image/png", "source": "generated"}
 
   event: text
   data: {"content": "#carousel #tips..."}
@@ -1175,28 +1172,40 @@ async def verify_brand_owner(brand_id: str, token: dict = Depends(verify_firebas
 ```
 
 @app.get("/api/generate/{plan_id}/{day_index}")
-async def generate_post_endpoint(plan_id: str, day_index: int, request: Request):
-    """Stream interleaved post generation via SSE."""
-    
+async def generate_post_endpoint(
+    plan_id: str, day_index: int, request: Request,
+    regen_mode: str | None = None,   # v1.9: "text_only" skips image generation
+    existing_images: str | None = None,  # v1.9: comma-separated existing image URLs to preserve
+):
+    """Stream interleaved post generation via SSE.
+
+    v1.9: regen_mode=text_only query param enables text-only regeneration,
+    preserving existing carousel images while regenerating captions/hashtags.
+    existing_images parameter passes through URLs to skip image generation.
+    """
+
     # Budget guard (Gap #7)
-    if not budget_tracker.can_generate():
+    if not await budget_tracker.can_generate_image():  # v1.9: async, Firestore-backed
         return JSONResponse(
-            status_code=429, 
-            content={"error": "Image generation budget exhausted", 
-                     "budget": budget_tracker.get_status()}
+            status_code=429,
+            content={"error": "Image generation budget exhausted",
+                     "budget": await budget_tracker.get_remaining()}
         )
-    
+
     # Load brand profile and day brief
+    # v1.9: brand profile cached with 30s TTL during generation
     plan = await firestore_client.get_plan(plan_id)
-    brand = await firestore_client.get_brand(plan["brand_id"])
+    brand = await get_brand_cached(plan["brand_id"], ttl_seconds=30)
     day_brief = plan["days"][day_index]
-    
+
     # Check if user uploaded their own photo for this day (P1 BYOP)
     user_photo_url = day_brief.get("user_photo_url", None)
-    
+
     async def event_stream():
+        # v1.9: bounded SSE queue — prevents unbounded memory growth
+        queue = asyncio.Queue(maxsize=200)
         post_data = {"texts": [], "images": [], "post_id": None}
-        
+
         try:
             # Generate interleaved content (Mode A or B based on user photo)
             async for part in generate_post(brand, day_brief, user_photo_url=user_photo_url):
@@ -1572,7 +1581,9 @@ amplifi-db/
 │               │   └── generated_at: timestamp | null
 │               │
 │               ├── created_at: timestamp
-│               └── updated_at: timestamp
+│               ├── updated_at: timestamp
+│               ├── status: string         # "draft" | "approved" | "posted" | "deleted" (v1.9 soft delete)
+│               └── deleted_at: timestamp | null  # v1.9: set by delete_post, null when active
 │
 │       └── video_jobs/                    # Subcollection (P1)
 │           └── {jobId}/
@@ -1584,6 +1595,21 @@ amplifi-db/
 │               ├── created_at: timestamp
 │               └── updated_at: timestamp
 ```
+
+**System documents (v1.9):**
+
+```
+amplifi-db/
+├── _system/
+│   └── budget                              # Singleton — global budget state (v1.9)
+│       ├── images_generated: number        # Total images generated across all brands
+│       ├── videos_generated: number        # Total videos generated
+│       ├── image_cost: number              # Cumulative image cost ($)
+│       ├── video_cost: number              # Cumulative video cost ($)
+│       └── updated_at: timestamp           # Last write timestamp
+```
+
+**Soft deletes (v1.9):** `delete_post` sets `status="deleted"` and `deleted_at` timestamp on the post document rather than performing a hard delete. `list_posts` filters out posts where `status == "deleted"`. No hard deletes are performed — this enables future recovery/undo functionality.
 
 ## 7.2 Cloud Storage Structure
 
@@ -1601,8 +1627,8 @@ gs://amplifi-assets-2026/
 └── generated/
     └── {postId}/
         ├── image_{hash}.png               # Generated image (naming uses content hash)
-        ├── image_{hash2}.png              # Additional images (carousel — up to 3 slides)
-        ├── image_{hash3}.png              # Third carousel slide
+        ├── image_{hash2}.png              # Additional images (carousel — up to 7 slides, v1.9)
+        ├── image_{hash3}.png              # ...through slide 7
         ├── video_{hash}.mp4               # Generated video clip (Veo 3.1)
         └── ...
 
@@ -1747,41 +1773,75 @@ MAX_IMAGES = int(IMAGE_BUDGET / COST_PER_IMAGE)
 MAX_VIDEOS_FAST = int(VIDEO_BUDGET / COST_PER_VIDEO_FAST)
 
 class BudgetTracker:
-    """Track image AND video generation costs against $100 credit."""
-    
-    def __init__(self):
-        self.images_generated = 0
-        self.videos_generated = 0
-        self.image_cost = 0.0
-        self.video_cost = 0.0
-    
-    @property
-    def total_cost(self) -> float:
-        return self.image_cost + self.video_cost
-    
-    def can_generate_image(self) -> bool:
-        return self.total_cost < (TOTAL_CREDIT * 0.8)
-    
-    def can_generate_video(self) -> bool:
-        return self.total_cost + COST_PER_VIDEO_FAST < (TOTAL_CREDIT * 0.8)
-    
-    def record_image(self, num_images: int = 1):
-        self.images_generated += num_images
-        self.image_cost = self.images_generated * COST_PER_IMAGE
-    
-    def record_video(self, tier: str = "fast"):
-        self.videos_generated += 1
+    """Track image AND video generation costs against $100 credit.
+
+    v1.9: Rewritten for Firestore persistence. All state is stored in the
+    _system/budget document. All methods are async. Reads/writes go through
+    Firestore on every call, ensuring correctness across Cloud Run cold starts
+    and auto-scaling instances (no in-memory state that resets on scale-down).
+
+    Firestore document: _system/budget
+    Fields: images_generated, videos_generated, image_cost, video_cost, updated_at
+    """
+
+    BUDGET_DOC = "_system/budget"
+
+    async def _read_budget(self) -> dict:
+        """Read current budget state from Firestore."""
+        doc = await firestore_client.get_document(self.BUDGET_DOC)
+        return doc or {"images_generated": 0, "videos_generated": 0,
+                       "image_cost": 0.0, "video_cost": 0.0}
+
+    async def can_generate_image(self) -> bool:
+        budget = await self._read_budget()
+        total = budget["image_cost"] + budget["video_cost"]
+        return total < (TOTAL_CREDIT * 0.8)
+
+    async def can_generate_video(self) -> bool:
+        budget = await self._read_budget()
+        total = budget["image_cost"] + budget["video_cost"]
+        return total + COST_PER_VIDEO_FAST < (TOTAL_CREDIT * 0.8)
+
+    async def record_image(self, num_images: int = 1):
+        """Atomically increment image count and cost in Firestore.
+        Emits structured metric log for Cloud Monitoring."""
+        await firestore_client.increment_budget(
+            self.BUDGET_DOC,
+            {"images_generated": num_images,
+             "image_cost": num_images * COST_PER_IMAGE}
+        )
+        logger.info("budget_record", extra={
+            "metric_name": "budget_record",
+            "record_type": "image",
+            "count": num_images,
+            "cost": num_images * COST_PER_IMAGE,
+        })
+
+    async def record_video(self, tier: str = "fast"):
+        """Atomically increment video count and cost in Firestore.
+        Emits structured metric log for Cloud Monitoring."""
         cost = COST_PER_VIDEO_FAST if tier == "fast" else COST_PER_VIDEO_STD
-        self.video_cost += cost
-    
-    def get_status(self) -> dict:
+        await firestore_client.increment_budget(
+            self.BUDGET_DOC,
+            {"videos_generated": 1, "video_cost": cost}
+        )
+        logger.info("budget_record", extra={
+            "metric_name": "budget_record",
+            "record_type": "video",
+            "tier": tier,
+            "cost": cost,
+        })
+
+    async def get_remaining(self) -> dict:
+        budget = await self._read_budget()
+        total = budget["image_cost"] + budget["video_cost"]
         return {
-            "images_generated": self.images_generated,
-            "videos_generated": self.videos_generated,
-            "image_cost": f"${self.image_cost:.2f}",
-            "video_cost": f"${self.video_cost:.2f}",
-            "total_cost": f"${self.total_cost:.2f}",
-            "budget_remaining": f"${TOTAL_CREDIT - self.total_cost:.2f}",
+            "images_generated": budget["images_generated"],
+            "videos_generated": budget["videos_generated"],
+            "image_cost": f"${budget['image_cost']:.2f}",
+            "video_cost": f"${budget['video_cost']:.2f}",
+            "total_cost": f"${total:.2f}",
+            "budget_remaining": f"${TOTAL_CREDIT - total:.2f}",
         }
 ```
 
@@ -2109,7 +2169,13 @@ App (React Router)
 │       ├── EmptyState ("No brands yet — create your first brand")
 │       └── Pagination (Previous | Page X of Y | Next)
 │
+├── ProtectedRoute — v1.9 auth wrapper component in App.tsx
+│   │   Wraps all authenticated routes (/brands, /onboard, /dashboard/*)
+│   │   Redirects to / (landing page) if user is not signed in
+│   │
 ├── OnboardPage (/onboard) — thin shell, delegates to OnboardWizard
+│   │   v1.9 onboarding guard: checks for existing brands, redirects to /brands
+│   │   ?new=true query param bypasses the guard (for "add another brand" flow)
 │   └── OnboardWizard (732 lines, 3-step deferred-creation flow)
 │       ├── Step 1: "Tell us about your brand"
 │       │   ├── URLInput (website URL — hidden in no-website mode)
@@ -2372,6 +2438,7 @@ The NUX consists of two complementary systems: the **Onboarding Wizard** (brand 
 **Key design decisions:**
 - No plan generation in the wizard. Plan generation was moved to the dashboard to keep onboarding focused on brand creation. Users land on their new dashboard with a clear "Generate Calendar" CTA.
 - `OnboardPage.tsx` was simplified to a thin shell that renders `<OnboardWizard />` and handles the post-completion redirect to `/dashboard/:id`.
+- **Onboarding guard (v1.9):** `OnboardPage` checks whether the user already has brands. If brands exist, the user is redirected to `/brands` instead of the wizard — preventing accidental re-onboarding. The `?new=true` query parameter bypasses this guard, used by the "Add Another Brand" button on the Brands page.
 
 ### 9.3.2 Guided Tour (GuidedTour.tsx, useTour.ts)
 
@@ -2585,8 +2652,9 @@ The `deploy.sh` script:
 ```
 amplifi-hackaton/
 ├── backend/
-│   ├── server.py                  # FastAPI app (~65 lines — app setup + router includes)
+│   ├── server.py                  # FastAPI app (~80 lines — app setup + middleware + exception handler + router includes)
 │   ├── middleware.py              # Firebase Auth middleware (verify_firebase_token, verify_brand_owner)
+│   ├── middleware_logging.py      # v1.9: RequestContextMiddleware — structured JSON logging with contextvars
 │   ├── clients.py                 # Singleton Gemini client (shared across all agents)
 │   ├── gcs_utils.py               # Shared GCS URI parsing utilities
 │   ├── constants.py               # Shared constants: PILLARS, DERIVATIVE_TYPES, PLATFORM_STRENGTHS,
@@ -2609,7 +2677,7 @@ amplifi-hackaton/
 │   │   ├── strategy_agent.py      # Strategy Agent + calendar generation (social proof tiers)
 │   │   ├── content_creator.py     # Content Creator Agent (orchestrator — delegates to sub-modules)
 │   │   ├── caption_pipeline.py    # Caption generation pipeline (extracted from content_creator.py)
-│   │   ├── carousel_builder.py    # 3-slide parallel carousel generation (extracted)
+│   │   ├── carousel_builder.py    # 7-slide concurrent carousel generation (v1.9: semaphore=7, all slides parallel)
 │   │   ├── hashtag_engine.py      # Hashtag generation, sanitization, per-platform limits (extracted)
 │   │   ├── quality_gates.py       # Pre/post-generation quality checks (extracted)
 │   │   ├── image_prompt_builder.py # Platform-aware image prompt construction (extracted)
