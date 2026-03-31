@@ -31,7 +31,15 @@ graph TB
     end
 
     subgraph CICD["CI/CD"]
-        CB["Cloud Build + Terraform"]
+        CB["Cloud Build + Terraform<br/>pytest → Docker → Deploy"]
+    end
+
+    subgraph Testing["Testing & CI"]
+        TST["pytest · 35 Tests · Cloud Build CI"]
+    end
+
+    subgraph Observability["Logging & Metrics"]
+        LOG["JSON Logging · Request Context · Metrics"]
     end
 
     FE <-->|"REST + SSE"| API
@@ -57,6 +65,8 @@ graph TB
     API --> FS
     API --> GCS
     CB -->|"Deploy"| API
+    TST -->|"Validates"| API
+    LOG -->|"Observes"| API
 
     classDef browser fill:#1a1a2e,stroke:#e94560,color:#fff
     classDef cloud fill:#0f3460,stroke:#16213e,color:#fff
@@ -73,3 +83,5 @@ graph TB
     class GFlash,GLive,VEO gemini
     class FS,GCS,FAUTH gcp
     class CB infra
+    class TST infra
+    class LOG support

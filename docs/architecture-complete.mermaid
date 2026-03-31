@@ -13,8 +13,9 @@ graph TB
             APP["FastAPI App<br/>CORS · Router Includes<br/>SPA Catch-All<br/>(path traversal prevention)"]
         end
 
-        subgraph Middleware["Auth Middleware Layer"]
-            MW["middleware.py<br/>verify_firebase_token()<br/>firebase_admin.verify_id_token()<br/>verify_brand_owner()<br/>Depends() on HTTP routers<br/>verify_ws_brand_owner()<br/>Sec-WebSocket-Protocol auth<br/>for WebSocket endpoints"]
+        subgraph Middleware["Auth & Logging Middleware Layer"]
+            MW["middleware.py<br/>verify_firebase_token()<br/>firebase_admin.verify_id_token()<br/>verify_brand_owner()<br/>Depends() on HTTP routers<br/>verify_ws_brand_owner()<br/>Sec-WebSocket-Protocol auth<br/>HMAC OAuth State<br/>for WebSocket endpoints"]
+            MWL["RequestContextMiddleware<br/>middleware_logging.py<br/>request_id · user_uid<br/>duration_ms · JSON logs"]
         end
 
         subgraph Routers["FastAPI Routers (7 modules)"]
@@ -36,7 +37,7 @@ graph TB
 
         subgraph CCModules["Content Creator Sub-Modules"]
             CP["caption_pipeline.py<br/>Caption Generation"]
-            CB["carousel_builder.py<br/>3-Slide Parallel Gen"]
+            CB["carousel_builder.py<br/>7-Slide Parallel Gen"]
             HE["hashtag_engine.py<br/>Sanitization · Limits"]
             QG["quality_gates.py<br/>Pre/Post Quality Checks"]
             IPB["image_prompt_builder.py<br/>Platform-Aware Prompts"]
@@ -65,16 +66,26 @@ graph TB
             IF["Image Fallback<br/>Separate Image-Only Gen<br/>On Interleaved Failure"]
             PR["Platform Registry<br/>platforms.py<br/>11 Platforms + 4 Derivative Overrides<br/>PlatformSpec + Scoring Weights"]
             BA_SVC["Brand Assets Service<br/>brand_assets.py<br/>Logo + Product Photo Cache"]
-            NC["Notion Client<br/>notion_client.py<br/>OAuth + Fernet Encryption<br/>(AES-128-CBC + HMAC-SHA256)<br/>Database Export"]
+            NC["Notion Client<br/>notion_client.py<br/>Mandatory Fernet Encryption<br/>HMAC OAuth State<br/>Database Export"]
             EC["Email Client<br/>email_client.py<br/>Resend API / .ics Delivery"]
+            BTS["Budget Tracker<br/>Firestore-Persisted<br/>budget_tracker.py"]
         end
     end
 
     subgraph CICD["CI/CD Pipeline"]
         DS["deploy.sh<br/>One-Command Deploy<br/>Reads .env Config"]
-        CBuild["Cloud Build<br/>cloudbuild.yaml<br/>3-Step Pipeline"]
+        CBuild["Cloud Build<br/>cloudbuild.yaml<br/>4-Step Pipeline"]
         AR["Artifact Registry<br/>Docker Images<br/>amplifi:latest"]
         TF["Terraform IaC<br/>main.tf<br/>GCP Resource Provisioning"]
+    end
+
+    subgraph Testing["Testing (pytest)"]
+        TCONF["conftest.py<br/>Fixtures"]
+        T_MW["test_middleware.py<br/>12 Tests"]
+        T_INT["test_integrations.py<br/>6 Tests"]
+        T_BT["test_budget_tracker.py<br/>12 Tests"]
+        T_BR["test_brands.py<br/>2 Tests"]
+        T_PO["test_posts.py<br/>3 Tests"]
     end
 
     subgraph GCP["Google Cloud Platform"]
@@ -99,6 +110,8 @@ graph TB
     TOUR -->|"data-tour-id targeting<br/>dashboard elements"| PAGES
 
     %% App → Middleware → Routers
+    APP --> MWL
+    MWL --> MW
     APP --> MW
     MW --> R_BRANDS
     MW --> R_PLANS
@@ -166,6 +179,7 @@ graph TB
     R_INT --> NC
     R_INT --> EC
     NC -->|"Fernet-Encrypted<br/>OAuth Tokens"| FS
+    BTS -->|"Budget Data"| FS
 
     %% Gemini API calls
     BA -->|"Brand Analysis<br/>(temp 0.15)"| GFlash
@@ -185,9 +199,17 @@ graph TB
     VID -->|"Store Video"| GCS
     EX -->|"Download Media<br/>blob.download_as_bytes"| GCS
 
+    %% Testing
+    T_MW -->|"Tests"| MW
+    T_MW -->|"Tests"| MWL
+    T_INT -->|"Tests"| R_INT
+    T_BT -->|"Tests"| BTS
+    T_BR -->|"Tests"| R_BRANDS
+    T_PO -->|"Tests"| R_POSTS
+
     %% CI/CD
     DS -->|"Triggers"| CBuild
-    CBuild -->|"Step 1: Docker Build<br/>Step 2: Push"| AR
+    CBuild -->|"Step 0: pytest<br/>Step 1: Docker Build<br/>Step 2: Push"| AR
     AR -->|"Step 3: Deploy"| APP
     TF -->|"Provisions"| FS
     TF -->|"Provisions"| GCS
@@ -220,7 +242,9 @@ graph TB
     class SC scoring
     class VC,VID support
     class CL,GU,CO shared
-    class WS,BT,HS,EX,IF,PR,BA_SVC,NC,EC tools
+    class WS,BT,HS,EX,IF,PR,BA_SVC,NC,EC,BTS tools
     class FS,GCS,FA gcp
     class GFlash,GLive gemini
+    class MWL middleware
+    class TCONF,T_MW,T_INT,T_BT,T_BR,T_PO infra
     class DS,CBuild,AR,TF infra
