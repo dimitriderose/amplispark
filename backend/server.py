@@ -1,16 +1,25 @@
 import logging
 import os
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from pythonjsonlogger.json import JsonFormatter
+from starlette.responses import JSONResponse
 
 from backend.config import CORS_ORIGINS
 from backend.middleware import verify_brand_owner  # noqa: F401 — exported for route-level Depends()
+from backend.middleware_logging import RequestContextMiddleware
 
 from backend.routers import brands, plans, posts, generation, media, integrations, voice
 
-logging.basicConfig(level=logging.INFO)
+_handler = logging.StreamHandler()
+_handler.setFormatter(JsonFormatter(
+    fmt="%(asctime)s %(levelname)s %(name)s %(message)s",
+    rename_fields={"asctime": "timestamp", "levelname": "severity"},
+))
+logging.root.handlers = [_handler]
+logging.root.setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
@@ -19,13 +28,28 @@ app = FastAPI(
     version="1.0.0",
 )
 
+app.add_middleware(RequestContextMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "X-Requested-With", "X-User-UID"],
 )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    # HTTPException is already handled by FastAPI's default handler, so skip it
+    if isinstance(exc, HTTPException):
+        raise exc
+    logger.error("unhandled_exception", extra={
+        "path": request.url.path,
+        "method": request.method,
+        "error": str(exc),
+        "type": type(exc).__name__,
+    })
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 # ── Health ────────────────────────────────────────────────────
 
@@ -48,10 +72,10 @@ app.include_router(voice.router, prefix="/api")
 # ── Static frontend (production) ──────────────────────────────
 frontend_dist = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
 if os.path.exists(frontend_dist):
+    from pathlib import Path
     from starlette.responses import FileResponse as _FileResponse
 
     _index_html = os.path.join(frontend_dist, "index.html")
-    _resolved_dist = os.path.realpath(frontend_dist)
 
     # Static assets first (proper caching headers + content-type detection)
     app.mount("/assets", StaticFiles(directory=os.path.join(frontend_dist, "assets")), name="assets")
@@ -60,8 +84,11 @@ if os.path.exists(frontend_dist):
     @app.get("/{full_path:path}")
     async def _spa_fallback(full_path: str):
         file_path = os.path.join(frontend_dist, full_path)
-        resolved = os.path.realpath(file_path)
         # Prevent path traversal — only serve files within frontend_dist
-        if (resolved.startswith(_resolved_dist + os.sep) or resolved == _resolved_dist) and os.path.isfile(resolved):
-            return _FileResponse(resolved)
+        try:
+            Path(file_path).resolve().relative_to(Path(frontend_dist).resolve())
+            if os.path.isfile(file_path):
+                return _FileResponse(file_path)
+        except ValueError:
+            pass
         return _FileResponse(_index_html)

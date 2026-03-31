@@ -90,6 +90,8 @@ export default function VideoRepurpose({ brandId }: Props) {
   const [selectedFileSize, setSelectedFileSize] = useState('')
 
   const handleFile = async (file: File) => {
+    // H8: Prevent double-click / duplicate upload
+    if (uploading) return
     const ext = file.name.split('.').pop()?.toLowerCase()
     if (!['mp4', 'mov'].includes(ext ?? '')) {
       setError('Only .mp4 and .mov files are supported')

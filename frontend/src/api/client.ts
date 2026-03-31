@@ -34,7 +34,15 @@ async function handleResponse<T>(res: Response): Promise<T> {
   if (res.status === 204 || res.headers.get('content-length') === '0') {
     return undefined as T
   }
-  return res.json()
+  const data = await res.json()
+  // Runtime validation: ensure response is not null/undefined when an object is expected
+  if (data === null || data === undefined) {
+    throw new Error(`Unexpected empty response body from ${res.url || 'API'}`)
+  }
+  if (typeof data !== 'object' && typeof data !== 'boolean' && typeof data !== 'number' && typeof data !== 'string') {
+    throw new Error(`Unexpected response type "${typeof data}" from ${res.url || 'API'}`)
+  }
+  return data as T
 }
 
 async function handleBlobResponse(res: Response): Promise<Blob> {
@@ -79,9 +87,14 @@ export const api = {
   getBrand: (brandId: string) => request<BrandResponse>(`/api/brands/${brandId}`),
   updateBrand: (brandId: string, data: object) =>
     request<BrandResponse>(`/api/brands/${brandId}`, { method: 'PUT', body: JSON.stringify(data) }),
-  uploadBrandAsset: (brandId: string, formData: FormData) =>
-    fetch(`/api/brands/${brandId}/upload`, { method: 'POST', body: formData })
-      .then(r => handleResponse<UploadAssetResponse>(r)),
+  uploadBrandAsset: async (brandId: string, formData: FormData) => {
+    const authH = await _authHeaders()
+    return fetch(`/api/brands/${brandId}/upload`, {
+      method: 'POST',
+      headers: { ...('Authorization' in authH ? { Authorization: authH.Authorization } : authH) },
+      body: formData,
+    }).then(r => handleResponse<UploadAssetResponse>(r))
+  },
   deleteBrandAsset: (brandId: string, assetIndex: number) =>
     request<void>(`/api/brands/${brandId}/assets/${assetIndex}`, { method: 'DELETE' }),
   setBrandLogo: (brandId: string, logoUrl: string | null) =>
@@ -114,22 +127,34 @@ export const api = {
     request<ReviewPostResponse>(`/api/brands/${brandId}/posts/${postId}/review${force ? '?force=true' : ''}`, { method: 'POST' }),
   approvePost: (brandId: string, postId: string) =>
     request<ApprovePostResponse>(`/api/brands/${brandId}/posts/${postId}/approve`, { method: 'POST' }),
-  exportPost: (postId: string, brandId: string) =>
-    fetch(`/api/posts/${postId}/export?brand_id=${encodeURIComponent(brandId)}`)
+  exportPost: async (postId: string, brandId: string) => {
+    const authH = await _authHeaders()
+    return fetch(`/api/posts/${postId}/export?brand_id=${encodeURIComponent(brandId)}`, {
+      headers: { ...authH },
+    })
       .then(r => handleBlobResponse(r))
       .then(async blob => {
         downloadBlob(blob, `amplifi_post_${postId}.zip`)
-      }),
-  exportPlan: (planId: string, brandId: string) =>
-    fetch(`/api/export/${planId}?brand_id=${encodeURIComponent(brandId)}`, { method: 'POST' })
-      .then(r => handleBlobResponse(r))
-      .then(blob => downloadBlob(blob, `amplifi_export_${planId}.zip`)),
-
-  uploadDayPhoto: (brandId: string, planId: string, dayIndex: number, formData: FormData) =>
-    fetch(`/api/brands/${brandId}/plans/${planId}/days/${dayIndex}/photo`, {
+      })
+  },
+  exportPlan: async (planId: string, brandId: string) => {
+    const authH = await _authHeaders()
+    return fetch(`/api/export/${planId}?brand_id=${encodeURIComponent(brandId)}`, {
       method: 'POST',
+      headers: { ...authH },
+    })
+      .then(r => handleBlobResponse(r))
+      .then(blob => downloadBlob(blob, `amplifi_export_${planId}.zip`))
+  },
+
+  uploadDayPhoto: async (brandId: string, planId: string, dayIndex: number, formData: FormData) => {
+    const authH = await _authHeaders()
+    return fetch(`/api/brands/${brandId}/plans/${planId}/days/${dayIndex}/photo`, {
+      method: 'POST',
+      headers: { ...('Authorization' in authH ? { Authorization: authH.Authorization } : authH) },
       body: formData,
-    }).then(r => handleResponse<DayPhotoResponse>(r)),
+    }).then(r => handleResponse<DayPhotoResponse>(r))
+  },
 
   deleteDayPhoto: (brandId: string, planId: string, dayIndex: number) =>
     request<void>(`/api/brands/${brandId}/plans/${planId}/days/${dayIndex}/photo`, { method: 'DELETE' }),
@@ -144,9 +169,14 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ platform, oauth_token: oauthToken }) },
     ),
 
-  uploadVideoForRepurpose: (brandId: string, formData: FormData) =>
-    fetch(`/api/brands/${brandId}/video-repurpose`, { method: 'POST', body: formData })
-      .then(r => handleResponse<{ job_id: string }>(r)),
+  uploadVideoForRepurpose: async (brandId: string, formData: FormData) => {
+    const authH = await _authHeaders()
+    return fetch(`/api/brands/${brandId}/video-repurpose`, {
+      method: 'POST',
+      headers: { ...('Authorization' in authH ? { Authorization: authH.Authorization } : authH) },
+      body: formData,
+    }).then(r => handleResponse<{ job_id: string }>(r))
+  },
 
   getVideoRepurposeJob: (jobId: string, brandId: string) =>
     request<{
@@ -156,10 +186,14 @@ export const api = {
       error?: string
     }>(`/api/video-repurpose-jobs/${jobId}?brand_id=${encodeURIComponent(brandId)}`),
 
-  downloadCalendar: (brandId: string, planId: string) =>
-    fetch(`/api/brands/${brandId}/plans/${planId}/calendar.ics`)
+  downloadCalendar: async (brandId: string, planId: string) => {
+    const authH = await _authHeaders()
+    return fetch(`/api/brands/${brandId}/plans/${planId}/calendar.ics`, {
+      headers: { ...authH },
+    })
       .then(r => handleBlobResponse(r))
-      .then(blob => downloadBlob(blob, 'amplifi_content_plan.ics')),
+      .then(blob => downloadBlob(blob, 'amplifi_content_plan.ics'))
+  },
 
   emailCalendar: (brandId: string, planId: string, email: string) =>
     request<void>(`/api/brands/${brandId}/plans/${planId}/calendar/email`, {
@@ -187,22 +221,31 @@ export const api = {
       { method: 'POST' },
     ),
 
-  editPostMedia: (brandId: string, postId: string, body: { edit_prompt: string; slide_index?: number; target?: string }) =>
-    fetch(`/api/brands/${brandId}/posts/${postId}/edit-media`, {
+  editPostMedia: async (brandId: string, postId: string, body: { edit_prompt: string; slide_index?: number; target?: string }) => {
+    const authH = await _authHeaders()
+    return fetch(`/api/brands/${brandId}/posts/${postId}/edit-media`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authH },
       body: JSON.stringify(body),
-    }).then(r => handleResponse<EditMediaResponse>(r)),
+    }).then(r => handleResponse<EditMediaResponse>(r))
+  },
 
-  resetPostMedia: (brandId: string, postId: string, target?: string) =>
-    fetch(`/api/brands/${brandId}/posts/${postId}/edit-media/reset${target ? `?target=${target}` : ''}`, {
+  resetPostMedia: async (brandId: string, postId: string, target?: string) => {
+    const authH = await _authHeaders()
+    return fetch(`/api/brands/${brandId}/posts/${postId}/edit-media/reset${target ? `?target=${target}` : ''}`, {
       method: 'POST',
-    }).then(r => handleResponse<ResetMediaResponse>(r)),
+      headers: { ...authH },
+    }).then(r => handleResponse<ResetMediaResponse>(r))
+  },
 
   regeneratePost: (brandId: string, postId: string) =>
     request<RegenerateResponse>(`/api/brands/${brandId}/posts/${postId}/regenerate`, { method: 'POST' }),
 
-  refreshPlanResearch: (brandId: string, planId: string) =>
-    fetch(`/api/brands/${brandId}/plans/${planId}/refresh-research`, { method: 'POST' })
-      .then(r => handleResponse<RefreshResearchResponse>(r)),
+  refreshPlanResearch: async (brandId: string, planId: string) => {
+    const authH = await _authHeaders()
+    return fetch(`/api/brands/${brandId}/plans/${planId}/refresh-research`, {
+      method: 'POST',
+      headers: { ...authH },
+    }).then(r => handleResponse<RefreshResearchResponse>(r))
+  },
 }

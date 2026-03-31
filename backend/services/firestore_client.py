@@ -145,12 +145,12 @@ async def update_plan_day(brand_id: str, plan_id: str, day_index: int, data: dic
     plan_doc = await plan_ref.get()
     if not plan_doc.exists:
         raise ValueError(f"Plan {plan_id} not found for brand {brand_id}")
-    days = plan_doc.to_dict().get("days", [])
+    days = list(plan_doc.to_dict().get("days", []))
     if day_index < 0 or day_index >= len(days):
         raise ValueError(
             f"day_index {day_index} out of range (plan has {len(days)} days)"
         )
-    days[day_index].update(data)
+    days[day_index] = {**days[day_index], **data}
     await plan_ref.update({"days": days})
 
 # ── Post operations ───────────────────────────────────────────
@@ -172,9 +172,13 @@ async def get_post(brand_id: str, post_id: str) -> Optional[dict]:
     return doc.to_dict() if doc.exists else None
 
 async def delete_post(brand_id: str, post_id: str) -> None:
+    from datetime import datetime, timezone
     db = get_client()
     await (db.collection("brands").document(brand_id)
-             .collection("posts").document(post_id).delete())
+             .collection("posts").document(post_id).update({
+                 "status": "deleted",
+                 "deleted_at": datetime.now(timezone.utc).isoformat(),
+             }))
 
 async def update_post(brand_id: str, post_id: str, data: dict) -> None:
     db = get_client()
@@ -190,7 +194,9 @@ async def list_posts(brand_id: str, plan_id: Optional[str] = None) -> list:
     if plan_id:
         ref = ref.where("plan_id", "==", plan_id)
     docs = await ref.get()
-    return [d.to_dict() for d in docs]
+    posts = [d.to_dict() for d in docs]
+    posts = [p for p in posts if p.get("status") != "deleted"]
+    return posts
 
 # ── Video job operations ──────────────────────────────────────
 

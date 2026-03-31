@@ -43,6 +43,8 @@ logger = logging.getLogger(__name__)
 
 def _validate_format(caption: str, derivative_type: str) -> bool:
     """Check if the caption follows the expected derivative format. Log warnings on mismatch."""
+    if not isinstance(caption, str):
+        return False
     if derivative_type == "carousel":
         ok = "Slide 1" in caption and "Slide 2" in caption
         if not ok:
@@ -132,7 +134,7 @@ async def _generate_carousel_images(
     style = image_style or _get_image_style(None)
 
     # Limit concurrent image API calls to avoid rate limiting
-    _sem = asyncio.Semaphore(3)
+    _sem = asyncio.Semaphore(7)
 
     async def _gen_one(slide_text: str, slide_num: int) -> tuple[bytes, str] | None:
         async with _sem:
@@ -251,6 +253,7 @@ async def generate_post(
     instructions: str | None = None,
     prior_hooks: list[str] | None = None,
     image_style_key: str | None = None,
+    existing_images: dict | None = None,
 ) -> AsyncIterator[dict]:
     """
     Generate a social media post using Gemini 2.5 Flash.
@@ -1324,7 +1327,7 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
     # ── Normal mode (interleaved TEXT + IMAGE) ────────────────────────────────
 
     # Check budget
-    if not bt.budget_tracker.can_generate_image():
+    if not await bt.budget_tracker.can_generate_image():
         yield {"event": "error", "data": {"message": "Image budget exhausted"}}
         return
 
@@ -1531,152 +1534,162 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
         }
 
         # ── Step 3: Image generation (after review gate passes) ──
-        yield {"event": "status", "data": {"message": "Generating image..."}}
+        if existing_images:
+            # Reuse existing images instead of generating new ones
+            image_url = existing_images.get("image_url")
+            image_gcs_uri = existing_images.get("image_gcs_uri")
+            all_image_urls = existing_images.get("image_urls", [])
+            all_image_gcs_uris = existing_images.get("image_gcs_uris", [])
+            # Emit image events for frontend
+            for img_url in all_image_urls:
+                yield {"event": "image", "data": {"url": img_url, "reused": True}}
+        else:
+            yield {"event": "status", "data": {"message": "Generating image..."}}
 
-        # Load brand reference images for visual consistency
-        img_contents: list = []
-        try:
-            brand_refs = await get_brand_reference_images(brand_profile, max_images=3)
-            if brand_refs:
-                for ref_bytes, ref_mime in brand_refs:
-                    img_contents.append(types.Part.from_bytes(data=ref_bytes, mime_type=ref_mime))
-                logger.info("Passing %d brand reference images for image generation", len(brand_refs))
-        except Exception as e:
-            logger.warning("Failed to load brand reference images: %s", e)
+            # Load brand reference images for visual consistency
+            img_contents: list = []
+            try:
+                brand_refs = await get_brand_reference_images(brand_profile, max_images=3)
+                if brand_refs:
+                    for ref_bytes, ref_mime in brand_refs:
+                        img_contents.append(types.Part.from_bytes(data=ref_bytes, mime_type=ref_mime))
+                    logger.info("Passing %d brand reference images for image generation", len(brand_refs))
+            except Exception as e:
+                logger.warning("Failed to load brand reference images: %s", e)
 
-        # Resolve image style: per-post override > brand default > photorealistic
-        _image_style = _get_image_style(
-            image_style_key or brand_profile.get("default_image_style")
-        )
-        img_prompt = _build_image_prompt(
-            platform=platform,
-            style=_image_style,
-            enhanced_image_prompt=image_prompt,
-            image_style_directive=image_style_directive,
-            color_hint=color_hint,
-            style_ref_block=style_ref_block,
-            aspect=_aspect,
-            derivative_type=derivative_type,
-        )
-        img_contents.insert(0, img_prompt)
+            # Resolve image style: per-post override > brand default > photorealistic
+            _image_style = _get_image_style(
+                image_style_key or brand_profile.get("default_image_style")
+            )
+            img_prompt = _build_image_prompt(
+                platform=platform,
+                style=_image_style,
+                enhanced_image_prompt=image_prompt,
+                image_style_directive=image_style_directive,
+                color_hint=color_hint,
+                style_ref_block=style_ref_block,
+                aspect=_aspect,
+                derivative_type=derivative_type,
+            )
+            img_contents.insert(0, img_prompt)
 
-        try:
-            image_bytes, image_mime = await _generate_image_with_retry(img_contents)
+            try:
+                image_bytes, image_mime = await _generate_image_with_retry(img_contents)
 
-            if image_bytes:
-                # Post-processing: resize + platform-specific text overlay
-                try:
-                    image_bytes = resize_to_aspect(image_bytes, _aspect)
-                    cover_raw_bytes = image_bytes  # preserve pre-overlay copy for slide style reference
-                    if derivative_type == "carousel":
-                        image_bytes = create_carousel_cover(
-                            image_bytes, content_theme or caption_hook, colors, _aspect)
-                    elif platform == "pinterest":
-                        image_bytes = create_pinterest_pin(
-                            image_bytes, content_theme, key_message[:80], colors)
-                    elif platform in ("tiktok", "youtube_shorts"):
-                        image_bytes = create_tiktok_cover(
-                            image_bytes, caption_hook or content_theme, colors)
-                    # Standard posts (IG, LI, FB, X, Threads, Mastodon, Bluesky): no text overlay
-                    image_mime = "image/png"
-                except Exception as pp_err:
-                    logger.warning("Image post-processing failed (non-fatal): %s", pp_err)
-
-                # Generate alt-text for accessibility-first platforms
-                alt_text = await _generate_alt_text(image_bytes, content_theme, platform)
-
-                try:
-                    image_url, image_gcs_uri = await upload_image_to_gcs(image_bytes, image_mime, post_id)
-                    bt.budget_tracker.record_image()
-                    _img_event_data = {"url": image_url, "mime_type": image_mime, "gcs_uri": image_gcs_uri}
-                    if alt_text:
-                        _img_event_data["alt_text"] = alt_text
-                    yield {
-                        "event": "image",
-                        "data": _img_event_data,
-                    }
-                except Exception as upload_err:
-                    logger.error("Image upload failed: %s", upload_err)
-                    b64 = base64.b64encode(image_bytes).decode()
-                    yield {
-                        "event": "image",
-                        "data": {
-                            "url": f"data:{image_mime};base64,{b64}",
-                            "mime_type": image_mime,
-                            "fallback": True,
-                        }
-                    }
-            else:
-                logger.error("Image generation returned no image for post %s", post_id)
-        except Exception as img_err:
-            logger.error("Image generation failed for post %s: %s", post_id, img_err)
-
-        # ── Init image URL lists (carousel slides appended below) ──
-        all_image_urls: list[str] = []
-        all_image_gcs_uris: list[str] = []
-        if image_url:
-            all_image_urls.append(image_url)
-        if image_gcs_uri:
-            all_image_gcs_uris.append(image_gcs_uri)
-
-        # ── Carousel: generate additional slide images ──
-        if derivative_type == "carousel" and final_caption:
-            slide_descriptions = _parse_slide_descriptions(final_caption, max_slides=_spec.carousel_slide_count)
-            if len(slide_descriptions) > 1:
-                yield {"event": "status", "data": {"message": "Generating carousel slides..."}}
-                extra_slides = await _generate_carousel_images(
-                    slide_descriptions,
-                    business_name=business_name,
-                    visual_style=visual_style,
-                    color_hint=color_hint,
-                    image_style_directive=image_style_directive,
-                    style_ref_block=style_ref_block,
-                    platform=platform,
-                    post_id=post_id,
-                    cover_image_bytes=cover_raw_bytes,
-                    image_style=_image_style,
-                )
-                for slide_idx, (slide_bytes, slide_mime) in enumerate(extra_slides):
-                    # Post-process each slide: resize + number badge + title
+                if image_bytes:
+                    # Post-processing: resize + platform-specific text overlay
                     try:
-                        slide_bytes = resize_to_aspect(slide_bytes, _aspect)
-                        _slide_title = _extract_slide_headline(slide_descriptions[slide_idx + 1]) if slide_idx + 1 < len(slide_descriptions) else ""
-                        # Final slide: if headline was truncated with ellipsis, use clean fallback
-                        if slide_idx + 2 == len(slide_descriptions) and _slide_title.endswith('…'):
-                            _slide_title = "Your Next Step"
-                        slide_bytes = create_carousel_slide(
-                            slide_bytes, _slide_title, colors, _aspect)
-                        slide_mime = "image/png"
+                        image_bytes = resize_to_aspect(image_bytes, _aspect)
+                        cover_raw_bytes = image_bytes  # preserve pre-overlay copy for slide style reference
+                        if derivative_type == "carousel":
+                            image_bytes = create_carousel_cover(
+                                image_bytes, content_theme or caption_hook, colors, _aspect)
+                        elif platform == "pinterest":
+                            image_bytes = create_pinterest_pin(
+                                image_bytes, content_theme, key_message[:80], colors)
+                        elif platform in ("tiktok", "youtube_shorts"):
+                            image_bytes = create_tiktok_cover(
+                                image_bytes, caption_hook or content_theme, colors)
+                        # Standard posts (IG, LI, FB, X, Threads, Mastodon, Bluesky): no text overlay
+                        image_mime = "image/png"
                     except Exception as pp_err:
-                        logger.warning("Carousel slide post-processing failed: %s", pp_err)
+                        logger.warning("Image post-processing failed (non-fatal): %s", pp_err)
+
+                    # Generate alt-text for accessibility-first platforms
+                    alt_text = await _generate_alt_text(image_bytes, content_theme, platform)
+
                     try:
-                        slide_url, slide_gcs = await upload_image_to_gcs(slide_bytes, slide_mime, post_id)
-                        bt.budget_tracker.record_image()
-                        all_image_urls.append(slide_url)
-                        all_image_gcs_uris.append(slide_gcs)
+                        image_url, image_gcs_uri = await upload_image_to_gcs(image_bytes, image_mime, post_id)
+                        await bt.budget_tracker.record_image()
+                        _img_event_data = {"url": image_url, "mime_type": image_mime, "gcs_uri": image_gcs_uri}
+                        if alt_text:
+                            _img_event_data["alt_text"] = alt_text
                         yield {
                             "event": "image",
-                            "data": {"url": slide_url, "mime_type": slide_mime, "gcs_uri": slide_gcs}
+                            "data": _img_event_data,
                         }
                     except Exception as upload_err:
-                        logger.error("Carousel slide upload failed: %s", upload_err)
+                        logger.error("Image upload failed: %s", upload_err)
+                        b64 = base64.b64encode(image_bytes).decode()
+                        yield {
+                            "event": "image",
+                            "data": {
+                                "url": f"data:{image_mime};base64,{b64}",
+                                "mime_type": image_mime,
+                                "fallback": True,
+                            }
+                        }
+                else:
+                    logger.error("Image generation returned no image for post %s", post_id)
+            except Exception as img_err:
+                logger.error("Image generation failed for post %s: %s", post_id, img_err)
 
-                # Re-render cover with actual Slide 1 hook text (fixes cover/caption mismatch)
-                if slide_descriptions and cover_raw_bytes:
-                    try:
-                        _cover_hook = _extract_slide_headline(slide_descriptions[0])
-                        if _cover_hook and _cover_hook != (content_theme or caption_hook):
-                            _new_cover = create_carousel_cover(cover_raw_bytes, _cover_hook, colors, _aspect)
-                            _cover_url, _cover_gcs = await upload_image_to_gcs(_new_cover, "image/png", post_id)
-                            if all_image_urls:
-                                all_image_urls[0] = _cover_url
-                            if all_image_gcs_uris:
-                                all_image_gcs_uris[0] = _cover_gcs
-                            image_url = _cover_url
-                            image_gcs_uri = _cover_gcs
-                            yield {"event": "image_update", "data": {"index": 0, "url": _cover_url, "mime_type": "image/png", "gcs_uri": _cover_gcs}}
-                    except Exception as cover_err:
-                        logger.warning("Cover re-render failed (non-fatal): %s", cover_err)
+            # ── Init image URL lists (carousel slides appended below) ──
+            all_image_urls: list[str] = []
+            all_image_gcs_uris: list[str] = []
+            if image_url:
+                all_image_urls.append(image_url)
+            if image_gcs_uri:
+                all_image_gcs_uris.append(image_gcs_uri)
+
+            # ── Carousel: generate additional slide images ──
+            if derivative_type == "carousel" and final_caption:
+                slide_descriptions = _parse_slide_descriptions(final_caption, max_slides=_spec.carousel_slide_count)
+                if len(slide_descriptions) > 1:
+                    yield {"event": "status", "data": {"message": "Generating carousel slides..."}}
+                    extra_slides = await _generate_carousel_images(
+                        slide_descriptions,
+                        business_name=business_name,
+                        visual_style=visual_style,
+                        color_hint=color_hint,
+                        image_style_directive=image_style_directive,
+                        style_ref_block=style_ref_block,
+                        platform=platform,
+                        post_id=post_id,
+                        cover_image_bytes=cover_raw_bytes,
+                        image_style=_image_style,
+                    )
+                    for slide_idx, (slide_bytes, slide_mime) in enumerate(extra_slides):
+                        # Post-process each slide: resize + number badge + title
+                        try:
+                            slide_bytes = resize_to_aspect(slide_bytes, _aspect)
+                            _slide_title = _extract_slide_headline(slide_descriptions[slide_idx + 1]) if slide_idx + 1 < len(slide_descriptions) else ""
+                            # Final slide: if headline was truncated with ellipsis, use clean fallback
+                            if slide_idx + 2 == len(slide_descriptions) and _slide_title.endswith('…'):
+                                _slide_title = "Your Next Step"
+                            slide_bytes = create_carousel_slide(
+                                slide_bytes, _slide_title, colors, _aspect)
+                            slide_mime = "image/png"
+                        except Exception as pp_err:
+                            logger.warning("Carousel slide post-processing failed: %s", pp_err)
+                        try:
+                            slide_url, slide_gcs = await upload_image_to_gcs(slide_bytes, slide_mime, post_id)
+                            await bt.budget_tracker.record_image()
+                            all_image_urls.append(slide_url)
+                            all_image_gcs_uris.append(slide_gcs)
+                            yield {
+                                "event": "image",
+                                "data": {"url": slide_url, "mime_type": slide_mime, "gcs_uri": slide_gcs}
+                            }
+                        except Exception as upload_err:
+                            logger.error("Carousel slide upload failed: %s", upload_err)
+
+                    # Re-render cover with actual Slide 1 hook text (fixes cover/caption mismatch)
+                    if slide_descriptions and cover_raw_bytes:
+                        try:
+                            _cover_hook = _extract_slide_headline(slide_descriptions[0])
+                            if _cover_hook and _cover_hook != (content_theme or caption_hook):
+                                _new_cover = create_carousel_cover(cover_raw_bytes, _cover_hook, colors, _aspect)
+                                _cover_url, _cover_gcs = await upload_image_to_gcs(_new_cover, "image/png", post_id)
+                                if all_image_urls:
+                                    all_image_urls[0] = _cover_url
+                                if all_image_gcs_uris:
+                                    all_image_gcs_uris[0] = _cover_gcs
+                                image_url = _cover_url
+                                image_gcs_uri = _cover_gcs
+                                yield {"event": "image_update", "data": {"index": 0, "url": _cover_url, "mime_type": "image/png", "gcs_uri": _cover_gcs}}
+                        except Exception as cover_err:
+                            logger.warning("Cover re-render failed (non-fatal): %s", cover_err)
 
         yield {
             "event": "complete",

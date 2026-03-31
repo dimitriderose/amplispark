@@ -547,6 +547,7 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
               {videoStatus === 'idle' ? (
                 <button
                   onClick={() => startGeneration('fast')}
+                  disabled={videoStatus !== 'idle'}
                   style={{
                     width: '100%', padding: '8px', borderRadius: 7, border: 'none',
                     background: `linear-gradient(135deg, ${A.violet}, ${A.indigo})`,
@@ -651,10 +652,13 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
                   <div style={{ textAlign: 'center', padding: 20 }}>
                     <button
                       onClick={() => startGeneration('fast')}
+                      disabled={videoStatus === 'generating'}
                       style={{
                         padding: '12px 24px', borderRadius: 10, border: 'none',
-                        background: `linear-gradient(135deg, ${A.violet}, ${A.indigo})`,
-                        color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                        background: videoStatus === 'generating' ? A.surfaceAlt : `linear-gradient(135deg, ${A.violet}, ${A.indigo})`,
+                        color: videoStatus === 'generating' ? A.textMuted : 'white',
+                        fontSize: 13, fontWeight: 600,
+                        cursor: videoStatus === 'generating' ? 'not-allowed' : 'pointer',
                       }}
                     >
                       Generate 8-sec Clip

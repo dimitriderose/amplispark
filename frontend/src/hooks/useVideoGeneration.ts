@@ -9,9 +9,13 @@ export function useVideoGeneration(postId: string, brandId: string, existingVide
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState('')
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // H8/M20: Guard against duplicate submissions
+  const isGeneratingRef = useRef(false)
 
   const startGeneration = useCallback(
     async (tier: 'fast' | 'standard' = 'fast') => {
+      if (isGeneratingRef.current) return
+      isGeneratingRef.current = true
       setStatus('generating')
       setProgress(0)
       setError('')
@@ -25,6 +29,7 @@ export function useVideoGeneration(postId: string, brandId: string, existingVide
         intervalRef.current = setInterval(async () => {
           if (Date.now() - startTime > MAX_POLL_MS) {
             clearInterval(intervalRef.current!)
+            isGeneratingRef.current = false
             setError('Video generation timed out. Please try again.')
             setStatus('error')
             return
@@ -36,11 +41,13 @@ export function useVideoGeneration(postId: string, brandId: string, existingVide
 
             if (job.status === 'complete') {
               clearInterval(intervalRef.current!)
+              isGeneratingRef.current = false
               setVideoUrl(job.result?.video_url || null)
               setProgress(100)
               setStatus('complete')
             } else if (job.status === 'failed') {
               clearInterval(intervalRef.current!)
+              isGeneratingRef.current = false
               setError(job.result?.error || 'Video generation failed')
               setStatus('error')
             }
@@ -49,6 +56,7 @@ export function useVideoGeneration(postId: string, brandId: string, existingVide
           }
         }, 5000)
       } catch (err: any) {
+        isGeneratingRef.current = false
         setError(err.message || 'Failed to start video generation')
         setStatus('error')
       }
@@ -59,6 +67,7 @@ export function useVideoGeneration(postId: string, brandId: string, existingVide
   // Reset state when postId or existingVideoUrl changes (navigating between posts)
   useEffect(() => {
     // Clear any in-flight polling from the previous post
+    isGeneratingRef.current = false
     if (intervalRef.current) {
       clearInterval(intervalRef.current)
       intervalRef.current = null

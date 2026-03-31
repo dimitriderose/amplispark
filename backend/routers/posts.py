@@ -79,13 +79,34 @@ class PatchPostBody(_PydanticBaseModel):
 async def list_posts_endpoint(
     brand_id: str = Query(...),
     plan_id: str | None = Query(None),
+    limit: int = Query(50),
+    offset: int = Query(0),
 ):
     """List all posts for a brand, optionally filtered by plan."""
     posts = await firestore_client.list_posts(brand_id, plan_id)
-    await asyncio.gather(
-        *[_auto_fail_stale_generating(p, brand_id) for p in posts],
-        *[_refresh_signed_urls(p) for p in posts],
-    )
+
+    # Batch-update stale "generating" posts instead of N+1 individual writes
+    stale_ids = []
+    for post in posts:
+        if post.get("status") != "generating":
+            continue
+        created = post.get("created_at")
+        if created:
+            if created.tzinfo is None:
+                created = created.replace(tzinfo=timezone.utc)
+        if created and (datetime.now(timezone.utc) - created) > timedelta(minutes=10):
+            post_id = post.get("post_id")
+            if post_id:
+                stale_ids.append(post_id)
+                post["status"] = "failed"  # update in-memory
+    if stale_ids:
+        await asyncio.gather(*[
+            firestore_client.update_post(brand_id, pid, {"status": "failed"})
+            for pid in stale_ids
+        ])
+
+    posts = posts[offset:offset + limit]
+    await asyncio.gather(*[_refresh_signed_urls(p) for p in posts])
     return {"posts": posts}
 
 
@@ -180,6 +201,9 @@ async def export_plan_zip(
     if not posts:
         raise HTTPException(status_code=404, detail="No posts found for this plan")
 
+    _IMAGE_SIZE_WARN = 50 * 1024 * 1024   # 50 MB
+    _VIDEO_SIZE_LIMIT = 100 * 1024 * 1024  # 100 MB
+
     # Download image bytes directly from GCS
     async def _download_post_image(post: dict) -> bytes | None:
         gcs_uri: str | None = post.get("image_gcs_uri")
@@ -193,6 +217,12 @@ async def export_plan_zip(
             bucket = get_bucket()
             blob = bucket.blob(blob_path)
             loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, blob.reload)
+            if blob.size and blob.size > _IMAGE_SIZE_WARN:
+                logger.warning(
+                    "Image blob for post %s is very large (%d bytes)",
+                    post.get("post_id"), blob.size,
+                )
             return await loop.run_in_executor(None, blob.download_as_bytes)
         except Exception as exc:
             logger.warning("Could not download image for post %s: %s", post.get("post_id"), exc)
@@ -214,6 +244,13 @@ async def export_plan_zip(
             bucket = get_bucket()
             blob = bucket.blob(blob_path)
             loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, blob.reload)
+            if blob.size and blob.size > _VIDEO_SIZE_LIMIT:
+                logger.warning(
+                    "Video blob for post %s exceeds 100 MB (%d bytes), skipping download",
+                    post.get("post_id"), blob.size,
+                )
+                return None
             return await loop.run_in_executor(None, blob.download_as_bytes)
         except Exception as exc:
             logger.warning("Could not download video for post %s: %s", post.get("post_id"), exc)
@@ -530,7 +567,7 @@ async def download_calendar_ics(brand_id: str, plan_id: str):
     )
 
 
-_EMAIL_RE = re.compile(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$")
+_EMAIL_RE = re.compile(r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$')
 
 
 @router.post("/brands/{brand_id}/plans/{plan_id}/calendar/email")
@@ -562,6 +599,6 @@ async def email_calendar(
         await send_calendar_email(email, brand_name, ics_content)
     except Exception as e:
         logger.error("Failed to send calendar email to %s: %s", email, e)
-        raise HTTPException(status_code=500, detail=f"Failed to send email: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
     return {"status": "sent", "to": email}

@@ -14,10 +14,14 @@ router = APIRouter()
 
 
 @router.get("/brands")
-async def list_brands(owner_uid: str = Query(...)):
+async def list_brands(
+    owner_uid: str = Query(...),
+    limit: int = Query(50),
+    offset: int = Query(0),
+):
     """List all brands owned by a given anonymous UID."""
     brands = await firestore_client.list_brands_by_owner(owner_uid)
-    return {"brands": brands}
+    return {"brands": brands[offset:offset + limit]}
 
 
 @router.post("/brands")
@@ -84,7 +88,7 @@ async def analyze_brand(brand_id: str, data: BrandProfileCreate):
     except Exception as e:
         logger.error(f"Brand analysis error for {brand_id}: {e}")
         await firestore_client.update_brand(brand_id, {"analysis_status": "failed"})
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/brands/{brand_id}")

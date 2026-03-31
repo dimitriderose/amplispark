@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   auth,
   signInWithGoogle,
@@ -18,8 +18,12 @@ export function useAuth() {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
 
+  const isMounted = useRef(true)
+
   useEffect(() => {
+    isMounted.current = true
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser: User | null) => {
+      if (!isMounted.current) return
       if (firebaseUser) {
         setUid(firebaseUser.uid)
         setUser({
@@ -33,7 +37,10 @@ export function useAuth() {
       }
       setLoading(false)
     })
-    return unsubscribe
+    return () => {
+      isMounted.current = false
+      unsubscribe()
+    }
   }, [])
 
   const signIn = useCallback(async () => {

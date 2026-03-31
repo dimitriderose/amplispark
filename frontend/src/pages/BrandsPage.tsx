@@ -31,7 +31,7 @@ export default function BrandsPage() {
     if (!uid) return
     api.listBrands(uid)
       .then((res) => setBrands((res as unknown as { brands: BrandSummary[] }).brands || []))
-      .catch(() => {})
+      .catch((e) => { console.error('Failed to load brands:', e) })
   }, [uid])
 
   if (loading) return null
@@ -59,7 +59,7 @@ export default function BrandsPage() {
             Describe your business, get an AI-powered content strategy, and generate a week of posts in minutes.
           </p>
           <button
-            onClick={() => navigate('/onboard')}
+            onClick={() => navigate('/onboard?new=true')}
             style={{
               padding: '12px 32px',
               borderRadius: 10,

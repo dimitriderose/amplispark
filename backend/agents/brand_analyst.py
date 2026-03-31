@@ -201,8 +201,12 @@ Return ONLY a valid JSON object with these exact keys:
             ),
         )
 
-        profile = json.loads(response.text.strip())
+        raw = response.text.strip()
+        profile = json.loads(raw)
 
+    except json.JSONDecodeError as jde:
+        logger.warning("Brand analyst: invalid JSON from LLM (first 200 chars): %s — %s", raw[:200], jde)
+        profile = _fallback_profile(description, website_url)
     except Exception as e:
         logger.error(f"Brand analysis failed: {e}")
         # Fallback: return minimal profile from description
