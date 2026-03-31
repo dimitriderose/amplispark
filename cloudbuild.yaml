@@ -14,6 +14,16 @@
 # ──────────────────────────────────────────────────────────────────────────────
 
 steps:
+  # Step 0: Run backend tests
+  - name: 'python:3.12-slim'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        pip install --quiet -r backend/requirements.txt &&
+        cd backend &&
+        python -m pytest tests/ -v --tb=short
+
   # Step 1: Build Docker image with Firebase config as build args
   - name: 'gcr.io/cloud-builders/docker'
     args:
