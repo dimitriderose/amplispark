@@ -656,7 +656,29 @@ video_first:        Caption-only (no image gen) → auto-trigger Veo text-to-vid
 
 The platform's `char_limits["video_first"]` enforces teaser-length captions (e.g., 200 chars for Instagram, 500 for LinkedIn).
 
-### 3.4.2 Brand Reference Image Injection
+### 3.4.2 Carousel Optimization (v1.9)
+
+Carousel image generation was optimized from sequential batches to full concurrency:
+
+- **Semaphore raised from 3 to 7:** `asyncio.Semaphore(7)` in `carousel_builder.py` allows all 7 carousel slides to generate concurrently. Previously, a semaphore of 3 produced images in 3+3+1 sequential batches.
+- **Generation time improvement:** ~15 min → ~3 min for a full 7-slide carousel (bottleneck is now the slowest single Gemini image generation call, not cumulative sequential calls).
+- **Text-only regeneration:** The `regen_mode=text_only` query parameter on `GET /api/generate/{planId}/{day}` enables regenerating captions and hashtags without re-generating images. The `existing_images` parameter passes through the current image URLs, which are re-emitted as SSE image events without touching the Gemini image API. This supports rapid caption iteration without burning image budget.
+
+```python
+# backend/agents/carousel_builder.py — concurrent carousel generation
+semaphore = asyncio.Semaphore(7)  # v1.9: raised from 3
+
+async def generate_carousel_images(brand, brief, slide_prompts: list[str]):
+    """Generate all carousel slides concurrently within semaphore bounds."""
+    async def gen_slide(prompt):
+        async with semaphore:
+            return await generate_single_image(brand, brief, prompt)
+
+    results = await asyncio.gather(*[gen_slide(p) for p in slide_prompts])
+    return results
+```
+
+### 3.4.3 Brand Reference Image Injection
 
 The Content Creator and Video Creator both use the Brand Assets Service (`backend/services/brand_assets.py`) to inject up to 3 brand reference images into every Gemini generation call. This ensures visual consistency with the brand's actual assets.
 
@@ -668,7 +690,7 @@ ref_images = await get_brand_reference_images(brand_profile, max_images=3)
 # Cached in-memory per brand_id for process lifetime
 ```
 
-### 3.4.3 Platform Registry Integration
+### 3.4.4 Platform Registry Integration
 
 The Content Creator imports platform-specific content prompts from the Platform Registry (`backend/platforms.py`) rather than maintaining local platform dicts. This ensures all agents share a single source of truth for platform formatting rules.
 
@@ -2586,6 +2608,7 @@ The CI/CD pipeline is defined in `cloudbuild.yaml` and triggered via `scripts/de
 
 | Step | Action | Key Details |
 |------|--------|-------------|
+| 0. Test (v1.9) | Run pytest | `python:3.12-slim` image, `pip install -r requirements.txt`, `pytest backend/tests/` — blocks build on failure |
 | 1. Docker Build | Build multi-stage image | Firebase `VITE_*` vars passed as `--build-arg` (baked into JS bundle by Vite) |
 | 2. Push | Push to Artifact Registry | `{region}-docker.pkg.dev/{project}/amplifi/amplifi:latest` |
 | 3. Deploy | Deploy to Cloud Run | Runtime env vars: `GOOGLE_API_KEY`, `CORS_ORIGINS`, `RESEND_API_KEY`, `NOTION_*`, `GEMINI_MODEL` |
@@ -2621,7 +2644,7 @@ The `deploy.sh` script:
 | `NOTION_CLIENT_ID` | No | `""` | Notion OAuth client ID |
 | `NOTION_CLIENT_SECRET` | No | `""` | Notion OAuth client secret |
 | `NOTION_REDIRECT_URI` | No | `""` | Notion OAuth redirect URI (must match Cloud Run URL) |
-| `FERNET_KEY` | No | `""` | Fernet encryption key for Notion OAuth token encryption at rest |
+| `TOKEN_ENCRYPT_KEY` | **Yes** (v1.9) | — | Fernet encryption key for OAuth token encryption at rest. **Mandatory** — app raises `RuntimeError` on startup if missing. Replaces optional `FERNET_KEY`. |
 
 **Build-time environment** (Docker build args — baked into JS bundle):
 
@@ -2813,7 +2836,30 @@ amplifi-hackaton/
 | **End-to-End** | Full flow: paste URL → analysis → calendar → generate 7 posts → review | Manual testing with real business URLs | Week 2 Friday |
 | **Budget** | Verify cost tracking accuracy across multiple generations | Automated test with counter assertions | Week 2 |
 
-## 12.2 Critical Test Cases
+## 12.2 Test Infrastructure (v1.9)
+
+**Stack:** pytest + pytest-asyncio + pytest-cov. All tests run with `pytest` from the project root. Async tests use `@pytest.mark.asyncio` and are executed with the asyncio event loop.
+
+**Shared fixtures (`backend/tests/conftest.py`):**
+- `mock_firebase_auth` — patches `firebase_admin.auth.verify_id_token` to return a deterministic decoded token
+- `mock_firestore` — patches `firestore_client` with an in-memory dict-backed store
+- `sample_brand` — returns a complete brand profile dict with all required fields
+- `sample_plan` — returns a content plan with 7 day briefs
+- `sample_post` — returns a generated post document
+
+**35 tests across 5 test files:**
+
+| File | Tests | Coverage |
+|------|-------|----------|
+| `test_auth_middleware.py` | 12 | Token verification, missing header, expired token, invalid token, brand ownership check, cross-user access denial |
+| `test_token_encryption.py` | 6 | Encrypt/decrypt round-trip, missing key RuntimeError, corrupted ciphertext, key rotation |
+| `test_budget_tracker.py` | 12 | can_generate_image, record_image, record_video, budget exhaustion, concurrent access, Firestore persistence across cold starts |
+| `test_brand_sanitization.py` | 2 | XSS prevention in brand names, SQL-like injection in description field |
+| `test_post_operations.py` | 3 | Soft delete sets status+timestamp, list_posts excludes deleted, delete idempotency |
+
+**CI integration:** `cloudbuild.yaml` runs pytest as Step 0 before the Docker build (see §10.4). A test failure blocks the build and deploy.
+
+## 12.3 Critical Test Cases
 
 ```python
 # test_content_creator.py
@@ -2823,10 +2869,10 @@ async def test_interleaved_output_has_text_and_image():
     brand = sample_brand_profile()
     brief = sample_day_brief()
     result = await generate_post_fallback(brand, brief)
-    
+
     text_parts = [r for r in result if r["type"] == "text"]
     image_parts = [r for r in result if r["type"] == "image"]
-    
+
     assert len(text_parts) >= 1, "Must have at least one text part (caption)"
     assert len(image_parts) >= 1, "Must have at least one image"
 
@@ -2898,9 +2944,50 @@ async def stream_and_upload(response_parts):
 
 ## 13.3 Observability
 
+### 13.3.1 Structured JSON Logging (v1.9)
+
+All backend logging uses `python-json-logger` to emit JSON-formatted log entries. Cloud Logging automatically parses the JSON structure, enabling log-based queries on any field.
+
+**RequestContextMiddleware (`backend/middleware_logging.py`):**
+- Assigns a unique `request_id` (UUID4) to every incoming request via `contextvars`
+- Extracts `user_uid` from the Firebase auth token and propagates it via `contextvars`
+- Logs `request_complete` event on every response with: `method`, `path`, `status_code`, `duration_ms`, `user_uid`
+- Skips `/health` endpoint to reduce noise from Cloud Run health checks
+- All downstream `logger.*` calls automatically include `request_id` and `user_uid` in the JSON output
+
 ```python
-# Key metrics
-logger.info("generation_event", extra={
+# backend/middleware_logging.py — RequestContextMiddleware
+import contextvars, uuid, time, logging
+from pythonjsonlogger import json as json_log
+
+request_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("request_id", default="")
+user_uid_var: contextvars.ContextVar[str] = contextvars.ContextVar("user_uid", default="")
+
+class RequestContextMiddleware:
+    async def __call__(self, request, call_next):
+        request_id_var.set(str(uuid.uuid4()))
+        start = time.monotonic()
+        response = await call_next(request)
+        if request.url.path != "/health":
+            logger.info("request_complete", extra={
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": response.status_code,
+                "duration_ms": round((time.monotonic() - start) * 1000),
+                "user_uid": user_uid_var.get(),
+                "request_id": request_id_var.get(),
+            })
+        return response
+```
+
+### 13.3.2 Metric Logging (v1.9)
+
+Structured metric logs are emitted at key points throughout the application. Each metric log includes an `extra` dict with a `metric_name` field, enabling Cloud Monitoring log-based metrics to trigger alerts and dashboards.
+
+```python
+# Key metric events and their extra fields:
+logger.info("generation_complete", extra={
+    "metric_name": "generation_complete",
     "brand_id": brand_id,
     "plan_id": plan_id,
     "day_index": day_index,
@@ -2912,6 +2999,30 @@ logger.info("generation_event", extra={
     "review_score": review_score,
     "estimated_cost": cost,
     "budget_remaining": budget_remaining,
+})
+
+logger.error("generation_failed", extra={
+    "metric_name": "generation_failed",
+    "brand_id": brand_id, "plan_id": plan_id,
+    "error_type": type(exc).__name__,
+})
+
+logger.warning("auth_failure", extra={
+    "metric_name": "auth_failure",
+    "path": request.url.path,
+    "reason": "expired_token" | "invalid_token" | "missing_header",
+})
+
+logger.info("budget_record", extra={
+    "metric_name": "budget_record",
+    "record_type": "image" | "video",
+    "count": num, "cost": cost,
+})
+
+logger.info("notion_export", extra={
+    "metric_name": "notion_export",
+    "brand_id": brand_id, "plan_id": plan_id,
+    "pages_exported": count,
 })
 ```
 
