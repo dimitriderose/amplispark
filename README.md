@@ -32,13 +32,9 @@ Amplispark uses Gemini's interleaved text + image output to generate copy and vi
 - **Live platform previews** — see how your post will look on each platform with character counts, "see more" fold indicators, and platform-specific formatting.
 - **Notion integration** — connect your Notion workspace via OAuth and export your content calendar directly to a Notion database.
 - **Responsive design** — works on desktop, tablet, and mobile with dedicated breakpoints and touch-friendly controls.
-- **Secure by default** — Google Sign-In with server-side token verification, mandatory Fernet token encryption (fails fast if key is missing), HMAC-signed OAuth state for CSRF protection, tightened CORS policies, sanitized error responses, and per-brand access control.
-- **Structured logging** — all backend logs output as structured JSON via python-json-logger, with request_id, user_uid, and duration_ms on every request. Cloud Logging compatible.
-- **Soft deletes** — posts are soft-deleted (status="deleted" + deleted_at timestamp) instead of hard-deleted, preserving data history.
-- **Pagination** — brand list and post list endpoints support pagination for large datasets.
-- **Double-click protection** — generation, video upload, and bulk operations guard against duplicate submissions.
-- **Onboarding guard** — users with existing brands are redirected to /brands (unless ?new=true), avoiding redundant onboarding.
-- **Auth reliability** — explicit Firebase persistence (browserLocalPersistence) fixes browser-refresh sign-out, protected route component waits for Firebase to restore state, and auth headers on all fetch calls.
+- **Secure by default** — Google Sign-In with server-side token verification, encrypted OAuth tokens, CSRF protection, and per-brand access control.
+- **Stays signed in** — no more unexpected sign-outs on browser refresh. Firebase auth state persists across sessions.
+- **Smart onboarding** — users with existing brands skip straight to the brands page. Add new brands anytime via the dashboard.
 
 ## How it works
 
@@ -55,16 +51,14 @@ Amplispark uses Gemini's interleaved text + image output to generate copy and vi
 - **Agent Framework:** Google ADK (Agent Development Kit)
 - **Backend:** FastAPI on Cloud Run (port 8080), modular router architecture
 - **Auth:** Firebase Google Sign-In (persistent UID, account dropdown with profile photo) + firebase-admin server-side token verification
-- **Security:** Mandatory Fernet encryption for stored OAuth tokens, HMAC-signed OAuth state (CSRF protection), tightened CORS, sanitized error responses, path traversal prevention
+- **Security:** Encrypted OAuth tokens, CSRF protection, per-brand access control
 - **Database:** Cloud Firestore
 - **Storage:** Cloud Storage (generated images, videos + uploads)
 - **Video:** Veo 3.1 (AI-generated Reels/TikTok clips)
 - **Email:** Resend API (calendar invite delivery)
 - **Integrations:** Notion API (OAuth + calendar export)
 - **Frontend:** React 19 + TypeScript + Vite 7
-- **Testing:** pytest + pytest-asyncio (35 backend tests across middleware, integrations, budget tracking, brands, and posts)
-- **Logging:** python-json-logger with request context middleware (request_id, user_uid, duration_ms on every log line)
-- **CI/CD:** Cloud Build pipeline (`cloudbuild.yaml` + `scripts/deploy.sh`) — tests run before Docker build, one-command deploy
+- **CI/CD:** Cloud Build pipeline (`cloudbuild.yaml` + `scripts/deploy.sh`) — automated tests + one-command deploy
 - **Infrastructure:** Terraform IaC provisions all GCP resources (APIs, Firestore, GCS, Artifact Registry, Cloud Run, CORS auto-config)
 
 ## Architecture
@@ -89,46 +83,18 @@ User Browser (React 19 + Firebase Google Auth)
                     ├── Brand Assets Service (logo + product photo cache)
                     ├── Notion Client (OAuth + Fernet-encrypted tokens)
                     ├── Email Service (Resend — .ics calendar delivery)
-                    ├── Budget Tracker (Firestore-persisted, survives cold starts)
-                    ├── Structured JSON Logger (request_id, user_uid, duration_ms)
+                    ├── Budget Tracker (usage limits per brand)
                     ├── Firebase Google Auth (persistent UID + server-side verification)
                     ├── Gemini API (generateContent)
                     │   └── responseModalities: ["TEXT", "IMAGE"]
                     ├── Cloud Firestore (brands, plans, posts)
                     └── Cloud Storage (images, videos, assets)
 
-CI/CD:  deploy.sh → Cloud Build → pytest (35 tests) → Docker build → Artifact Registry → Cloud Run
+CI/CD:  deploy.sh → Cloud Build → Docker build → Artifact Registry → Cloud Run
 IaC:    terraform apply provisions all GCP resources in one command
 ```
 
 See the [architecture diagram](docs/architecture-simple.mermaid) for the high-level overview, or the [complete architecture](docs/architecture-complete.mermaid) for the full system with all sub-modules and data flows.
-
-## Testing
-
-35 backend tests (pytest + pytest-asyncio) covering:
-
-- **Middleware** (12 tests) — auth verification, request context, error handling
-- **Integrations** (6 tests) — Notion OAuth flow, token encryption, export logic
-- **Budget Tracker** (12 tests) — usage limits, Firestore persistence, reset cycles
-- **Brands** (2 tests) — brand CRUD and access control
-- **Posts** (3 tests) — post creation, soft deletes, pagination
-
-CI runs the full test suite before the Docker build in `cloudbuild.yaml`. A failing test blocks deployment.
-
-## Observability
-
-- Structured JSON logging on every request (request_id, user_uid, duration_ms) via python-json-logger
-- Metric log lines for generation_complete, generation_failed, auth failures, budget usage, and Notion exports
-- Global exception handler returns clean JSON 500 responses (no internal details leaked)
-- Bounded SSE queue (maxsize=200) prevents memory leaks on disconnected clients
-
-## Performance
-
-- Carousel image concurrency raised from 3 to 7 — cuts carousel generation from ~15 min to ~3 min
-- Text-only regeneration mode (`regen_mode=text_only`) — regenerate captions without re-generating images
-- Brand profile cache with 30-second TTL during generation
-- Batch stale post cleanup (asyncio.gather instead of sequential writes)
-- Firestore-persisted budget tracker survives Cloud Run cold starts and works across instances
 
 ## Quick Start
 
@@ -148,8 +114,8 @@ For local development and deployment instructions, see the [Deployment Guide](do
 
 | Document | Description |
 |---|---|
-| [Product Requirements (PRD)](docs/PRD.md) | v1.8 — Full product spec with 3-step onboarding wizard, guided tour, security hardening, mandatory token encryption, structured logging, soft deletes, pagination, testing, observability |
-| [Technical Design (TDD)](docs/TDD.md) | v1.9 — Implementation spec covering Cloud Build CI/CD, pytest test suite, structured JSON logging, HMAC OAuth state, performance optimizations, Firestore-persisted budget tracker |
+| [Product Requirements (PRD)](docs/PRD.md) | v1.8 — Full product spec: 3-step onboarding wizard, guided tour, content generation, export suite, security, multi-brand support |
+| [Technical Design (TDD)](docs/TDD.md) | v1.9 — Implementation spec: API design, agent pipeline, CI/CD, testing, logging, security, performance |
 | [Deployment Guide](docs/DEPLOYMENT.md) | Complete deployment guide — local dev, Cloud Build CI/CD (`deploy.sh`), manual Cloud Run deploy, Terraform IaC, environment variables, troubleshooting |
 | [Architecture Diagram](docs/architecture-simple.mermaid) | High-level system architecture — ADK pipeline, Gemini APIs, GCP services |
 | [Architecture (Complete)](docs/architecture-complete.mermaid) | Full detailed diagram — all sub-modules, routers, services, data flows |
