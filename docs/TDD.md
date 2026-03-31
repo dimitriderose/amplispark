@@ -4,7 +4,7 @@
 **Category:** ✍️ Creative Storyteller
 **Author:** Software Architecture Team
 **Companion Document:** PRD — Amplispark v1.5
-**Version:** 1.8 | March 15, 2026 (updated from v1.7 — added NUX: onboarding wizard + guided tour)
+**Version:** 1.9 | March 31, 2026 (updated from v1.8 — structured JSON logging, security hardening, Firestore-backed budget tracker, carousel optimization, test infrastructure, soft deletes, auth improvements)
 
 ---
 
@@ -12,7 +12,7 @@
 
 This Technical Design Document specifies the implementation architecture for Amplispark, an AI-powered creative director that produces complete social media content packages using Gemini's interleaved text and image output. It translates the PRD's product requirements into concrete engineering decisions, API contracts, data models, code structure, and deployment specifications.
 
-**Scope:** All P0 and P1 features from the PRD, plus shipped P2 features: brand analysis from URL (with deterministic analysis at temperature 0.15), content calendar generation with event integration and social proof tier system, interleaved post generation with carousel support, image fallback, video_first pipeline, and brand reference image injection, multiplicative two-step review scoring with platform-specific weights (15 profiles: 11 platforms + 4 derivative overrides), React dashboard with tab-based navigation and Edit Brand page, image/video storage, streaming UI, Firebase Google Sign-In with account dropdown and Firebase ID token verification middleware, dedicated Brands page with pagination (5 per page), tier-aware Gemini Live voice coaching with content calendar context, Veo 3.1 video generation, full ZIP export with media, Platform Registry (11 platforms), Notion integration (OAuth + Fernet-encrypted tokens + database export), calendar .ics export with email delivery, platform-specific caption/hashtag enforcement, Cloud Build CI/CD pipeline with `deploy.sh`, SPA catch-all routing for deep links on Cloud Run with path traversal prevention, AI-researched posting frequency with Google Search grounding, multi-platform calendar generation with brief_index/day_index separation, modular backend architecture (7 FastAPI routers, 5 content creator sub-modules, shared constants/clients/middleware), centralized frontend type system with generic hooks, 3-step onboarding wizard with deferred brand creation and sessionStorage persistence, and 11-step SVG-based guided tour with per-brand completion tracking.
+**Scope:** All P0 and P1 features from the PRD, plus shipped P2 features: brand analysis from URL (with deterministic analysis at temperature 0.15), content calendar generation with event integration and social proof tier system, interleaved post generation with carousel support, image fallback, video_first pipeline, and brand reference image injection, multiplicative two-step review scoring with platform-specific weights (15 profiles: 11 platforms + 4 derivative overrides), React dashboard with tab-based navigation and Edit Brand page, image/video storage, streaming UI, Firebase Google Sign-In with account dropdown and Firebase ID token verification middleware, dedicated Brands page with pagination (5 per page), tier-aware Gemini Live voice coaching with content calendar context, Veo 3.1 video generation, full ZIP export with media, Platform Registry (11 platforms), Notion integration (OAuth + Fernet-encrypted tokens + database export), calendar .ics export with email delivery, platform-specific caption/hashtag enforcement, Cloud Build CI/CD pipeline with `deploy.sh`, SPA catch-all routing for deep links on Cloud Run with path traversal prevention, AI-researched posting frequency with Google Search grounding, multi-platform calendar generation with brief_index/day_index separation, modular backend architecture (7 FastAPI routers, 5 content creator sub-modules, shared constants/clients/middleware), centralized frontend type system with generic hooks, 3-step onboarding wizard with deferred brand creation and sessionStorage persistence, 11-step SVG-based guided tour with per-brand completion tracking, structured JSON logging with request context propagation, global exception handler, HMAC-signed OAuth state, Firestore-persisted budget tracker, 7-slide concurrent carousel generation, bounded SSE queues, soft deletes for posts, ProtectedRoute auth wrapper, pytest test infrastructure (35 tests) with CI integration, and double-click protection across generation flows.
 
 **Out of scope (unspecified):** Post analytics dashboard (P3). Remaining P2 features are specified in §14.1. P3 features are additive and do not affect core architecture.
 
@@ -153,10 +153,16 @@ All API routes are protected by a middleware chain: (1) `verify_firebase_token()
 
 Rationale: The previous auth model relied on client-side UID passing. Server-side token verification prevents unauthorized access to other users' brands.
 
-**Decision 10: Fernet Encryption for OAuth Tokens**
-Notion OAuth access tokens are encrypted at rest using Fernet (AES-128-CBC + HMAC-SHA256) before storage in Firestore. The encryption key is derived from the application's secret configuration.
+**Decision 10: Security Hardening — Token Encryption, HMAC OAuth State, CORS Lockdown**
+Notion OAuth access tokens are encrypted at rest using Fernet (AES-128-CBC + HMAC-SHA256) before storage in Firestore. The encryption key is derived from the application's secret configuration. As of v1.9, token encryption is **mandatory** — the application raises `RuntimeError` on startup if `TOKEN_ENCRYPT_KEY` is not set, preventing accidental plaintext token storage.
 
-Rationale: OAuth tokens stored in plaintext in Firestore would be exposed if the database were compromised. Fernet provides authenticated encryption with a simple API.
+**HMAC-signed OAuth state (v1.9):** The Notion OAuth flow now generates an HMAC-SHA256 signature of `brand_id` using the application secret as the `state` parameter. On callback, the server recomputes the HMAC and compares — rejecting any request where the state does not match. This prevents CSRF attacks and ensures the OAuth callback is bound to the originating brand.
+
+**Tightened CORS (v1.9):** The CORS middleware was locked down from `allow_methods=["*"], allow_headers=["*"]` to explicit lists: `allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]` and explicit `allow_headers` (Authorization, Content-Type, etc.). This reduces the attack surface from overly permissive wildcard CORS.
+
+**Error response sanitization (v1.9):** All routers return sanitized error responses that do not leak internal details (stack traces, file paths, database structure). The global exception handler (see §4.2) catches unhandled exceptions and returns a clean `{"detail": "Internal server error"}` JSON response.
+
+Rationale: OAuth tokens stored in plaintext in Firestore would be exposed if the database were compromised. Fernet provides authenticated encryption with a simple API. The mandatory key check, HMAC state validation, explicit CORS, and error sanitization form a defense-in-depth security posture.
 
 **Decision 11: Multiplicative Two-Step Scoring System**
 The Review Agent scoring was refactored from a single LLM-decided overall score (prone to inflation) to a two-step computation:
@@ -1087,19 +1093,48 @@ Response: { status: "approved" | "unapproved" }
 > **Note (v1.7):** The app setup below reflects the modular router architecture. `server.py` is now ~65 lines. Each router is a separate module in `backend/routers/`.
 
 ```python
-# backend/server.py (~65 lines — app setup + router includes)
-from fastapi import FastAPI
+# backend/server.py (~80 lines — app setup + middleware + router includes + exception handler)
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from backend.middleware import firebase_auth_middleware
+from backend.middleware_logging import RequestContextMiddleware
 from backend.routers import brands, plans, posts, generation, media, integrations, voice
+import logging
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
-# CORS middleware
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+# Structured JSON logging middleware (v1.9) — must be added before CORS
+# Uses contextvars to propagate request_id and user_uid across async call stack
+app.add_middleware(RequestContextMiddleware)
+
+# CORS middleware — explicit methods and headers (v1.9, tightened from wildcards)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[os.environ.get("CORS_ORIGINS", "http://localhost:5173")],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "X-Request-ID"],
+    allow_credentials=True,
+)
 
 # Firebase Auth middleware (verifies ID tokens on all /api/* routes)
 app.middleware("http")(firebase_auth_middleware)
+
+# Global exception handler (v1.9) — catches unhandled errors, returns clean JSON 500
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error("unhandled_exception", extra={
+        "path": request.url.path,
+        "method": request.method,
+        "error_type": type(exc).__name__,
+        "error_detail": str(exc),
+    })
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+    )
 
 # Router includes — each router owns its route prefix
 app.include_router(brands.router, prefix="/api")       # /api/brands/*
