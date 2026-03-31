@@ -2705,12 +2705,21 @@ amplifi-hackaton/
 │   │   ├── post.py                # Post, ReviewResult models
 │   │   └── api.py                 # Request/Response models
 │   │
-│   ├── requirements.txt
+│   ├── tests/                     # v1.9: pytest test suite (35 tests across 5 files)
+│   │   ├── conftest.py            # Shared fixtures: mock Firebase auth, mock Firestore, sample data
+│   │   ├── test_auth_middleware.py # Auth middleware tests (12 tests)
+│   │   ├── test_token_encryption.py # Token encryption tests (6 tests)
+│   │   ├── test_budget_tracker.py # Budget tracker tests (12 tests)
+│   │   ├── test_brand_sanitization.py # Brand sanitization tests (2 tests)
+│   │   └── test_post_operations.py # Post operations tests (3 tests)
+│   │
+│   ├── requirements.txt           # v1.9: compatible version ranges (>=X,<Y) instead of exact pins
 │   ├── Dockerfile                 # Multi-stage: Node.js frontend build + Python runtime
 │   └── .env.example
 ├── frontend/
 │   ├── src/
 │   │   ├── App.tsx                # React Router (/, /brands, /onboard, /dashboard/:id, ...)
+│   │   │                          #   v1.9: ProtectedRoute component wraps authenticated routes
 │   │   ├── types/                 # Centralized type definitions (v1.7)
 │   │   │   ├── index.ts           # Shared interfaces (Brand, Plan, Post, Review, etc.)
 │   │   │   └── api.ts             # API response types (ApiResponse<T>, PaginatedResponse, etc.)
@@ -2760,7 +2769,9 @@ amplifi-hackaton/
 │   │   ├── api/
 │   │   │   ├── client.ts         # REST API client (handleResponse + handleBlobResponse)
 │   │   │   │                     #   Sends Firebase ID token in Authorization: Bearer header
+│   │   │   │                     #   v1.9: Auth headers added to all 9 previously-missing fetch calls
 │   │   │   └── firebase.ts       # Firebase config + Google Sign-In
+│   │   │                          #   v1.9: setPersistence(auth, browserLocalPersistence)
 │   │   └── theme.ts              # Design system tokens (colors, spacing)
 │   ├── package.json              # React 19 + react-router-dom + Vite 7
 │   ├── tsconfig.json             # TypeScript config
@@ -2768,7 +2779,7 @@ amplifi-hackaton/
 │   └── index.html
 ├── scripts/
 │   └── deploy.sh                 # One-command Cloud Build deploy
-├── cloudbuild.yaml               # Cloud Build CI/CD pipeline (3 steps)
+├── cloudbuild.yaml               # Cloud Build CI/CD pipeline (4 steps — v1.9: pytest before Docker build)
 ├── terraform/
 │   ├── main.tf                   # All GCP resource definitions
 │   ├── variables.tf              # Input variables
