@@ -1225,6 +1225,9 @@ async def generate_post_endpoint(
 
     async def event_stream():
         # v1.9: bounded SSE queue — prevents unbounded memory growth
+        # put_nowait with QueueFull handling: logs warning and drops the event
+        # rather than blocking or crashing. 200 events is sufficient for a
+        # 7-slide carousel with caption, hashtags, review, and status events.
         queue = asyncio.Queue(maxsize=200)
         post_data = {"texts": [], "images": [], "post_id": None}
 
@@ -1380,6 +1383,15 @@ function usePostGeneration(planId: string, dayIndex: number) {
   return { caption, imageUrl, imageUrls, hashtags, review, error, status, generate };
 }
 ```
+
+### 4.4 Double-Click Protection (v1.9)
+
+Multiple components guard against duplicate submissions that could waste budget or create duplicate posts:
+
+- **`usePostGeneration`:** `isSubmittingRef` (useRef) is set `true` on `generate()` call and checked at entry — prevents duplicate SSE connections from rapid clicks.
+- **`ContentCalendar`:** `generateClicked` state is set on "Generate" button click and reset via `useEffect` when generation completes — disables the button during generation.
+- **`VideoRepurpose`:** Submit button disabled while `isGenerating` is true.
+- **`PostLibrary`:** Bulk operations (approve all, export all) use a loading flag to prevent re-triggering during async operations.
 
 ---
 
@@ -1569,7 +1581,7 @@ amplifi-db/
 │               ├── image_urls: string[]   # ["gs://amplifi-assets/generated/{postId}/image.png"]
 │               ├── hashtags: string[]     # ["#artisanbread", "#freshbaked", ...]
 │               ├── posting_time: string   # "11:30 AM EST"
-│               ├── status: string         # "draft" | "approved" | "posted"
+│               ├── status: string         # "draft" | "approved" | "posted" | "deleted" (v1.9 soft delete)
 │               ├── pillar: string | null          # "education" | "inspiration" | "promotion" | "behind_the_scenes" | "user_generated"
 │               ├── format: string | null          # "original" | "carousel" | "thread_hook" | "blog_snippet" | "story" | "pin" | "video_first"
 │               ├── cta_type: string | null        # "engagement" | "conversion" | "implied" | "none"
@@ -1604,8 +1616,7 @@ amplifi-db/
 │               │
 │               ├── created_at: timestamp
 │               ├── updated_at: timestamp
-│               ├── status: string         # "draft" | "approved" | "posted" | "deleted" (v1.9 soft delete)
-│               └── deleted_at: timestamp | null  # v1.9: set by delete_post, null when active
+│               └── deleted_at: timestamp | null  # v1.9: set by delete_post (soft delete), null when active
 │
 │       └── video_jobs/                    # Subcollection (P1)
 │           └── {jobId}/
@@ -2667,6 +2678,19 @@ The `deploy.sh` script:
 | **Cloud Run** | Application hosting (serverless) | 2M requests/month free |
 | **Cloud Build** | CI/CD image builds | 120 build-min/day free |
 | **Artifact Registry** | Docker image storage | 500 MB free |
+
+## 10.7 Dependency Management (v1.9)
+
+`backend/requirements.txt` uses compatible version ranges (`>=X,<Y`) instead of exact pins. This allows patch updates for security fixes while preventing breaking changes from major version bumps.
+
+**Key dependencies added in v1.9:**
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| `python-json-logger` | `==3.2.1` | JSON-formatted log output for Cloud Logging |
+| `pytest` | `>=8.0.0` | Test runner |
+| `pytest-asyncio` | `>=0.24.0` | Async test support |
+| `pytest-cov` | `>=6.0.0` | Code coverage reporting |
 
 ---
 
@@ -4134,19 +4158,13 @@ Interleaved output (TEXT + IMAGE) requests are computationally expensive and may
 
 **Effort:** 1-2 weeks for queuing + caching. Vertex AI migration is a config change.
 
-## 17.3 🔴 In-Memory BudgetTracker → Persistent Budget Service
+## 17.3 ~~🔴 In-Memory BudgetTracker → Persistent Budget Service~~ ✅ RESOLVED (v1.9)
 
-**Hackathon:** `BudgetTracker` (§8.3) is a Python class instance in memory on a single Cloud Run container.
+**Hackathon:** `BudgetTracker` (§8.3) was a Python class instance in memory on a single Cloud Run container.
 
-**Why it breaks:** Cloud Run is stateless. Instance scales down → budget resets to zero. Two instances running simultaneously have independent counters — each thinks it has the full $100 budget. 2x overspend without knowing.
+**Resolution (v1.9):** BudgetTracker rewritten to use Firestore persistence. All state stored in `_system/budget` document. All methods are async. Reads/writes go through Firestore on every call, surviving Cloud Run cold starts and working correctly across auto-scaling instances. See §8.3 for updated implementation.
 
-**Migration:**
-- Firestore atomic increment on a `budget` document per project
-- Firestore transactions for check-and-increment (`can_generate` + `record_generation` must be atomic)
-- Cloud Monitoring alerts at 50%, 75%, 90% budget thresholds
-- Per-user budget isolation (multi-tenant) in Firestore
-
-**Effort:** Half a day. Should be done during hackathon if time allows.
+**Remaining:** Per-user budget isolation (multi-tenant) and Cloud Monitoring alerts at budget thresholds are still TODO.
 
 ## 17.4 🔴 No Authentication / Single-Tenant → Multi-Tenant with Auth
 
@@ -4270,7 +4288,7 @@ Interleaved output (TEXT + IMAGE) requests are computationally expensive and may
 
 | Priority | Item | Effort | Why First |
 |---|---|---|---|
-| **Week 1** | §17.3 Persistent Budget | 0.5 days | Prevents overspend. Trivial fix. |
+| ~~**Week 1**~~ | ~~§17.3 Persistent Budget~~ | ~~0.5 days~~ | ✅ Resolved in v1.9 — Firestore-backed BudgetTracker |
 | **Week 1** | §17.4 Auth + Multi-Tenant | 1 week | Can't have multiple users without it. |
 | **Week 2** | §17.2 Rate Limit Queuing | 1-2 weeks | 10th user gets 429 without it. |
 | **Week 2** | §17.7 CDN + Permanent URLs | 1-2 days | Images break after 7 days. |
@@ -4290,5 +4308,6 @@ Interleaved output (TEXT + IMAGE) requests are computationally expensive and may
 
 *Document created: February 21, 2026*
 *Updated: March 2, 2026 (v1.3 — Platform Registry, Brand Assets, Notion/Calendar integrations, calibrated scoring, social proof tiers, voice coach strategy)*
+*Updated: March 31, 2026 (v1.9 — structured JSON logging, global exception handler, security hardening, Firestore-backed budget tracker, carousel optimization, bounded SSE queues, soft deletes, auth improvements, pytest test infrastructure, CI pipeline, double-click protection, metric logging, dependency management)*
 *Companion PRD: PRD.md v1.3*
 *Hackathon deadline: March 16, 2026*
