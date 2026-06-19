@@ -9,7 +9,7 @@ beautifulsoup4==4.12.3
 pydantic>=2.12.0,<3.0.0
 python-dotenv==1.0.0
 python-multipart>=0.0.9,<1.0.0
-Pillow>=10.0.0,<11.0.0
+Pillow>=10.0.0,<13.0.0
 resend==2.0.0
 sse-starlette>=1.8.2,<3.0.0
 cryptography>=42.0.0,<44.0.0
