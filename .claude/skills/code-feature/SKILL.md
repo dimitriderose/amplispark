@@ -1,3 +1,7 @@
+---
+name: code-feature
+description: Implement a feature using role-specific engineering agents (BE, FE, Context, Network, Audio, DevOps, DBA). Use when the user wants to implement or build a feature from a spec.
+---
 Implement the feature using role-specific engineering agents.
 
 ## Steps

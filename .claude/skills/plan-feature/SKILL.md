@@ -1,3 +1,7 @@
+---
+name: plan-feature
+description: Facilitate a feature planning session with a PM and Software Architect to produce a feature spec. Use when the user wants to plan a new feature, design a change, or discuss what to build next.
+---
 Facilitate a feature planning session with a PM and Software Architect.
 
 ## Steps

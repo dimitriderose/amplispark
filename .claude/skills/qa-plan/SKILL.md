@@ -1,3 +1,7 @@
+---
+name: qa-plan
+description: Create a QA test plan for a feature as a QA Lead. Use when the user wants to create a test plan, plan QA, or prepare for testing a feature.
+---
 Create a QA test plan for the feature as a QA Lead.
 
 ## Steps

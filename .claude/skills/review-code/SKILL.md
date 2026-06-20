@@ -1,3 +1,7 @@
+---
+name: review-code
+description: Run a brutal multi-agent code review across all domains (BE, FE, Context, DBA, Network, Audio, DevOps, Software Architect) and fix every bug found in-place. Use when the user wants to review code, find bugs, or do a code review before committing.
+---
 Run a brutal multi-agent code review and fix all bugs found.
 
 ## Steps

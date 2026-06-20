@@ -1,3 +1,7 @@
+---
+name: run-local
+description: Start both the Amplispark backend and frontend servers for local development. Use when the user wants to run the app locally, start the servers, or develop locally.
+---
 Start both the Amplispark backend and frontend for full-stack local development.
 
 ## Steps

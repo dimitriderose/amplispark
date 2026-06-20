@@ -1,3 +1,7 @@
+---
+name: qa-test
+description: Implement tests as QA Testers based on a QA test plan. Use when the user wants to write tests, implement a test plan, or add test coverage.
+---
 Implement tests as QA Testers based on the QA test plan.
 
 ## Steps

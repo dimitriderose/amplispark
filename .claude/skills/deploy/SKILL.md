@@ -1,3 +1,7 @@
+---
+name: deploy
+description: Deploy Amplispark to production on Google Cloud Run. Use when the user wants to deploy, ship, or push to production.
+---
 Deploy Amplispark to production on Google Cloud Run.
 
 WARNING: This updates the live production app and cannot be automatically undone.

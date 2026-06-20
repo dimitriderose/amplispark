@@ -1,3 +1,7 @@
+---
+name: run-frontend
+description: Start the Amplispark React/Vite frontend dev server locally. Use when the user wants to start only the frontend or the React app.
+---
 Start the Amplispark React/Vite frontend dev server locally.
 
 ## Steps

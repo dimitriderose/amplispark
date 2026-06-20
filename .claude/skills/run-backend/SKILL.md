@@ -1,3 +1,7 @@
+---
+name: run-backend
+description: Start the Amplispark FastAPI backend server locally. Use when the user wants to start only the backend, or run the API server.
+---
 Start the Amplispark FastAPI backend server locally.
 
 ## Steps
