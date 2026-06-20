@@ -35,11 +35,7 @@ async def get_authenticated_uid(request: Request) -> str | None:
     """
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
-        # Fallback: check X-User-UID for backward compat during migration
-        uid = request.headers.get("X-User-UID") or None
-        if uid:
-            user_uid_var.set(uid)
-        return uid
+        return None
 
     token = auth_header[len("Bearer ") :]
     try:
