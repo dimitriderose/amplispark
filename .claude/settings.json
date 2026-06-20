@@ -49,7 +49,15 @@
       "Bash(gcloud iam *)",
       "Bash(gh secret *)",
       "Bash(gh run *)",
-      "PowerShell(python -c \"import yaml; yaml.safe_load\\(open\\('c:/Users/dimit/Documents/GitHub/amplispark/cloudbuild.yaml'\\)\\); print\\('YAML valid'\\)\")"
+      "PowerShell(python -c \"import yaml; yaml.safe_load\\(open\\('c:/Users/dimit/Documents/GitHub/amplispark/cloudbuild.yaml'\\)\\); print\\('YAML valid'\\)\")",
+      "Workflow(deep-research)",
+      "WebFetch(domain:www.buildfastwithai.com)",
+      "WebFetch(domain:firebase.google.com)",
+      "WebFetch(domain:pocketlantern.dev)",
+      "WebFetch(domain:en.wikipedia.org)",
+      "WebFetch(domain:simonwillison.net)",
+      "Bash(./backend/.venv/Scripts/ruff check *)",
+      "Bash(./backend/.venv/Scripts/ruff format *)"
     ],
     "additionalDirectories": [
       "c:\\Users\\dimit\\Documents\\GitHub\\amplispark\\.claude"

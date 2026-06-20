@@ -89,7 +89,7 @@ steps:
       - '--region=${_REGION}'
       - '--platform=managed'
       - '--allow-unauthenticated'
-      - '--update-env-vars=GCP_PROJECT_ID=${PROJECT_ID},GCS_BUCKET_NAME=${PROJECT_ID}-amplifi-assets,CORS_ORIGINS=${_CORS_ORIGINS},NOTION_CLIENT_ID=${_NOTION_CLIENT_ID},NOTION_REDIRECT_URI=${_NOTION_REDIRECT_URI},GEMINI_MODEL=gemini-2.5-flash-preview-05-20'
+      - '--update-env-vars=GCP_PROJECT_ID=${PROJECT_ID},GCS_BUCKET_NAME=${PROJECT_ID}-amplifi-assets,CORS_ORIGINS=${_CORS_ORIGINS},NOTION_CLIENT_ID=${_NOTION_CLIENT_ID},NOTION_REDIRECT_URI=${_NOTION_REDIRECT_URI},GEMINI_MODEL=gemini-3.5-flash'
       - '--set-secrets=GOOGLE_API_KEY=GOOGLE_API_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,NOTION_CLIENT_SECRET=NOTION_CLIENT_SECRET:latest,TOKEN_ENCRYPT_KEY=TOKEN_ENCRYPT_KEY:latest'
       - '--memory=2Gi'
       - '--cpu=2'

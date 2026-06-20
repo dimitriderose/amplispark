@@ -44,7 +44,7 @@ from backend.services.image_postprocess import (
 from backend.services.storage_client import upload_image_to_gcs
 
 # Interleaved text+image generation requires an image-capable model
-GEMINI_IMAGE_MODEL = "gemini-3.1-flash-image-preview"
+GEMINI_IMAGE_MODEL = "gemini-3.1-flash-image"
 
 logger = logging.getLogger(__name__)
 
@@ -246,7 +246,7 @@ async def _generate_alt_text(
         _alt_contents: Any = [_alt_img, _alt_txt]
         result = await asyncio.to_thread(
             lambda: _alt_client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-3.5-flash",
                 contents=_alt_contents,
             )
         )
