@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent / ".env")
 
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3-flash-preview")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash-preview-05-20")
 if not os.environ.get("GEMINI_MODEL"):
     _logging.getLogger(__name__).warning("GEMINI_MODEL not set, using default: %s", GEMINI_MODEL)
 GCP_PROJECT_ID = os.environ.get("GCP_PROJECT_ID", "amplifi-hackathon")

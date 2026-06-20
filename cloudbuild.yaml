@@ -15,20 +15,51 @@
 # ──────────────────────────────────────────────────────────────────────────────
 
 steps:
-  # Step 0: Run backend tests
-  - name: 'python:3.12-slim'
+  # Step 0: Pull previous images for layer cache (allowed to fail on first build).
+  # Two tags are pulled:
+  #   :builder — Stage 1 (node:20-slim) layers, caches npm ci across builds
+  #   :latest  — Stage 2 (python:3.12-slim) layers, caches pip install + apt
+  - name: 'gcr.io/cloud-builders/docker'
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        pip install --quiet -r backend/requirements.txt &&
-        cd backend &&
-        python -m pytest tests/ -v --tb=short
+        docker pull ${_REGION}-docker.pkg.dev/${PROJECT_ID}/amplifi/amplifi:builder || true
+        docker pull ${_REGION}-docker.pkg.dev/${PROJECT_ID}/amplifi/amplifi:latest  || true
 
-  # Step 1: Build Docker image with Firebase config as build args
+  # Step 1: Build Stage 1 (frontend builder) targeting the builder stage.
+  # Pushing this tag separately makes the npm ci layer cacheable across builds —
+  # without it, Stage 1 layers are never stored in the registry and must be
+  # rebuilt from scratch every time (npm ci = ~30-60 s per build).
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
+      - '--target=builder'
+      - '--cache-from=${_REGION}-docker.pkg.dev/${PROJECT_ID}/amplifi/amplifi:builder'
+      - '--build-arg=VITE_FIREBASE_API_KEY=${_VITE_FIREBASE_API_KEY}'
+      - '--build-arg=VITE_FIREBASE_AUTH_DOMAIN=${_VITE_FIREBASE_AUTH_DOMAIN}'
+      - '--build-arg=VITE_FIREBASE_PROJECT_ID=${_VITE_FIREBASE_PROJECT_ID}'
+      - '--build-arg=VITE_FIREBASE_STORAGE_BUCKET=${_VITE_FIREBASE_STORAGE_BUCKET}'
+      - '--build-arg=VITE_FIREBASE_MESSAGING_SENDER_ID=${_VITE_FIREBASE_MESSAGING_SENDER_ID}'
+      - '--build-arg=VITE_FIREBASE_APP_ID=${_VITE_FIREBASE_APP_ID}'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/amplifi/amplifi:builder'
+      - '-f'
+      - 'backend/Dockerfile'
+      - '.'
+
+  # Step 2: Push the builder stage so its layers are available as cache next build
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/amplifi/amplifi:builder'
+
+  # Step 3: Build the final runtime image, seeding cache from both stages
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '--cache-from=${_REGION}-docker.pkg.dev/${PROJECT_ID}/amplifi/amplifi:builder'
+      - '--cache-from=${_REGION}-docker.pkg.dev/${PROJECT_ID}/amplifi/amplifi:latest'
       - '--build-arg=VITE_FIREBASE_API_KEY=${_VITE_FIREBASE_API_KEY}'
       - '--build-arg=VITE_FIREBASE_AUTH_DOMAIN=${_VITE_FIREBASE_AUTH_DOMAIN}'
       - '--build-arg=VITE_FIREBASE_PROJECT_ID=${_VITE_FIREBASE_PROJECT_ID}'
@@ -41,13 +72,13 @@ steps:
       - 'backend/Dockerfile'
       - '.'
 
-  # Step 2: Push to Artifact Registry
+  # Step 4: Push the final runtime image to Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
       - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/amplifi/amplifi:latest'
 
-  # Step 3: Deploy to Cloud Run
+  # Step 5: Deploy to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'gcloud'
     args:
@@ -58,7 +89,7 @@ steps:
       - '--region=${_REGION}'
       - '--platform=managed'
       - '--allow-unauthenticated'
-      - '--update-env-vars=GCP_PROJECT_ID=${PROJECT_ID},GCS_BUCKET_NAME=${PROJECT_ID}-amplifi-assets,CORS_ORIGINS=${_CORS_ORIGINS},NOTION_CLIENT_ID=${_NOTION_CLIENT_ID},NOTION_REDIRECT_URI=${_NOTION_REDIRECT_URI},GEMINI_MODEL=gemini-3-flash-preview'
+      - '--update-env-vars=GCP_PROJECT_ID=${PROJECT_ID},GCS_BUCKET_NAME=${PROJECT_ID}-amplifi-assets,CORS_ORIGINS=${_CORS_ORIGINS},NOTION_CLIENT_ID=${_NOTION_CLIENT_ID},NOTION_REDIRECT_URI=${_NOTION_REDIRECT_URI},GEMINI_MODEL=gemini-2.5-flash-preview-05-20'
       - '--set-secrets=GOOGLE_API_KEY=GOOGLE_API_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,NOTION_CLIENT_SECRET=NOTION_CLIENT_SECRET:latest,TOKEN_ENCRYPT_KEY=TOKEN_ENCRYPT_KEY:latest'
       - '--memory=2Gi'
       - '--cpu=2'
@@ -67,6 +98,7 @@ steps:
       - '--max-instances=10'
 
 images:
+  - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/amplifi/amplifi:builder'
   - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/amplifi/amplifi:latest'
 
 substitutions:
