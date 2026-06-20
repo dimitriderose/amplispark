@@ -71,7 +71,7 @@ async def _research_best_platforms(
                 temperature=0.2,
             ),
         )
-        raw = response.text.strip()
+        raw = (response.text or "").strip()
         if raw.startswith("```"):
             parts = raw.split("```")
             raw = parts[1] if len(parts) > 1 else raw
@@ -152,7 +152,7 @@ async def _research_posting_frequency(
                 temperature=0.2,
             ),
         )
-        raw = response.text.strip()
+        raw = (response.text or "").strip()
         if raw.startswith("```"):
             parts = raw.split("```")
             raw = parts[1] if len(parts) > 1 else raw
@@ -240,7 +240,7 @@ async def _research_platform_trends(platform: str, industry: str) -> dict | None
                 temperature=0.2,
             ),
         )
-        raw = response.text.strip()
+        raw = (response.text or "").strip()
         # Strip markdown fences if present
         if raw.startswith("```"):
             parts = raw.split("```")
@@ -299,7 +299,7 @@ async def _research_industry_hooks(industry: str, platforms: list[str]) -> str:
                 temperature=0.2,
             ),
         )
-        result = response.text.strip()
+        result = (response.text or "").strip()
         logger.info("Industry hook research completed for %s", industry)
         return result
     except Exception as e:
@@ -349,7 +349,7 @@ async def _research_visual_trends(platform: str, industry: str) -> dict | None:
                 temperature=0.2,
             ),
         )
-        raw = response.text.strip()
+        raw = (response.text or "").strip()
         # Strip markdown fences if present
         if raw.startswith("```"):
             parts = raw.split("```")
@@ -417,7 +417,7 @@ async def _research_video_trends(platform: str, industry: str) -> dict | None:
                 temperature=0.2,
             ),
         )
-        raw = response.text.strip()
+        raw = (response.text or "").strip()
         # Strip markdown fences if present
         if raw.startswith("```"):
             parts = raw.split("```")
@@ -921,7 +921,7 @@ Return ONLY a valid JSON array of {total_briefs} objects. No markdown, no extra 
             ),
         )
 
-        raw = response.text.strip()
+        raw = (response.text or "").strip()
         # Strip markdown fences if present
         if raw.startswith("```"):
             parts = raw.split("```")

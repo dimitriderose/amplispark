@@ -141,7 +141,7 @@ async def upload_brand_asset_endpoint(
         content = await file.read()
         mime = file.content_type or "application/octet-stream"
         file_type = "document" if "pdf" in mime else "image"
-        gcs_uri = await upload_brand_asset(brand_id, content, file.filename, mime)
+        gcs_uri = await upload_brand_asset(brand_id, content, file.filename or "upload", mime)
         uploaded.append(
             {
                 "filename": file.filename,

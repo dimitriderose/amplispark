@@ -245,7 +245,7 @@ def _build_calendar_block(plan: dict | None, posts: list | None) -> str:
 # ---------------------------------------------------------------------------
 
 
-def build_coaching_prompt(brand_profile: dict, plan: dict = None, posts: list = None) -> str:
+def build_coaching_prompt(brand_profile: dict, plan: dict | None = None, posts: list | None = None) -> str:
     """Build the Gemini Live API system prompt for voice brand coaching.
 
     The prompt injects the full brand profile and content calendar so the

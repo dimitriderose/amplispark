@@ -1,4 +1,5 @@
 import os
+from typing import Any, cast
 
 import resend
 
@@ -20,11 +21,14 @@ async def send_calendar_email(to_email: str, brand_name: str, ics_content: str):
                 "<p>— Amplispark</p>"
             ),
             "attachments": [
-                {
-                    "filename": "amplispark_content_plan.ics",
-                    "content_type": "text/calendar; method=REQUEST; charset=utf-8",
-                    "content": ics_content,
-                }
+                cast(
+                    Any,
+                    {
+                        "filename": "amplispark_content_plan.ics",
+                        "content_type": "text/calendar; method=REQUEST; charset=utf-8",
+                        "content": ics_content,
+                    },
+                )
             ],
         }
     )

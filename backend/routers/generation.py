@@ -43,6 +43,7 @@ async def stream_generate(
 
     day_brief = days[day_index]
 
+    brand: dict | None = None
     if brand_id in _brand_cache and time.time() - _brand_cache[brand_id][1] < 30:
         brand = _brand_cache[brand_id][0]
     else:

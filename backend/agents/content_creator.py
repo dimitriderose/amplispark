@@ -3,6 +3,7 @@ import base64
 import logging
 import re
 from collections.abc import AsyncIterator
+from typing import Any
 
 from google.genai import types
 
@@ -171,9 +172,11 @@ async def _generate_carousel_images(
                         temperature=0.7,
                     ),
                 )
-                for part in resp.candidates[0].content.parts:
-                    if part.inline_data:
-                        return (part.inline_data.data, part.inline_data.mime_type or "image/png")
+                _c0 = resp.candidates[0].content if resp.candidates else None
+                for part in (_c0.parts if _c0 and _c0.parts else []):
+                    if part.inline_data and part.inline_data.data is not None:
+                        _part_data: bytes = part.inline_data.data
+                        return (_part_data, part.inline_data.mime_type or "image/png")
             except Exception as e:
                 logger.error("Carousel slide %d generation failed: %s", slide_num, e)
             return None
@@ -200,9 +203,10 @@ async def _generate_image_with_retry(
                     temperature=0.7,
                 ),
             )
-            for part in resp.candidates[0].content.parts:
-                if part.inline_data:
-                    data = part.inline_data.data
+            _rc0 = resp.candidates[0].content if resp.candidates else None
+            for part in (_rc0.parts if _rc0 and _rc0.parts else []):
+                if part.inline_data and part.inline_data.data is not None:
+                    data: bytes = part.inline_data.data
                     mime = part.inline_data.mime_type or "image/png"
                     if len(data) > 5000:  # Minimum viable image (~5KB)
                         return data, mime
@@ -232,19 +236,21 @@ async def _generate_alt_text(
         return None
 
     try:
-        result = await asyncio.to_thread(
-            get_genai_client().models.generate_content,
-            model="gemini-2.5-flash",
-            contents=[
-                types.Part.from_bytes(data=image_bytes, mime_type="image/png"),
-                (
-                    f"Write alt-text for this image (for screen readers). Context: {content_theme[:150]}.\n"
-                    "Be factual and descriptive: what's in the image, colors, composition.\n"
-                    "Do NOT say 'AI-generated' or 'stock photo'. Max 300 characters."
-                ),
-            ],
+        _alt_client = get_genai_client()
+        _alt_img = types.Part.from_bytes(data=image_bytes, mime_type="image/png")
+        _alt_txt = (
+            f"Write alt-text for this image (for screen readers). Context: {content_theme[:150]}.\n"
+            "Be factual and descriptive: what's in the image, colors, composition.\n"
+            "Do NOT say 'AI-generated' or 'stock photo'. Max 300 characters."
         )
-        alt = result.text.strip()[:500]
+        _alt_contents: Any = [_alt_img, _alt_txt]
+        result = await asyncio.to_thread(
+            lambda: _alt_client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=_alt_contents,
+            )
+        )
+        alt = (result.text or "").strip()[:500]
         return alt
     except Exception as e:
         logger.warning("Alt-text generation failed (non-fatal): %s", e)
@@ -1029,6 +1035,7 @@ async def generate_post(
     )
 
     # ── BYOP mode ─────────────────────────────────────────────────────────────
+    parsed_hashtags: list[str] | None = None
     if custom_photo_bytes:
         yield {"event": "status", "data": {"message": "Analyzing your photo..."}}
 
@@ -1061,18 +1068,24 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
             )
             text_part = types.Part(text=byop_prompt)
 
+            _byop_client = get_genai_client()
+            _byop_img, _byop_txt = image_part, text_part
+            _byop_contents: Any = [_byop_img, _byop_txt]
             response = await asyncio.to_thread(
-                get_genai_client().models.generate_content,
-                model=GEMINI_MODEL,
-                contents=[image_part, text_part],
-                config=types.GenerateContentConfig(
-                    response_modalities=["TEXT"],
-                    temperature=0.7,
-                ),
+                lambda: _byop_client.models.generate_content(
+                    model=GEMINI_MODEL,
+                    contents=_byop_contents,
+                    config=types.GenerateContentConfig(
+                        response_modalities=["TEXT"],
+                        temperature=0.7,
+                    ),
+                )
             )
 
+            _byop_cands = response.candidates
+            _byop_content = _byop_cands[0].content if _byop_cands else None
             full_text = "".join(
-                part.text for part in response.candidates[0].content.parts if part.text
+                part.text for part in (_byop_content.parts if _byop_content and _byop_content.parts else []) if part.text
             )
 
             if "HASHTAGS:" in full_text:
@@ -1143,14 +1156,20 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                 )
                 yield {"event": "status", "data": {"message": "Regenerating content..."}}
                 try:
+                    _byop_regen_client = get_genai_client()
+                    _byop_regen_img, _byop_regen_txt = image_part, text_part
+                    _byop_regen_contents: Any = [_byop_regen_img, _byop_regen_txt]
                     regen_response = await asyncio.to_thread(
-                        get_genai_client().models.generate_content,
-                        model=GEMINI_MODEL,
-                        contents=[image_part, text_part],
-                        config=types.GenerateContentConfig(temperature=0.8),
+                        lambda: _byop_regen_client.models.generate_content(
+                            model=GEMINI_MODEL,
+                            contents=_byop_regen_contents,
+                            config=types.GenerateContentConfig(temperature=0.8),
+                        )
                     )
+                    _byop_regen_cands = regen_response.candidates
+                    _byop_regen_content = _byop_regen_cands[0].content if _byop_regen_cands else None
                     regen_text = "".join(
-                        p.text for p in regen_response.candidates[0].content.parts if p.text
+                        p.text for p in (_byop_regen_content.parts if _byop_regen_content and _byop_regen_content.parts else []) if p.text
                     )
                     if "HASHTAGS:" in regen_text:
                         regen_cap, regen_ht = regen_text.split("HASHTAGS:", 1)
@@ -1268,8 +1287,10 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                 ),
             )
 
+            _vid_cands = response.candidates
+            _vid_content = _vid_cands[0].content if _vid_cands else None
             full_text = "".join(
-                part.text for part in response.candidates[0].content.parts if part.text
+                part.text for part in (_vid_content.parts if _vid_content and _vid_content.parts else []) if part.text
             )
 
             if "HASHTAGS:" in full_text:
@@ -1317,8 +1338,10 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                         contents=video_prompt,
                         config=types.GenerateContentConfig(temperature=0.8),
                     )
+                    _vid_regen_cands = regen_response.candidates
+                    _vid_regen_content = _vid_regen_cands[0].content if _vid_regen_cands else None
                     regen_text = "".join(
-                        p.text for p in regen_response.candidates[0].content.parts if p.text
+                        p.text for p in (_vid_regen_content.parts if _vid_regen_content and _vid_regen_content.parts else []) if p.text
                     )
                     if "HASHTAGS:" in regen_text:
                         regen_cap, regen_ht = regen_text.split("HASHTAGS:", 1)
@@ -1478,7 +1501,9 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
             config=types.GenerateContentConfig(temperature=0.7),
         )
 
-        for part in response.candidates[0].content.parts:
+        _txt_cands = response.candidates
+        _txt_content = _txt_cands[0].content if _txt_cands else None
+        for part in (_txt_content.parts if _txt_content and _txt_content.parts else []):
             if part.text:
                 text = part.text
                 if "HASHTAGS:" in text:
@@ -1541,7 +1566,9 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                     config=types.GenerateContentConfig(temperature=0.4),
                 )
                 retry_text = ""
-                for rpart in retry_response.candidates[0].content.parts:
+                _retry_cands = retry_response.candidates
+                _retry_content = _retry_cands[0].content if _retry_cands else None
+                for rpart in (_retry_content.parts if _retry_content and _retry_content.parts else []):
                     if rpart.text:
                         retry_text += rpart.text
                 if retry_text.strip():
@@ -1599,7 +1626,7 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                     contents=prompt,
                     config=types.GenerateContentConfig(temperature=0.8),
                 )
-                regen_text = regen_response.text.strip()
+                regen_text = (regen_response.text or "").strip()
                 if "HASHTAGS:" in regen_text:
                     regen_cap, regen_ht = regen_text.split("HASHTAGS:", 1)
                     regen_caption = _strip_markdown(_fix_mojibake(regen_cap.strip()))
@@ -1655,6 +1682,8 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
         }
 
         # ── Step 3: Image generation (after review gate passes) ──
+        all_image_urls: list[str] = []
+        all_image_gcs_uris: list[str] = []
         if existing_images:
             # Reuse existing images instead of generating new ones
             image_url = existing_images.get("image_url")
@@ -1761,8 +1790,8 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                 logger.error("Image generation failed for post %s: %s", post_id, img_err)
 
             # ── Init image URL lists (carousel slides appended below) ──
-            all_image_urls: list[str] = []
-            all_image_gcs_uris: list[str] = []
+            all_image_urls = []
+            all_image_gcs_uris = []
             if image_url:
                 all_image_urls.append(image_url)
             if image_gcs_uri:

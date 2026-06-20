@@ -166,7 +166,7 @@ Return ONLY a valid JSON object with these exact keys:
         ),
     )
     try:
-        raw = response.text.strip()
+        raw = (response.text or "").strip()
         if raw.startswith("```"):
             parts = raw.split("```")
             raw = parts[1] if len(parts) > 1 else raw

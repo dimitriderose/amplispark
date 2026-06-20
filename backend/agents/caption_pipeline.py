@@ -146,7 +146,7 @@ async def _smart_condense(caption: str, platform: str, derivative_type: str) -> 
             contents=condense_prompt,
             config=types.GenerateContentConfig(temperature=0.3),
         )
-        condensed = _strip_markdown(resp.text.strip())
+        condensed = _strip_markdown((resp.text or "").strip())
         if len(condensed) <= limit and len(condensed) > limit // 3:
             # For carousels, verify slide count preserved
             if derivative_type == "carousel":

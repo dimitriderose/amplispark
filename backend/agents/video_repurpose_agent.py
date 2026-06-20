@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import json
 import logging
 import os
@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import tempfile
 import uuid
+from typing import Any
 
 from google.genai import types
 
@@ -33,7 +34,7 @@ _GEMINI_POLL_INTERVAL_S = 4
 # FFmpeg subprocess timeout per command (5 minutes)
 _FFMPEG_TIMEOUT_S = 300
 
-# Platform-specific max clip duration (seconds) — used for timestamp validation
+# Platform-specific max clip duration (seconds) â€” used for timestamp validation
 _PLATFORM_MAX_S: dict[str, float] = {
     "reels": 60,
     "tiktok": 60,
@@ -42,7 +43,7 @@ _PLATFORM_MAX_S: dict[str, float] = {
 }
 
 
-# ── FFmpeg helpers ─────────────────────────────────────────────────────────────
+# â”€â”€ FFmpeg helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 def _run_ffmpeg(args: list[str]) -> None:
@@ -90,7 +91,7 @@ def _extract_and_format_clip(
     )
 
 
-# ── Gemini video analysis ──────────────────────────────────────────────────────
+# â”€â”€ Gemini video analysis â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 async def _upload_to_gemini_files(video_path: str, mime_type: str) -> tuple:
@@ -106,9 +107,7 @@ async def _upload_to_gemini_files(video_path: str, mime_type: str) -> tuple:
     client = get_genai_client()
 
     video_file = await asyncio.to_thread(
-        client.files.upload,
-        path=video_path,
-        config={"mime_type": mime_type},
+        lambda: client.files.upload(file=video_path, config={"mime_type": mime_type})
     )
 
     # Poll with a hard timeout ceiling
@@ -121,7 +120,8 @@ async def _upload_to_gemini_files(video_path: str, mime_type: str) -> tuple:
             )
         await asyncio.sleep(_GEMINI_POLL_INTERVAL_S)
         elapsed += _GEMINI_POLL_INTERVAL_S
-        video_file = await asyncio.to_thread(client.files.get, name=video_file.name)
+        file_name: str = video_file.name or ""
+        video_file = await asyncio.to_thread(client.files.get, name=file_name)
 
     state_name = getattr(video_file.state, "name", str(video_file.state))
     if state_name != "ACTIVE":
@@ -131,8 +131,8 @@ async def _upload_to_gemini_files(video_path: str, mime_type: str) -> tuple:
 
 
 async def _analyze_video(
-    video_file: object,
-    client: object,
+    video_file: Any,
+    client: Any,
     brand_profile: dict,
     pillar: str = "",
     content_theme: str = "",
@@ -186,9 +186,9 @@ async def _analyze_video(
 Identify the TOP 3 most clip-worthy moments for social media short-form content.
 
 For each clip, choose the most suitable platform from: {platform_keys}
-- "reels" or "tiktok": 15–60 seconds, hook in first 3 seconds, high energy
-- "linkedin": 30–90 seconds, insight-driven, professional
-- "youtube_shorts": 15–60 seconds, fast-paced
+- "reels" or "tiktok": 15â€“60 seconds, hook in first 3 seconds, high energy
+- "linkedin": 30â€“90 seconds, insight-driven, professional
+- "youtube_shorts": 15â€“60 seconds, fast-paced
 
 Return ONLY a valid JSON array with this exact structure:
 [
@@ -219,7 +219,7 @@ Rules:
         ),
     )
 
-    raw = response.text.strip()
+    raw = (response.text or "").strip()
     if raw.startswith("```"):
         parts = raw.split("```")
         raw = parts[1] if len(parts) > 1 else raw
@@ -248,7 +248,7 @@ def _validate_clip_spec(spec: dict, index: int) -> tuple[float, float, str]:
     if start < 0:
         raise ValueError(f"Clip {index + 1}: start_time must be >= 0 (got {start})")
     if end <= start:
-        raise ValueError(f"Clip {index + 1}: end_time must be > start_time ({start}–{end})")
+        raise ValueError(f"Clip {index + 1}: end_time must be > start_time ({start}â€“{end})")
 
     platform = str(spec.get("platform", "reels")).lower()
     if platform not in _PLATFORM_CONFIGS:
@@ -271,7 +271,7 @@ def _validate_clip_spec(spec: dict, index: int) -> tuple[float, float, str]:
     return start, end, platform
 
 
-# ── Public API ─────────────────────────────────────────────────────────────────
+# â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 async def analyze_and_repurpose(
@@ -302,38 +302,38 @@ async def analyze_and_repurpose(
     ext = ".mp4" if mime_type == "video/mp4" else ".mov"
     tmpdir = tempfile.mkdtemp(prefix="vrepurpose_")
     try:
-        # 1 ─ Write source video to disk
+        # 1 â”€ Write source video to disk
         source_path = os.path.join(tmpdir, f"source_{uuid.uuid4().hex[:8]}{ext}")
         with open(source_path, "wb") as f:
             f.write(video_bytes)
 
-        # 2 ─ Upload to Gemini Files API
+        # 2 â”€ Upload to Gemini Files API
         logger.info(
-            "Uploading %d-byte video (%s) to Gemini Files API…", len(video_bytes), mime_type
+            "Uploading %d-byte video (%s) to Gemini Files APIâ€¦", len(video_bytes), mime_type
         )
         video_file, client = await _upload_to_gemini_files(source_path, mime_type)
         logger.info("Gemini file ready: %s", video_file.name)
 
-        # 3 ─ Analyze for clip-worthy moments
+        # 3 â”€ Analyze for clip-worthy moments
         clip_specs = await _analyze_video(
             video_file, client, brand_profile, pillar=pillar, content_theme=content_theme
         )
         logger.info("Gemini identified %d clips", len(clip_specs))
 
-        # 4 ─ Clean up Gemini file (awaited, so errors don't swallow silently)
+        # 4 â”€ Clean up Gemini file (awaited, so errors don't swallow silently)
         try:
             await asyncio.to_thread(client.files.delete, name=video_file.name)
         except Exception as e:
             logger.warning("Failed to delete Gemini file %s: %s", video_file.name, e)
 
-        # 5 ─ Extract, format, and collect each clip with FFmpeg
+        # 5 â”€ Extract, format, and collect each clip with FFmpeg
         clips = []
         for i, spec in enumerate(clip_specs[:3]):
             start, end, platform = _validate_clip_spec(spec, i)
             clip_tag = f"clip_{i + 1}_{platform}"
             final_path = os.path.join(tmpdir, f"{clip_tag}.mp4")
 
-            logger.info("Extracting clip %d: %.1f–%.1f → %s", i + 1, start, end, platform)
+            logger.info("Extracting clip %d: %.1fâ€“%.1f â†’ %s", i + 1, start, end, platform)
             await asyncio.to_thread(
                 _extract_and_format_clip, source_path, final_path, start, end, platform
             )
@@ -366,3 +366,4 @@ async def analyze_and_repurpose(
             shutil.rmtree(tmpdir)
         except Exception as cleanup_err:
             logger.warning("Failed to clean up tmpdir %s: %s", tmpdir, cleanup_err)
+

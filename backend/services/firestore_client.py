@@ -51,7 +51,7 @@ async def list_brands_by_owner(owner_uid: str) -> list:
         docs = await (
             db.collection("brands").where(filter=FieldFilter("owner_uid", "==", owner_uid)).get()
         )
-        brands = [d.to_dict() for d in docs]
+        brands = [d for d in (doc.to_dict() for doc in docs) if d is not None]
         brands.sort(key=lambda b: b.get("created_at", ""), reverse=True)
         return brands
     except Exception as e:
@@ -111,6 +111,8 @@ async def remove_brand_asset(brand_id: str, asset_index: int) -> dict | None:
     if not doc.exists:
         return None
     data = doc.to_dict()
+    if data is None:
+        return None
     assets = data.get("uploaded_assets", [])
     if asset_index < 0 or asset_index >= len(assets):
         return None
@@ -393,6 +395,8 @@ async def get_platform_trends(platform: str, industry: str) -> dict | None:
     if not snap.exists:
         return None
     data = snap.to_dict()
+    if data is None:
+        return None
     expires_at = data.get("expires_at")
     if expires_at:
         # Normalize to timezone-aware in case Firestore returns a naive datetime
@@ -432,6 +436,8 @@ async def get_platform_recommendations(industry: str, business_type: str) -> lis
     if not snap.exists:
         return None
     data = snap.to_dict()
+    if data is None:
+        return None
     expires_at = data.get("expires_at")
     if expires_at:
         if isinstance(expires_at, datetime) and expires_at.tzinfo is None:
@@ -475,6 +481,8 @@ async def get_posting_frequency(
     if not snap.exists:
         return None
     data = snap.to_dict()
+    if data is None:
+        return None
     expires_at = data.get("expires_at")
     if expires_at:
         if isinstance(expires_at, datetime) and expires_at.tzinfo is None:

@@ -356,16 +356,15 @@ async def start_video_generation(
     )
     _background_tasks.add(_veo_task)
     _veo_task.add_done_callback(_background_tasks.discard)
-    _veo_task.add_done_callback(
-        lambda t: (
-            t.exception()
-            and logger.error(
-                "Unhandled exception in video generation task for job %s: %s", job_id, t.exception()
+    def _veo_task_done_cb(t: asyncio.Task) -> None:
+        if not t.cancelled() and t.exception():
+            logger.error(
+                "Unhandled exception in video generation task for job %s: %s",
+                job_id,
+                t.exception(),
             )
-            if not t.cancelled()
-            else None
-        )
-    )
+
+    _veo_task.add_done_callback(_veo_task_done_cb)
 
     return {
         "job_id": job_id,
@@ -496,16 +495,15 @@ async def upload_video_for_repurpose(
     task = asyncio.create_task(_run_video_repurposing(job_id, brand_id, source_gcs_uri, brand))
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)
-    task.add_done_callback(
-        lambda t: (
-            t.exception()
-            and logger.error(
-                "Unhandled exception in repurpose task for job %s: %s", job_id, t.exception()
+    def _repurpose_task_done_cb(t: asyncio.Task) -> None:
+        if not t.cancelled() and t.exception():
+            logger.error(
+                "Unhandled exception in repurpose task for job %s: %s",
+                job_id,
+                t.exception(),
             )
-            if not t.cancelled()
-            else None
-        )
-    )
+
+    task.add_done_callback(_repurpose_task_done_cb)
 
     return {"job_id": job_id, "status": "queued"}
 

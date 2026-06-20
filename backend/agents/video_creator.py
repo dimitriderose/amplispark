@@ -189,7 +189,7 @@ async def generate_video_clip(
     client = get_genai_client()
 
     hero_image = None
-    if has_image:
+    if has_image and hero_image_bytes is not None:
         mime = "image/png" if hero_image_bytes[:4] == b"\x89PNG" else "image/jpeg"
         hero_image = types.Image(image_bytes=hero_image_bytes, mime_type=mime)
 
@@ -267,9 +267,10 @@ async def generate_video_clip(
                 f"Veo video generation timed out after {_VEO_POLL_TIMEOUT_S}s for post {post_id}"
             )
         await asyncio.sleep(10)
+        _current_op = operation
         operation = await loop.run_in_executor(
             None,
-            lambda op=operation: client.operations.get(op),
+            lambda: client.operations.get(_current_op),
         )
         logger.info("Veo operation status: done=%s", operation.done)
 

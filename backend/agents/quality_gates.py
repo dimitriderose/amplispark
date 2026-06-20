@@ -104,7 +104,7 @@ async def _quality_retry(final_caption: str, platform: str, derivative_type: str
         config=types.GenerateContentConfig(temperature=0.3),
     )
     retried = _enforce_char_limit(
-        _strip_markdown(_fix_mojibake(resp.text.strip())), platform, derivative_type
+        _strip_markdown(_fix_mojibake((resp.text or "").strip())), platform, derivative_type
     )
     new_violations = _check_quality_violations(retried, platform, derivative_type)
     if len(new_violations) < len(violations):
@@ -279,7 +279,7 @@ async def _review_gate(
             config=types.GenerateContentConfig(temperature=0.4),
         )
         rewritten = _enforce_char_limit(
-            _strip_markdown(_fix_mojibake(resp.text.strip())),
+            _strip_markdown(_fix_mojibake((resp.text or "").strip())),
             platform,
             derivative_type,
         )
@@ -367,7 +367,7 @@ async def _review_gate(
             config=types.GenerateContentConfig(temperature=0.6),
         )
         strong_rewrite = _enforce_char_limit(
-            _strip_markdown(_fix_mojibake(resp2.text.strip())),
+            _strip_markdown(_fix_mojibake((resp2.text or "").strip())),
             platform,
             derivative_type,
         )

@@ -6,7 +6,7 @@ import io
 import logging
 import uuid
 
-from google.cloud import storage
+import google.cloud.storage as storage
 from google.genai import types
 from PIL import Image
 

@@ -48,13 +48,17 @@ async def _generate_style_reference(brand_id: str, profile: dict) -> str | None:
         )
         if not response.candidates:
             return None
-        for part in response.candidates[0].content.parts:
-            if part.inline_data:
+        content = response.candidates[0].content
+        if content is None or content.parts is None:
+            return None
+        for part in content.parts:
+            if part.inline_data and part.inline_data.data is not None:
                 mime = part.inline_data.mime_type or "image/png"
                 ext = mime.split("/")[-1] if "/" in mime else "png"
+                _data: bytes = part.inline_data.data
                 gcs_uri = await upload_brand_asset(
                     brand_id,
-                    part.inline_data.data,
+                    _data,
                     f"style_reference.{ext}",
                     mime,
                 )
@@ -202,7 +206,7 @@ Return ONLY a valid JSON object with these exact keys:
             ),
         )
 
-        raw = response.text.strip()
+        raw = (response.text or "").strip()
         profile = json.loads(raw)
 
     except json.JSONDecodeError as jde:

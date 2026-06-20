@@ -475,7 +475,7 @@ Evaluate and respond with JSON only:
             ),
         )
 
-        raw = response.text.strip()
+        raw = (response.text or "").strip()
         if raw.startswith("```"):
             lines = raw.split("\n")
             raw = "\n".join(lines[1:-1])

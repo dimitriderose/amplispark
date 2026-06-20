@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from typing import cast
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from google.genai import types as _gtypes
@@ -71,7 +72,7 @@ async def voice_coaching_ws(
     if len(context) > 4000:
         context = context[-4000:]
 
-    system_prompt = build_coaching_prompt(brand, plan=plan_data, posts=posts)
+    system_prompt = build_coaching_prompt(brand, plan=cast(dict | None, plan_data), posts=posts)
     if context:
         system_prompt += (
             "\n\nCONVERSATION CONTINUITY:\n"
