@@ -11,12 +11,12 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 # ── Pixel dimensions for each aspect ratio ────────────────────────────────────
 
 ASPECT_TO_PIXELS: dict[str, tuple[int, int]] = {
-    "1:1":    (1080, 1080),
-    "4:5":    (1080, 1350),
+    "1:1": (1080, 1080),
+    "4:5": (1080, 1350),
     "1.91:1": (1200, 628),
-    "9:16":   (1080, 1920),
-    "16:9":   (1920, 1080),
-    "2:3":    (1000, 1500),
+    "9:16": (1080, 1920),
+    "16:9": (1920, 1080),
+    "2:3": (1000, 1500),
 }
 
 # ── Font loading ──────────────────────────────────────────────────────────────
@@ -33,7 +33,7 @@ def _get_font(bold: bool = False, size: int = 72) -> ImageFont.FreeTypeFont:
         font_path = _FONT_DIR / fname
         try:
             _FONT_CACHE[key] = ImageFont.truetype(str(font_path), size)
-        except (OSError, IOError):
+        except OSError:
             _FONT_CACHE[key] = ImageFont.load_default()
     return _FONT_CACHE[key]
 
@@ -44,6 +44,7 @@ def _scale_font_size(base_size: int, canvas_width: int) -> int:
 
 
 # ── Color utilities ───────────────────────────────────────────────────────────
+
 
 def _hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
     """Convert '#RRGGBB' to (R, G, B). Returns white on parse failure."""
@@ -58,9 +59,11 @@ def _hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
 
 def _srgb_luminance(rgb: tuple[int, int, int]) -> float:
     """WCAG 2.1 relative luminance with sRGB linearization."""
+
     def _lin(c: int) -> float:
         s = c / 255.0
         return s / 12.92 if s <= 0.04045 else ((s + 0.055) / 1.055) ** 2.4
+
     return 0.2126 * _lin(rgb[0]) + 0.7152 * _lin(rgb[1]) + 0.0722 * _lin(rgb[2])
 
 
@@ -91,6 +94,7 @@ def _gradient_color(brand_colors: list[str]) -> tuple[int, int, int]:
 
 
 # ── Core functions ────────────────────────────────────────────────────────────
+
 
 def resize_to_aspect(image_bytes: bytes, aspect_ratio: str) -> bytes:
     """Resize image to exact pixel dimensions for the given aspect ratio.
@@ -183,6 +187,7 @@ def _wrap_text(text: str, font: ImageFont.FreeTypeFont, max_width: int) -> list[
 
 # ── Platform-specific overlay functions ───────────────────────────────────────
 
+
 def create_carousel_cover(
     image_bytes: bytes,
     title: str,
@@ -242,9 +247,9 @@ def create_carousel_slide(
     if len(lines) > 2:
         # Re-wrap with a shorter title to fit in 2 lines
         shorter = title[:50]
-        last_space = shorter.rfind(' ')
+        last_space = shorter.rfind(" ")
         if last_space > 0:
-            shorter = shorter[:last_space] + '…'
+            shorter = shorter[:last_space] + "…"
         lines = _wrap_text(shorter, font, max_text_w)[:2]
     line_height = int(font_size * 1.3)  # 130% leading for readability
     total_h = len(lines) * line_height

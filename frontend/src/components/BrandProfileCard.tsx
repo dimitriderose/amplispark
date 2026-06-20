@@ -36,7 +36,7 @@ export default function BrandProfileCard({ brand, onUpdate }: Props) {
   useEffect(() => {
     setDraft(brand)
     setShowCompetitors(brand.ui_preferences?.show_competitors ?? true)
-  }, [brand.brand_id])
+  }, [brand])
 
   const handleToggleCompetitors = () => {
     const next = !showCompetitors

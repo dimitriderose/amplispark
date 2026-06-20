@@ -6,10 +6,6 @@ import re
 
 from google.genai import types
 
-from backend.clients import get_genai_client
-from backend.config import GEMINI_MODEL
-from backend.platforms import get as get_platform
-from backend.agents.review_agent import review_post
 from backend.agents.caption_pipeline import (
     _enforce_char_limit,
     _fix_mojibake,
@@ -17,6 +13,10 @@ from backend.agents.caption_pipeline import (
 )
 from backend.agents.carousel_builder import _SLIDE_RE
 from backend.agents.hashtag_engine import _sanitize_hashtags
+from backend.agents.review_agent import review_post
+from backend.clients import get_genai_client
+from backend.config import GEMINI_MODEL
+from backend.platforms import get as get_platform
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +71,7 @@ def _check_quality_violations(caption: str, platform: str, derivative_type: str)
     if platform != "pinterest":
         # Check each sentence in the opening line, stripping discourse markers
         # to catch variants like "But what if" → "what if" (already banned)
-        for sentence in re.split(r'[.?!:]\s+', first_line):
+        for sentence in re.split(r"[.?!:]\s+", first_line):
             cleaned = _DISCOURSE_MARKER_RE.sub("", sentence.strip())
             if cleaned and _BANNED_OPENERS_RE.match(cleaned):
                 violations.append(f"BANNED_HOOK: '{sentence.strip()[:60]}'")
@@ -98,14 +98,19 @@ async def _quality_retry(final_caption: str, platform: str, derivative_type: str
         f"Output the corrected caption only, no hashtags, no explanation."
     )
     resp = await asyncio.to_thread(
-        get_genai_client().models.generate_content, model=GEMINI_MODEL, contents=retry_prompt,
+        get_genai_client().models.generate_content,
+        model=GEMINI_MODEL,
+        contents=retry_prompt,
         config=types.GenerateContentConfig(temperature=0.3),
     )
-    retried = _enforce_char_limit(_strip_markdown(_fix_mojibake(resp.text.strip())), platform, derivative_type)
+    retried = _enforce_char_limit(
+        _strip_markdown(_fix_mojibake(resp.text.strip())), platform, derivative_type
+    )
     new_violations = _check_quality_violations(retried, platform, derivative_type)
     if len(new_violations) < len(violations):
-        logger.info("Quality retry improved: %d → %d violations",
-                     len(violations), len(new_violations))
+        logger.info(
+            "Quality retry improved: %d → %d violations", len(violations), len(new_violations)
+        )
         return retried
     logger.warning("Quality retry didn't improve — keeping original")
     return final_caption
@@ -141,8 +146,10 @@ async def _review_gate(
             "content_theme": day_brief.get("content_theme", ""),
         }
         review = await review_post(
-            post_for_review, brand_profile,
-            social_proof_tier=_proof_tier, cta_type=_cta_type,
+            post_for_review,
+            brand_profile,
+            social_proof_tier=_proof_tier,
+            cta_type=_cta_type,
         )
         score = review.get("score", 7)
         logger.info("Review gate score: %d for %s/%s", score, platform, derivative_type)
@@ -194,14 +201,20 @@ async def _review_gate(
 
         # Format preservation notes per derivative type
         _spec = get_platform(platform)
-        _char_limit = (_spec.char_limits or {}).get(derivative_type) or (_spec.char_limits or {}).get("default", 0)
-        _limit_note = f" HARD LIMIT: {_char_limit} characters for {platform} {derivative_type}." if _char_limit else ""
+        _char_limit = (_spec.char_limits or {}).get(derivative_type) or (
+            _spec.char_limits or {}
+        ).get("default", 0)
+        _limit_note = (
+            f" HARD LIMIT: {_char_limit} characters for {platform} {derivative_type}."
+            if _char_limit
+            else ""
+        )
         _FORMAT_NOTES = {
             "carousel": (
                 f"STRUCTURAL CONSTRAINT (HARD RULE — violating this breaks the image pipeline):\n"
                 f"The following Slide labels are MACHINE-PARSED to generate individual images. "
                 f"You MUST preserve EVERY label exactly: "
-                f"{', '.join(f'Slide {i+1}:' for i in range(_spec.carousel_slide_count))}.\n"
+                f"{', '.join(f'Slide {i + 1}:' for i in range(_spec.carousel_slide_count))}.\n"
                 f"- Do NOT remove, merge, renumber, or reword any Slide N: label\n"
                 f"- Do NOT restructure the caption to eliminate slide boundaries\n"
                 f"- Apply reviewer suggestions WITHIN individual slides, not by reorganizing\n"
@@ -242,12 +255,12 @@ async def _review_gate(
             f"- Do NOT invent client stories, dollar amounts, or statistics\n"
             f"- Prove expertise by teaching something specific and actionable\n"
             f"- BANNED HOOKS — do NOT open with any of these (or variants with 'But', 'And', 'So' prefixes): "
-            f"\"Are you...?\", \"Did you know...?\", \"What if...?\", \"In today's...\", "
-            f"\"As a...\", \"When it comes to...\", \"Here's the thing:\", \"The truth is:\", "
-            f"\"Let me tell you\", \"Still [X]ing...?\", \"[X] won't tell you\", "
-            f"\"You might be [X]ing\", \"Imagine [X]ing\"\n"
-            f"- MOMENTUM KILLERS — do NOT use: \"Sound familiar?\", \"Let's break it down\", "
-            f"\"Here's why it matters\", \"Let me explain\", \"Here's why you need to\"\n"
+            f'"Are you...?", "Did you know...?", "What if...?", "In today\'s...", '
+            f'"As a...", "When it comes to...", "Here\'s the thing:", "The truth is:", '
+            f'"Let me tell you", "Still [X]ing...?", "[X] won\'t tell you", '
+            f'"You might be [X]ing", "Imagine [X]ing"\n'
+            f'- MOMENTUM KILLERS — do NOT use: "Sound familiar?", "Let\'s break it down", '
+            f'"Here\'s why it matters", "Let me explain", "Here\'s why you need to"\n'
             f"- Open with a SPECIFIC, CONCRETE statement or a pattern-interrupt instead\n\n"
             f"{_format_block}"
             f"REVIEWER SUGGESTIONS (apply within existing format structure — "
@@ -277,7 +290,8 @@ async def _review_gate(
             if orig_slides > 1 and new_slides < orig_slides:
                 logger.warning(
                     "Review gate rewrite lost slides (%d→%d) — keeping original",
-                    orig_slides, new_slides,
+                    orig_slides,
+                    new_slides,
                 )
                 return final_caption, parsed_hashtags, review
         if revised_hashtags and isinstance(revised_hashtags, list):
@@ -294,19 +308,26 @@ async def _review_gate(
             "content_theme": day_brief.get("content_theme", ""),
         }
         final_review = await review_post(
-            rewritten_for_review, brand_profile,
-            social_proof_tier=_proof_tier, cta_type=_cta_type,
+            rewritten_for_review,
+            brand_profile,
+            social_proof_tier=_proof_tier,
+            cta_type=_cta_type,
         )
         final_score = final_review.get("score", 0)
-        logger.info("Review gate post-rewrite score: %d for %s/%s",
-                     final_score, platform, derivative_type)
+        logger.info(
+            "Review gate post-rewrite score: %d for %s/%s", final_score, platform, derivative_type
+        )
 
         if final_score >= 7:
             return rewritten, parsed_hashtags, final_review
 
         # ── Attempt 2: stronger rewrite with full day brief context ──
-        logger.warning("Review gate attempt 2 (score=%d) — stronger rewrite for %s/%s",
-                       final_score, platform, derivative_type)
+        logger.warning(
+            "Review gate attempt 2 (score=%d) — stronger rewrite for %s/%s",
+            final_score,
+            platform,
+            derivative_type,
+        )
 
         _pillar = day_brief.get("pillar", "")
         _theme = day_brief.get("content_theme", "")
@@ -332,8 +353,8 @@ async def _review_gate(
             f"do NOT remove/merge/renumber structural labels):\n{strong_notes}\n\n"
             f"HARD RULES:\n{_rewrite_constraints}"
             f"- BANNED HOOKS — do NOT open with: "
-            f"\"Are you...?\", \"Did you know...?\", \"What if...?\", \"In today's...\", "
-            f"\"As a...\", \"When it comes to...\", \"Here's the thing:\", \"The truth is:\"\n"
+            f'"Are you...?", "Did you know...?", "What if...?", "In today\'s...", '
+            f'"As a...", "When it comes to...", "Here\'s the thing:", "The truth is:"\n'
             f"- Open with a SPECIFIC, CONCRETE statement or pattern-interrupt\n"
             f"- Prove expertise by teaching, not claiming\n\n"
             f"{_format_block}"
@@ -347,7 +368,8 @@ async def _review_gate(
         )
         strong_rewrite = _enforce_char_limit(
             _strip_markdown(_fix_mojibake(resp2.text.strip())),
-            platform, derivative_type,
+            platform,
+            derivative_type,
         )
         # Carousel safety: reject rewrites that lost slide structure
         if derivative_type == "carousel":
@@ -356,7 +378,8 @@ async def _review_gate(
             if orig_slides > 1 and strong_slides < orig_slides:
                 logger.warning(
                     "Review gate attempt 2 lost slides (%d→%d) — keeping original",
-                    orig_slides, strong_slides,
+                    orig_slides,
+                    strong_slides,
                 )
                 return final_caption, parsed_hashtags, review
 
@@ -370,12 +393,15 @@ async def _review_gate(
             "content_theme": day_brief.get("content_theme", ""),
         }
         strong_review = await review_post(
-            strong_for_review, brand_profile,
-            social_proof_tier=_proof_tier, cta_type=_cta_type,
+            strong_for_review,
+            brand_profile,
+            social_proof_tier=_proof_tier,
+            cta_type=_cta_type,
         )
         strong_score = strong_review.get("score", 0)
-        logger.info("Review gate attempt 2 score: %d for %s/%s",
-                     strong_score, platform, derivative_type)
+        logger.info(
+            "Review gate attempt 2 score: %d for %s/%s", strong_score, platform, derivative_type
+        )
 
         if strong_score >= 7:
             if strong_review.get("revised_hashtags"):
@@ -383,8 +409,12 @@ async def _review_gate(
             return strong_rewrite, parsed_hashtags, strong_review
 
         # ── Attempt 2 also failed — return the best version we have ──
-        logger.warning("Review gate exhausted — best score %d for %s/%s",
-                       max(final_score, strong_score), platform, derivative_type)
+        logger.warning(
+            "Review gate exhausted — best score %d for %s/%s",
+            max(final_score, strong_score),
+            platform,
+            derivative_type,
+        )
         if strong_score >= final_score:
             return strong_rewrite, parsed_hashtags, strong_review
         return rewritten, parsed_hashtags, final_review

@@ -2,7 +2,6 @@
 
 import base64
 import logging
-from typing import Optional
 
 import httpx
 
@@ -120,24 +119,28 @@ def _build_page_body(caption: str, hashtags: list[str]) -> list[dict]:
     paragraphs = caption.split("\n\n") if caption else []
     for para in paragraphs:
         if para.strip():
-            blocks.append({
-                "object": "block",
-                "type": "paragraph",
-                "paragraph": {
-                    "rich_text": [{"type": "text", "text": {"content": para.strip()[:2000]}}],
-                },
-            })
+            blocks.append(
+                {
+                    "object": "block",
+                    "type": "paragraph",
+                    "paragraph": {
+                        "rich_text": [{"type": "text", "text": {"content": para.strip()[:2000]}}],
+                    },
+                }
+            )
 
     # Hashtags as a separate paragraph
     if hashtags:
         tag_str = " ".join(f"#{h.lstrip('#')}" for h in hashtags)
-        blocks.append({
-            "object": "block",
-            "type": "paragraph",
-            "paragraph": {
-                "rich_text": [{"type": "text", "text": {"content": tag_str[:2000]}}],
-            },
-        })
+        blocks.append(
+            {
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {
+                    "rich_text": [{"type": "text", "text": {"content": tag_str[:2000]}}],
+                },
+            }
+        )
 
     return blocks
 

@@ -4,6 +4,7 @@ import logging
 
 import httpx
 from google.genai import types
+
 from backend.clients import get_genai_client
 from backend.config import GEMINI_MODEL
 
@@ -11,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 # ── Platform post fetchers ─────────────────────────────────────────────────────
+
 
 async def _fetch_linkedin_posts(oauth_token: str, limit: int = 50) -> list[dict]:
     """Fetch recent posts from LinkedIn using a user OAuth 2.0 access token.
@@ -133,6 +135,7 @@ _FETCH_FNS: dict[str, object] = {
 
 # ── Gemini voice analysis ──────────────────────────────────────────────────────
 
+
 async def _analyze_social_voice(posts: list[dict]) -> dict:
     """Use Gemini to extract writing voice patterns from a list of posts."""
     post_texts = "\n---\n".join(p["text"] for p in posts[:30])
@@ -177,6 +180,7 @@ Return ONLY a valid JSON object with these exact keys:
 
 # ── Public API ─────────────────────────────────────────────────────────────────
 
+
 async def connect_platform(platform: str, oauth_token: str) -> dict:
     """Fetch posts from a social platform and return a Gemini-generated voice analysis.
 
@@ -202,10 +206,10 @@ async def connect_platform(platform: str, oauth_token: str) -> dict:
     fetch_fn = _FETCH_FNS[platform]
     try:
         posts = await fetch_fn(oauth_token)  # type: ignore[operator]
-    except httpx.TimeoutException:
+    except httpx.TimeoutException as err:
         raise ValueError(
             f"Request to {platform} timed out. The platform API may be slow — please try again."
-        )
+        ) from err
     except httpx.HTTPStatusError as e:
         status = e.response.status_code
         if status == 401:
@@ -224,9 +228,7 @@ async def connect_platform(platform: str, oauth_token: str) -> dict:
         raise
 
     if not posts:
-        raise ValueError(
-            f"No posts found on {platform}. Make sure your account has public posts."
-        )
+        raise ValueError(f"No posts found on {platform}. Make sure your account has public posts.")
 
     logger.info("Analyzing voice from %d %s posts", len(posts), platform)
     return await _analyze_social_voice(posts)

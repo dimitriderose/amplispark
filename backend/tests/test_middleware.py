@@ -1,13 +1,11 @@
 """Tests for Firebase auth middleware and brand ownership verification."""
 
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
-from starlette.testclient import TestClient
 
-from backend.tests.conftest import TEST_UID, TEST_BRAND_ID
-
+from backend.tests.conftest import TEST_BRAND_ID, TEST_UID
 
 # ---------------------------------------------------------------------------
 # get_authenticated_uid tests

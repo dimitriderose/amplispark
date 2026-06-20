@@ -7,6 +7,7 @@ connection pool instead of creating a fresh client at import time.
 import threading
 
 from google import genai
+
 from backend.config import GOOGLE_API_KEY
 
 _client = None

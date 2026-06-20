@@ -5,7 +5,6 @@ to Gemini and Veo for brand-consistent generation.
 """
 
 import logging
-from typing import Optional
 
 from backend.services.storage_client import download_gcs_uri
 
@@ -24,7 +23,7 @@ def _guess_mime(uri: str) -> str:
     return "image/jpeg"
 
 
-async def _download_safe(uri: str) -> Optional[tuple[bytes, str]]:
+async def _download_safe(uri: str) -> tuple[bytes, str] | None:
     """Download a GCS URI, returning (bytes, mime) or None on failure."""
     try:
         data = await download_gcs_uri(uri)

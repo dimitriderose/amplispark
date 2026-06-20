@@ -1,6 +1,7 @@
-from pydantic import BaseModel
-from typing import Optional, List
 from datetime import datetime
+
+from pydantic import BaseModel
+
 
 class Pillar(BaseModel):
     id: str
@@ -8,6 +9,7 @@ class Pillar(BaseModel):
     key_message: str
     source: str = "generated"  # "event" | "generated"
     derivative_count: int = 0
+
 
 class DayBrief(BaseModel):
     day_index: int
@@ -18,29 +20,33 @@ class DayBrief(BaseModel):
     caption_direction: str
     image_direction: str
     posting_time: str
-    pillar_id: Optional[str] = None
-    derivative_type: Optional[str] = None  # original | condensed | visual | conversational | engagement | standalone
-    pillar_context: Optional[str] = None
-    user_photo_url: Optional[str] = None
+    pillar_id: str | None = None
+    derivative_type: str | None = (
+        None  # original | condensed | visual | conversational | engagement | standalone
+    )
+    pillar_context: str | None = None
+    user_photo_url: str | None = None
     image_source: str = "generated"  # generated | user_upload
     generated: bool = False
-    post_id: Optional[str] = None
+    post_id: str | None = None
     status: str = "planned"  # planned | generated | approved | posted
+
 
 class ContentPlanCreate(BaseModel):
     brand_id: str
-    goals: Optional[str] = None
-    platforms: Optional[List[str]] = ["instagram"]
-    business_events: Optional[str] = None
+    goals: str | None = None
+    platforms: list[str] | None = ["instagram"]
+    business_events: str | None = None
+
 
 class ContentPlan(BaseModel):
     plan_id: str
     brand_id: str
     week_of: str
-    goals: Optional[str] = None
-    business_events: Optional[str] = None
-    platforms: List[str] = []
-    pillars: List[Pillar] = []
-    days: List[DayBrief] = []
+    goals: str | None = None
+    business_events: str | None = None
+    platforms: list[str] = []
+    pillars: list[Pillar] = []
+    days: list[DayBrief] = []
     status: str = "draft"  # draft | generating | complete
-    created_at: Optional[datetime] = None
+    created_at: datetime | None = None

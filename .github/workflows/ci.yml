@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  backend-tests:
+  backend:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,9 +20,22 @@ jobs:
           cache-dependency-path: backend/requirements.txt
 
       - name: Install dependencies
-        run: pip install -r backend/requirements.txt
+        run: pip install -r requirements-dev.txt
 
-      - name: Run backend tests with coverage
+      - name: Ruff lint
+        run: ruff check backend/
+
+      - name: Ruff format check
+        run: ruff format --check backend/
+
+      - name: Mypy type check
+        run: mypy backend/ --ignore-missing-imports
+        env:
+          GOOGLE_API_KEY: dummy
+          FIREBASE_PROJECT_ID: dummy
+          GCS_BUCKET_NAME: dummy
+
+      - name: Tests + coverage
         run: python -m pytest backend/tests/ -v --tb=short --cov=backend --cov-report=term-missing --cov-report=xml --cov-fail-under=0
         env:
           GOOGLE_API_KEY: dummy
@@ -35,7 +48,7 @@ jobs:
           name: backend-coverage
           path: coverage.xml
 
-  frontend-build:
+  frontend:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -51,7 +64,19 @@ jobs:
         run: npm ci
         working-directory: frontend
 
-      - name: TypeScript build check
+      - name: TypeScript type check
+        run: npm run typecheck
+        working-directory: frontend
+
+      - name: Lint (zero warnings)
+        run: npm run lint
+        working-directory: frontend
+
+      - name: Unit tests
+        run: npm run test
+        working-directory: frontend
+
+      - name: Production build
         run: npm run build
         working-directory: frontend
         env:
@@ -61,12 +86,3 @@ jobs:
           VITE_FIREBASE_STORAGE_BUCKET: dummy
           VITE_FIREBASE_MESSAGING_SENDER_ID: dummy
           VITE_FIREBASE_APP_ID: dummy
-
-      - name: Lint
-        run: npm run lint
-        working-directory: frontend
-
-      - name: Frontend tests (unit + coverage)
-        run: npm run test:coverage --if-present
-        working-directory: frontend
-        # Vitest not yet configured — tracked in GitHub issue #1 (90% coverage sprint)

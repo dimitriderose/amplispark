@@ -2,7 +2,6 @@
 
 import re
 
-
 _SLIDE_RE = re.compile(r"Slide\s*\d+\s*[:\-–]\s*", re.IGNORECASE)
 
 
@@ -21,20 +20,20 @@ def _extract_slide_headline(slide_text: str) -> str:
     truncation. Never cuts mid-word.
     """
     # Try to find the first sentence end within a generous limit
-    for sep in ['. ', '! ', '? ', '.\n', '!\n', '?\n']:
+    for sep in [". ", "! ", "? ", ".\n", "!\n", "?\n"]:
         idx = slide_text.find(sep)
         if idx != -1 and idx <= 80:
-            return slide_text[:idx + 1].strip()
+            return slide_text[: idx + 1].strip()
     # Also try colon, em-dash, semicolon, or ellipsis as natural break points
-    for sep in [': ', ' — ', '; ', '… ', '... ', '...\n']:
+    for sep in [": ", " — ", "; ", "… ", "... ", "...\n"]:
         idx = slide_text.find(sep)
         if idx != -1 and idx <= 60:
-            if sep == ': ' and idx < 15:
+            if sep == ": " and idx < 15:
                 continue  # Skip label prefix like "Technique: ..."
             return slide_text[:idx].strip()
     if len(slide_text) <= 60:
         return slide_text
     # Truncate at last word boundary, never mid-word
     truncated = slide_text[:60]
-    last_space = truncated.rfind(' ')
-    return (truncated[:last_space] if last_space > 0 else truncated) + '…'
+    last_space = truncated.rfind(" ")
+    return (truncated[:last_space] if last_space > 0 else truncated) + "…"

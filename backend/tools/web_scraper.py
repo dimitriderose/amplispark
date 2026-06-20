@@ -1,8 +1,9 @@
+import re
+from urllib.parse import urljoin
+
 import httpx
 from bs4 import BeautifulSoup
-import re
-from typing import Optional
-from urllib.parse import urljoin
+
 
 async def fetch_website(url: str) -> dict:
     """Fetch and parse a website for brand analysis.
@@ -12,19 +13,31 @@ async def fetch_website(url: str) -> dict:
     """
     if not url.startswith(("http://", "https://")):
         return {
-            "title": "", "description": "", "text_content": "Invalid URL scheme — only http/https allowed.",
-            "colors_found": [], "images": [], "nav_items": [], "logo_url": None, "error": "Invalid URL scheme",
+            "title": "",
+            "description": "",
+            "text_content": "Invalid URL scheme — only http/https allowed.",
+            "colors_found": [],
+            "images": [],
+            "nav_items": [],
+            "logo_url": None,
+            "error": "Invalid URL scheme",
         }
     try:
         async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
-            response = await client.get(url, headers={
-                "User-Agent": "Mozilla/5.0 (compatible; AmplisparkBot/1.0)"
-            })
+            response = await client.get(
+                url, headers={"User-Agent": "Mozilla/5.0 (compatible; AmplisparkBot/1.0)"}
+            )
             response.raise_for_status()
     except Exception as e:
         return {
-            "title": "", "description": "", "text_content": f"Could not fetch website: {e}",
-            "colors_found": [], "images": [], "nav_items": [], "logo_url": None, "error": str(e)
+            "title": "",
+            "description": "",
+            "text_content": f"Could not fetch website: {e}",
+            "colors_found": [],
+            "images": [],
+            "nav_items": [],
+            "logo_url": None,
+            "error": str(e),
         }
 
     # Parse with full HTML (before decomposing header/nav) for logo detection
@@ -61,7 +74,7 @@ async def fetch_website(url: str) -> dict:
     }
 
 
-def _extract_logo_url(soup: BeautifulSoup, base_url: str) -> Optional[str]:
+def _extract_logo_url(soup: BeautifulSoup, base_url: str) -> str | None:
     """Best-effort logo detection from HTML.
 
     Checks (in priority order):
@@ -71,12 +84,14 @@ def _extract_logo_url(soup: BeautifulSoup, base_url: str) -> Optional[str]:
     """
     # 1. <img> tags with logo in class, id, or alt
     for img in soup.find_all("img", src=True):
-        attrs_text = " ".join([
-            " ".join(img.get("class", [])),
-            img.get("id", ""),
-            img.get("alt", ""),
-            img.get("src", ""),
-        ]).lower()
+        attrs_text = " ".join(
+            [
+                " ".join(img.get("class", [])),
+                img.get("id", ""),
+                img.get("alt", ""),
+                img.get("src", ""),
+            ]
+        ).lower()
         if "logo" in attrs_text:
             src = img["src"]
             if src and not src.startswith("data:"):
@@ -102,7 +117,9 @@ def extract_css_colors(html: str) -> list[str]:
     rgb_pattern = r"rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)"
 
     hex_colors = re.findall(hex_pattern, html)
-    hex_colors = [f"#{c}" if len(c) == 6 else f"#{c[0]*2}{c[1]*2}{c[2]*2}" for c in hex_colors]
+    hex_colors = [
+        f"#{c}" if len(c) == 6 else f"#{c[0] * 2}{c[1] * 2}{c[2] * 2}" for c in hex_colors
+    ]
 
     rgb_colors = re.findall(rgb_pattern, html)
     rgb_hex = [f"#{int(r):02x}{int(g):02x}{int(b):02x}" for r, g, b in rgb_colors]

@@ -1,12 +1,11 @@
 import logging
-from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Body
+from fastapi import APIRouter, Body, File, HTTPException, Query, UploadFile
 
-from backend.models.brand import BrandProfileCreate, BrandProfile, BrandProfileUpdate
+from backend.agents.brand_analyst import run_brand_analysis
+from backend.models.brand import BrandProfileCreate, BrandProfileUpdate
 from backend.services import firestore_client
 from backend.services.storage_client import upload_brand_asset
-from backend.agents.brand_analyst import run_brand_analysis
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +20,7 @@ async def list_brands(
 ):
     """List all brands owned by a given anonymous UID."""
     brands = await firestore_client.list_brands_by_owner(owner_uid)
-    return {"brands": brands[offset:offset + limit]}
+    return {"brands": brands[offset : offset + limit]}
 
 
 @router.post("/brands")
@@ -68,18 +67,30 @@ async def analyze_brand(brand_id: str, data: BrandProfileCreate):
 
         # Only copy known-safe fields from LLM output — never spread arbitrary keys into Firestore
         _ALLOWED_PROFILE_KEYS = {
-            "business_name", "business_type", "industry", "tone", "colors",
-            "target_audience", "visual_style", "content_themes", "competitors",
-            "image_style_directive", "caption_style_directive",
-            "image_generation_risk", "byop_recommendation", "style_reference_gcs_uri",
+            "business_name",
+            "business_type",
+            "industry",
+            "tone",
+            "colors",
+            "target_audience",
+            "visual_style",
+            "content_themes",
+            "competitors",
+            "image_style_directive",
+            "caption_style_directive",
+            "image_generation_risk",
+            "byop_recommendation",
+            "style_reference_gcs_uri",
             "logo_url",
         }
         update_data = {k: v for k, v in profile.items() if k in _ALLOWED_PROFILE_KEYS}
-        update_data.update({
-            "description": data.description,
-            "website_url": data.website_url,
-            "analysis_status": "complete",
-        })
+        update_data.update(
+            {
+                "description": data.description,
+                "website_url": data.website_url,
+                "analysis_status": "complete",
+            }
+        )
         await firestore_client.update_brand(brand_id, update_data)
 
         brand = await firestore_client.get_brand(brand_id)
@@ -88,7 +99,7 @@ async def analyze_brand(brand_id: str, data: BrandProfileCreate):
     except Exception as e:
         logger.error(f"Brand analysis error for {brand_id}: {e}")
         await firestore_client.update_brand(brand_id, {"analysis_status": "failed"})
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.get("/brands/{brand_id}")
@@ -115,7 +126,7 @@ async def update_brand(brand_id: str, data: BrandProfileUpdate):
 @router.post("/brands/{brand_id}/upload")
 async def upload_brand_asset_endpoint(
     brand_id: str,
-    files: list[UploadFile] = File(...),
+    files: list[UploadFile] = File(...),  # noqa: B008
 ):
     """Upload brand assets (logo, product photos, PDFs). Max 3 files."""
     brand = await firestore_client.get_brand(brand_id)
@@ -131,11 +142,13 @@ async def upload_brand_asset_endpoint(
         mime = file.content_type or "application/octet-stream"
         file_type = "document" if "pdf" in mime else "image"
         gcs_uri = await upload_brand_asset(brand_id, content, file.filename, mime)
-        uploaded.append({
-            "filename": file.filename,
-            "url": gcs_uri,
-            "type": file_type,
-        })
+        uploaded.append(
+            {
+                "filename": file.filename,
+                "url": gcs_uri,
+                "type": file_type,
+            }
+        )
 
     # Update brand assets list in Firestore
     existing = brand.get("uploaded_assets", [])
@@ -154,7 +167,7 @@ async def delete_brand_asset(brand_id: str, asset_index: int):
 
 
 @router.patch("/brands/{brand_id}/logo")
-async def set_brand_logo(brand_id: str, logo_url: Optional[str] = Body(None, embed=True)):
+async def set_brand_logo(brand_id: str, logo_url: str | None = Body(None, embed=True)):
     """Set or clear the brand logo_url field."""
     brand = await firestore_client.get_brand(brand_id)
     if not brand:

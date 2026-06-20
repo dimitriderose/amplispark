@@ -1,7 +1,7 @@
 from collections import Counter
-from typing import Optional
 
-def analyze_brand_colors(css_colors: list[str], logo_path: Optional[str] = None) -> dict:
+
+def analyze_brand_colors(css_colors: list[str], logo_path: str | None = None) -> dict:
     """Analyze extracted colors to determine brand palette.
 
     Returns primary, secondary, accent color suggestions.
@@ -41,7 +41,9 @@ def analyze_brand_colors(css_colors: list[str], logo_path: Optional[str] = None)
 def extract_brand_voice(text_content: str) -> dict:
     """Analyze text content to extract brand voice characteristics."""
     word_count = len(text_content.split())
-    avg_sentence_len = len(text_content.split(".")) and word_count / max(len(text_content.split(".")), 1)
+    avg_sentence_len = len(text_content.split(".")) and word_count / max(
+        len(text_content.split(".")), 1
+    )
 
     # Very basic heuristic analysis
     tone_signals = {
@@ -59,7 +61,9 @@ def extract_brand_voice(text_content: str) -> dict:
             detected_tones.append(tone)
 
     return {
-        "detected_tones": detected_tones[:3] if detected_tones else ["professional", "approachable"],
+        "detected_tones": detected_tones[:3]
+        if detected_tones
+        else ["professional", "approachable"],
         "word_count": word_count,
         "approximate_reading_level": "conversational" if avg_sentence_len < 20 else "formal",
     }

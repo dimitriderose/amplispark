@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 # Helper builders for tier-aware prompt blocks
 # ---------------------------------------------------------------------------
 
+
 def _build_tier_block(proof_tier: str, years, clients) -> str:
     if proof_tier == "data_rich":
         return (
@@ -37,8 +38,7 @@ def _build_tier_block(proof_tier: str, years, clients) -> str:
 
 def _build_pillar_block(proof_tier: str) -> str:
     pillar_lines = "\n".join(
-        f"- {p.replace('_', ' ').title()}: {PILLAR_DESCRIPTIONS[p]}"
-        for p in PILLAR_DESCRIPTIONS
+        f"- {p.replace('_', ' ').title()}: {PILLAR_DESCRIPTIONS[p]}" for p in PILLAR_DESCRIPTIONS
     )
     header = f"CONTENT PILLARS (the 5 types used in the calendar):\n{pillar_lines}\n\n"
     if proof_tier == "thin_profile":
@@ -87,11 +87,7 @@ _DEFAULT_PLATFORMS = ["instagram", "linkedin", "x", "facebook"]
 
 def _build_platform_block(connected_platforms: list) -> str:
     platforms = connected_platforms if connected_platforms else _DEFAULT_PLATFORMS
-    lines = [
-        PLATFORM_STRENGTHS[p]
-        for p in platforms
-        if p in PLATFORM_STRENGTHS
-    ]
+    lines = [PLATFORM_STRENGTHS[p] for p in platforms if p in PLATFORM_STRENGTHS]
     if not lines:
         lines = [PLATFORM_STRENGTHS[p] for p in _DEFAULT_PLATFORMS]
     return "PLATFORM STRENGTHS (reference when explaining platform decisions):\n" + "\n".join(lines)
@@ -127,7 +123,7 @@ def _build_calendar_block(plan: dict | None, posts: list | None) -> str:
 
     # Index posts by (day_index, platform) for fast lookup
     post_map: dict[tuple[int, str], dict] = {}
-    for p in (posts or []):
+    for p in posts or []:
         key = (p.get("day_index"), p.get("platform", ""))
         if key not in post_map or p.get("status") == "complete":
             post_map[key] = p
@@ -142,8 +138,10 @@ def _build_calendar_block(plan: dict | None, posts: list | None) -> str:
     for d in days:
         pid = d.get("pillar_id")
         if pid:
-            pillar_id_counts[pid].append((d.get("day_index") or 0))
-    repurpose_ids = {pid for pid, idxs in pillar_id_counts.items() if len(set(idxs)) > 1 or len(idxs) > 1}
+            pillar_id_counts[pid].append(d.get("day_index") or 0)
+    repurpose_ids = {
+        pid for pid, idxs in pillar_id_counts.items() if len(set(idxs)) > 1 or len(idxs) > 1
+    }
 
     lines = ["YOUR CONTENT CALENDAR THIS WEEK:"]
     total_entries = 0
@@ -197,9 +195,11 @@ def _build_calendar_block(plan: dict | None, posts: list | None) -> str:
                 status_str = "NOT YET GENERATED"
                 review_note = ""
 
-            lines.append(f"  {platform.title()} | {deriv.replace('_', ' ').title()} | {pillar.replace('_', ' ').title()} | \"{theme}\"")
+            lines.append(
+                f'  {platform.title()} | {deriv.replace("_", " ").title()} | {pillar.replace("_", " ").title()} | "{theme}"'
+            )
             if hook:
-                lines.append(f"    Hook: \"{hook}\"")
+                lines.append(f'    Hook: "{hook}"')
             event_note = f" | Event: {event}" if event else ""
             lines.append(f"    CTA: {cta}{event_note} | Status: {status_str}{review_note}")
 
@@ -228,8 +228,10 @@ def _build_calendar_block(plan: dict | None, posts: list | None) -> str:
 
     # Progress summary
     avg_score = round(sum(scores) / len(scores), 1) if scores else 0
-    lines.append(f"\nPROGRESS: {generated}/{total_entries} generated, {approved} approved"
-                 + (f", avg score {avg_score}" if avg_score else ""))
+    lines.append(
+        f"\nPROGRESS: {generated}/{total_entries} generated, {approved} approved"
+        + (f", avg score {avg_score}" if avg_score else "")
+    )
 
     result = "\n".join(lines)
     # Cap calendar block to prevent prompt bloat (Gemini Live has limited context)
@@ -242,8 +244,8 @@ def _build_calendar_block(plan: dict | None, posts: list | None) -> str:
 # Main prompt builder
 # ---------------------------------------------------------------------------
 
-def build_coaching_prompt(brand_profile: dict, plan: dict = None,
-                          posts: list = None) -> str:
+
+def build_coaching_prompt(brand_profile: dict, plan: dict = None, posts: list = None) -> str:
     """Build the Gemini Live API system prompt for voice brand coaching.
 
     The prompt injects the full brand profile and content calendar so the

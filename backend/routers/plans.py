@@ -1,11 +1,11 @@
 import logging
 
-from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Body
+from fastapi import APIRouter, Body, File, HTTPException, UploadFile
 from pydantic import BaseModel as _PydanticBaseModel
 
+from backend.agents.strategy_agent import refresh_research, run_strategy
 from backend.services import firestore_client
 from backend.services.storage_client import upload_byop_photo
-from backend.agents.strategy_agent import run_strategy, refresh_research
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ async def list_plans(brand_id: str):
 
 
 @router.post("/brands/{brand_id}/plans")
-async def create_plan(brand_id: str, body: CreatePlanBody = Body(CreatePlanBody())):
+async def create_plan(brand_id: str, body: CreatePlanBody = Body(CreatePlanBody())):  # noqa: B008
     """Generate a content calendar plan using the Strategy Agent."""
     brand = await firestore_client.get_brand(brand_id)
     if not brand:
@@ -43,10 +43,12 @@ async def create_plan(brand_id: str, body: CreatePlanBody = Body(CreatePlanBody(
         # else: None -> Strategy Agent uses AI recommendation (existing behavior)
 
     try:
-        days, trend_summary = await run_strategy(brand_id, brand, num_days, business_events=body.business_events, platforms=platforms)
+        days, trend_summary = await run_strategy(
+            brand_id, brand, num_days, business_events=body.business_events, platforms=platforms
+        )
     except Exception as e:
         logger.error(f"Strategy agent error for brand {brand_id}: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
     plan_data = {
         "brand_id": brand_id,
@@ -61,7 +63,7 @@ async def create_plan(brand_id: str, body: CreatePlanBody = Body(CreatePlanBody(
         plan_id = await firestore_client.create_plan(brand_id, plan_data)
     except Exception as e:
         logger.error(f"Failed to persist plan for brand {brand_id}: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
     return {"plan_id": plan_id, "status": "complete", "days": days, "trend_summary": trend_summary}
 
@@ -117,7 +119,7 @@ async def update_plan_day(
     brand_id: str,
     plan_id: str,
     day_index: int,
-    data: UpdatePlanDayBody = Body(...),
+    data: UpdatePlanDayBody = Body(...),  # noqa: B008
 ):
     """Update a specific day in a content plan."""
     plan = await firestore_client.get_plan(plan_id, brand_id)
@@ -132,13 +134,17 @@ async def update_plan_day(
         )
 
     # Remove protected fields from user-supplied data
-    safe_data = {k: v for k, v in data.model_dump(exclude_none=True).items() if k not in ("day_index", "brand_id", "plan_id")}
+    safe_data = {
+        k: v
+        for k, v in data.model_dump(exclude_none=True).items()
+        if k not in ("day_index", "brand_id", "plan_id")
+    }
 
     try:
         await firestore_client.update_plan_day(brand_id, plan_id, day_index, safe_data)
     except Exception as e:
         logger.error(f"Failed to update day {day_index} for plan {plan_id}: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
     updated_plan = await firestore_client.get_plan(plan_id, brand_id)
     return {"plan_profile": updated_plan}
@@ -154,7 +160,7 @@ async def upload_day_photo(
     brand_id: str,
     plan_id: str,
     day_index: int,
-    file: UploadFile = File(...),
+    file: UploadFile = File(...),  # noqa: B008
 ):
     """Upload a custom photo for a specific calendar day (BYOP).
 
@@ -197,14 +203,21 @@ async def upload_day_photo(
             brand_id, plan_id, day_index, file_bytes, mime
         )
     except Exception as e:
-        logger.error("BYOP upload failed for brand %s plan %s day %s: %s", brand_id, plan_id, day_index, e)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        logger.error(
+            "BYOP upload failed for brand %s plan %s day %s: %s", brand_id, plan_id, day_index, e
+        )
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
-    await firestore_client.update_plan_day(brand_id, plan_id, day_index, {
-        "custom_photo_url": signed_url,
-        "custom_photo_gcs_uri": gcs_uri,
-        "custom_photo_mime": mime,
-    })
+    await firestore_client.update_plan_day(
+        brand_id,
+        plan_id,
+        day_index,
+        {
+            "custom_photo_url": signed_url,
+            "custom_photo_gcs_uri": gcs_uri,
+            "custom_photo_mime": mime,
+        },
+    )
 
     return {"custom_photo_url": signed_url, "day_index": day_index}
 
@@ -220,10 +233,15 @@ async def delete_day_photo(brand_id: str, plan_id: str, day_index: int):
     if day_index < 0 or day_index >= len(days):
         raise HTTPException(status_code=400, detail=f"day_index {day_index} out of range")
 
-    await firestore_client.update_plan_day(brand_id, plan_id, day_index, {
-        "custom_photo_url": None,
-        "custom_photo_gcs_uri": None,
-        "custom_photo_mime": None,
-    })
+    await firestore_client.update_plan_day(
+        brand_id,
+        plan_id,
+        day_index,
+        {
+            "custom_photo_url": None,
+            "custom_photo_gcs_uri": None,
+            "custom_photo_mime": None,
+        },
+    )
 
     return {"status": "removed", "day_index": day_index}

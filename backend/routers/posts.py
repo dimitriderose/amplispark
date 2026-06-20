@@ -5,15 +5,15 @@ import logging
 import re
 import uuid
 import zipfile
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, HTTPException, Query, Body
+from fastapi import APIRouter, Body, HTTPException, Query
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel as _PydanticBaseModel
 
 from backend.gcs_utils import parse_gcs_uri
 from backend.services import firestore_client
-from backend.services.storage_client import get_signed_url, get_bucket
+from backend.services.storage_client import get_bucket, get_signed_url
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +21,7 @@ router = APIRouter()
 
 
 # ── Helpers ──────────────────────────────────────────────────
+
 
 async def _refresh_signed_urls(post: dict) -> dict:
     """Re-sign expired GCS URLs so images always load."""
@@ -39,7 +40,9 @@ async def _refresh_signed_urls(post: dict) -> dict:
             else:
                 urls.append(signed)
         except Exception as e:
-            logger.warning("Failed to re-sign image URL index %d for %s: %s", i, post.get("post_id"), e)
+            logger.warning(
+                "Failed to re-sign image URL index %d for %s: %s", i, post.get("post_id"), e
+            )
     if post.get("thumbnail_gcs_uri"):
         try:
             post["thumbnail_url"] = await get_signed_url(post["thumbnail_gcs_uri"])
@@ -55,8 +58,8 @@ async def _auto_fail_stale_generating(post: dict, brand_id: str) -> None:
     created = post.get("created_at")
     if created:
         if created.tzinfo is None:
-            created = created.replace(tzinfo=timezone.utc)
-    if created and (datetime.now(timezone.utc) - created) > timedelta(minutes=10):
+            created = created.replace(tzinfo=UTC)
+    if created and (datetime.now(UTC) - created) > timedelta(minutes=10):
         post["status"] = "failed"
         post_id = post.get("post_id")
         if post_id:
@@ -68,12 +71,14 @@ async def _auto_fail_stale_generating(post: dict, brand_id: str) -> None:
 
 # ── Pydantic models ──────────────────────────────────────────
 
+
 class PatchPostBody(_PydanticBaseModel):
     caption: str | None = None
     hashtags: list[str] | None = None
 
 
 # ── Endpoints ────────────────────────────────────────────────
+
 
 @router.get("/posts")
 async def list_posts_endpoint(
@@ -93,19 +98,21 @@ async def list_posts_endpoint(
         created = post.get("created_at")
         if created:
             if created.tzinfo is None:
-                created = created.replace(tzinfo=timezone.utc)
-        if created and (datetime.now(timezone.utc) - created) > timedelta(minutes=10):
+                created = created.replace(tzinfo=UTC)
+        if created and (datetime.now(UTC) - created) > timedelta(minutes=10):
             post_id = post.get("post_id")
             if post_id:
                 stale_ids.append(post_id)
                 post["status"] = "failed"  # update in-memory
     if stale_ids:
-        await asyncio.gather(*[
-            firestore_client.update_post(brand_id, pid, {"status": "failed"})
-            for pid in stale_ids
-        ])
+        await asyncio.gather(
+            *[
+                firestore_client.update_post(brand_id, pid, {"status": "failed"})
+                for pid in stale_ids
+            ]
+        )
 
-    posts = posts[offset:offset + limit]
+    posts = posts[offset : offset + limit]
     await asyncio.gather(*[_refresh_signed_urls(p) for p in posts])
     return {"posts": posts}
 
@@ -201,7 +208,7 @@ async def export_plan_zip(
     if not posts:
         raise HTTPException(status_code=404, detail="No posts found for this plan")
 
-    _IMAGE_SIZE_WARN = 50 * 1024 * 1024   # 50 MB
+    _IMAGE_SIZE_WARN = 50 * 1024 * 1024  # 50 MB
     _VIDEO_SIZE_LIMIT = 100 * 1024 * 1024  # 100 MB
 
     # Download image bytes directly from GCS
@@ -221,7 +228,8 @@ async def export_plan_zip(
             if blob.size and blob.size > _IMAGE_SIZE_WARN:
                 logger.warning(
                     "Image blob for post %s is very large (%d bytes)",
-                    post.get("post_id"), blob.size,
+                    post.get("post_id"),
+                    blob.size,
                 )
             return await loop.run_in_executor(None, blob.download_as_bytes)
         except Exception as exc:
@@ -248,7 +256,8 @@ async def export_plan_zip(
             if blob.size and blob.size > _VIDEO_SIZE_LIMIT:
                 logger.warning(
                     "Video blob for post %s exceeds 100 MB (%d bytes), skipping download",
-                    post.get("post_id"), blob.size,
+                    post.get("post_id"),
+                    blob.size,
                 )
                 return None
             return await loop.run_in_executor(None, blob.download_as_bytes)
@@ -272,7 +281,7 @@ async def export_plan_zip(
 
     with zipfile.ZipFile(zip_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
         for index, (post, img_bytes, vid_bytes) in enumerate(
-            zip(posts, image_bytes_list, video_bytes_list)
+            zip(posts, image_bytes_list, video_bytes_list, strict=False)
         ):
             platform: str = post.get("platform", "post")
             caption: str = post.get("caption", "")
@@ -300,8 +309,7 @@ async def export_plan_zip(
 
             # Collect metadata (safe copy -- omit internal GCS URIs)
             post_meta = {
-                k: v for k, v in post.items()
-                if k not in ("image_gcs_uri", "image_gcs_uris")
+                k: v for k, v in post.items() if k not in ("image_gcs_uri", "image_gcs_uris")
             }
             plan_metadata.append(post_meta)
 
@@ -316,9 +324,7 @@ async def export_plan_zip(
     return StreamingResponse(
         zip_buffer,
         media_type="application/zip",
-        headers={
-            "Content-Disposition": f"attachment; filename=amplifi_export_{plan_id}.zip"
-        },
+        headers={"Content-Disposition": f"attachment; filename=amplifi_export_{plan_id}.zip"},
     )
 
 
@@ -335,11 +341,15 @@ async def patch_post_endpoint(brand_id: str, post_id: str, data: PatchPostBody):
         allowed["hashtags"] = data.hashtags
     if not allowed:
         raise HTTPException(status_code=400, detail="No patchable fields provided")
-    await firestore_client.update_post(brand_id, post_id, {
-        **allowed,
-        "user_edited": True,
-        "edited_at": datetime.now(timezone.utc).isoformat(),
-    })
+    await firestore_client.update_post(
+        brand_id,
+        post_id,
+        {
+            **allowed,
+            "user_edited": True,
+            "edited_at": datetime.now(UTC).isoformat(),
+        },
+    )
     updated = await firestore_client.get_post(brand_id, post_id)
     return {"post": updated}
 
@@ -372,18 +382,27 @@ async def review_post_endpoint(brand_id: str, post_id: str, force: bool = Query(
 
     # Store revision notes (specific edit instructions, not full rewrites)
     if result.get("revision_notes"):
-        await firestore_client.update_post(brand_id, post_id, {
-            "revision_notes": result["revision_notes"],
-        })
+        await firestore_client.update_post(
+            brand_id,
+            post_id,
+            {
+                "revision_notes": result["revision_notes"],
+            },
+        )
 
     # If revised hashtags provided, sanitize before saving
     if result.get("revised_hashtags"):
         from backend.agents.hashtag_engine import _sanitize_hashtags
+
         platform = post.get("platform", "instagram")
         cleaned = _sanitize_hashtags(result["revised_hashtags"], platform)
-        await firestore_client.update_post(brand_id, post_id, {
-            "hashtags": cleaned,
-        })
+        await firestore_client.update_post(
+            brand_id,
+            post_id,
+            {
+                "hashtags": cleaned,
+            },
+        )
 
     return {"review": result, "post_id": post_id}
 
@@ -412,12 +431,11 @@ async def regenerate_post(brand_id: str, post_id: str):
     if plan_id is None or day_index is None:
         raise HTTPException(status_code=422, detail="Post is missing plan_id or day_index")
     await firestore_client.delete_post(brand_id, post_id)
-    return {
-        "generate_url": f"/generate/{plan_id}/{day_index}?brand_id={brand_id}"
-    }
+    return {"generate_url": f"/generate/{plan_id}/{day_index}?brand_id={brand_id}"}
 
 
 # ── .ics Calendar helpers ────────────────────────────────────
+
 
 def _parse_posting_time(time_str: str) -> tuple[int, int]:
     """Parse posting_time like '9:00 AM', '2:30 PM' into (hour, minute) 24h."""
@@ -477,9 +495,9 @@ def _build_ics(plan: dict, posts: list[dict], brand_name: str) -> str:
             base_date = datetime.fromisoformat(created.replace("Z", "+00:00")).date()
         except Exception as e:
             logger.warning("Failed to parse plan created_at date %r: %s", created, e)
-            base_date = datetime.now(timezone.utc).date()
+            base_date = datetime.now(UTC).date()
     else:
-        base_date = datetime.now(timezone.utc).date()
+        base_date = datetime.now(UTC).date()
 
     # Build lookup: day_index -> day brief
     day_lookup = {d.get("day_index", i): d for i, d in enumerate(days)}
@@ -526,17 +544,19 @@ def _build_ics(plan: dict, posts: list[dict], brand_name: str) -> str:
             desc_parts.append(tags)
         description = _ics_escape("\n\n".join(desc_parts))
 
-        lines.extend([
-            "BEGIN:VEVENT",
-            f"UID:post_{post_id}@amplifi",
-            f"DTSTART:{dt_start.strftime('%Y%m%dT%H%M%S')}",
-            f"DTEND:{dt_end.strftime('%Y%m%dT%H%M%S')}",
-            _ics_fold_line(f"SUMMARY:{_ics_escape(summary)}"),
-            _ics_fold_line(f"DESCRIPTION:{description}"),
-            f"CATEGORIES:{platform}",
-            "STATUS:CONFIRMED",
-            "END:VEVENT",
-        ])
+        lines.extend(
+            [
+                "BEGIN:VEVENT",
+                f"UID:post_{post_id}@amplifi",
+                f"DTSTART:{dt_start.strftime('%Y%m%dT%H%M%S')}",
+                f"DTEND:{dt_end.strftime('%Y%m%dT%H%M%S')}",
+                _ics_fold_line(f"SUMMARY:{_ics_escape(summary)}"),
+                _ics_fold_line(f"DESCRIPTION:{description}"),
+                f"CATEGORIES:{platform}",
+                "STATUS:CONFIRMED",
+                "END:VEVENT",
+            ]
+        )
 
     lines.append("END:VCALENDAR")
     return "\r\n".join(lines)
@@ -567,7 +587,9 @@ async def download_calendar_ics(brand_id: str, plan_id: str):
     )
 
 
-_EMAIL_RE = re.compile(r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$')
+_EMAIL_RE = re.compile(
+    r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$"
+)
 
 
 @router.post("/brands/{brand_id}/plans/{plan_id}/calendar/email")
@@ -599,6 +621,6 @@ async def email_calendar(
         await send_calendar_email(email, brand_name, ics_content)
     except Exception as e:
         logger.error("Failed to send calendar email to %s: %s", email, e)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
     return {"status": "sent", "to": email}

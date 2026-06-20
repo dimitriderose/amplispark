@@ -1,11 +1,13 @@
 import asyncio
 import json
 import logging
-from google import genai
+
 from google.genai import types
-from backend.config import GOOGLE_API_KEY, GEMINI_MODEL
+
 from backend.clients import get_genai_client
-from backend.platforms import get_review_guidelines_block, get as get_platform, get_scoring_weights
+from backend.config import GEMINI_MODEL
+from backend.platforms import get as get_platform
+from backend.platforms import get_review_guidelines_block, get_scoring_weights
 
 logger = logging.getLogger(__name__)
 
@@ -262,7 +264,9 @@ async def review_post(
 
     # Platform spec lookups for char limits and slide counts
     _spec = get_platform(platform)
-    _char_limit = (_spec.char_limits or {}).get(derivative_type) or (_spec.char_limits or {}).get("default", 0)
+    _char_limit = (_spec.char_limits or {}).get(derivative_type) or (_spec.char_limits or {}).get(
+        "default", 0
+    )
 
     business_name = brand_profile.get("business_name", "Brand")
     tone = brand_profile.get("tone", "professional")
@@ -274,7 +278,9 @@ async def review_post(
     caption_style_directive = (
         f"Brand writing rhythm (for TONE reference only — do not penalize "
         f"content that deviates from structural instructions like 'start with a question' "
-        f"or 'include a CTA'):\n{_raw_style}" if _raw_style else ""
+        f"or 'include a CTA'):\n{_raw_style}"
+        if _raw_style
+        else ""
     )
 
     # Build platform-specific and derivative-specific check blocks
@@ -294,7 +300,9 @@ async def review_post(
 
     # Conditional social proof check for thin-profile brands
     social_proof_check = ""
-    if social_proof_tier in ("thin_profile", None) or not brand_profile.get("storytelling_strategy"):
+    if social_proof_tier in ("thin_profile", None) or not brand_profile.get(
+        "storytelling_strategy"
+    ):
         social_proof_check = (
             "THIN-PROFILE SOCIAL PROOF CHECK (CRITICAL — this brand has NO verified client data):\n"
             "- ANY reference to clients, client counts, years of experience, or client outcomes "
@@ -354,7 +362,9 @@ async def review_post(
 
     # ── Thin-profile scoring rubric adjustment ──
     _thin_profile_rubric = ""
-    if social_proof_tier in ("thin_profile", None) or not brand_profile.get("storytelling_strategy"):
+    if social_proof_tier in ("thin_profile", None) or not brand_profile.get(
+        "storytelling_strategy"
+    ):
         _thin_profile_rubric = (
             "\nTHIN-PROFILE SCORING NOTE:\n"
             "This brand has no client data. Education depth IS the differentiator.\n"
@@ -502,8 +512,12 @@ Evaluate and respond with JSON only:
 
         logger.info(
             "Review score computed: content=%.1f × struct=%.2f (%d issues) = %d for %s/%s",
-            content_quality, structural_mod, len(structural_issues),
-            final_score, platform, derivative_type,
+            content_quality,
+            structural_mod,
+            len(structural_issues),
+            final_score,
+            platform,
+            derivative_type,
         )
 
         # Enforce invariant: revision_notes only when structural issues exist

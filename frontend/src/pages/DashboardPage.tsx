@@ -141,7 +141,7 @@ export default function DashboardPage() {
     } else if (brandId) {
       sessionStorage.removeItem(`amplifi_plan_${brandId}`)
     }
-  }, [plan?.plan_id, brandId])
+  }, [plan?.plan_id, brandId, brand?.business_name])
 
   const approvedParam = searchParams.get('approved')
   const notionParam = searchParams.get('notion')

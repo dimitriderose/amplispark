@@ -6,13 +6,11 @@ uploads the MP4 to GCS, and returns the signed URL.
 
 import asyncio
 import logging
-import uuid
-from google import genai
+
 from google.genai import types
 
-from backend.config import GOOGLE_API_KEY
 from backend.clients import get_genai_client
-from backend.constants import PILLARS, PILLAR_NARRATIVES
+from backend.constants import PILLAR_NARRATIVES
 from backend.platforms import get as get_platform
 from backend.services.storage_client import upload_video_to_gcs
 
@@ -23,7 +21,9 @@ _VEO_POLL_TIMEOUT_S = 20 * 60
 
 
 def _get_model_and_aspect(
-    platform: str, tier: str, has_image: bool = False,
+    platform: str,
+    tier: str,
+    has_image: bool = False,
 ) -> tuple[str, str]:
     # Image-to-video only works on the full model — the fast variant rejects it
     if has_image:
@@ -43,9 +43,15 @@ _DEFAULT_VIDEO_STYLE = (
 )
 
 
-def _build_prompt(caption: str, brand_profile: dict, platform: str,
-                   has_brand_refs: bool = False, edit_prompt: str | None = None,
-                   content_theme: str = "", pillar: str = "") -> str:
+def _build_prompt(
+    caption: str,
+    brand_profile: dict,
+    platform: str,
+    has_brand_refs: bool = False,
+    edit_prompt: str | None = None,
+    content_theme: str = "",
+    pillar: str = "",
+) -> str:
     _spec = get_platform(platform)
     brand_name = brand_profile.get("business_name", "")
     tone = brand_profile.get("tone", "professional and engaging")
@@ -103,10 +109,13 @@ def _build_prompt(caption: str, brand_profile: dict, platform: str,
         )
 
     # Pillar-aware narrative arc
-    _pillar_arc = PILLAR_NARRATIVES.get(pillar, (
-        "NARRATIVE: Structure with a clear beginning (hook moment), middle (key visual), "
-        "and end (resolution). Show meaningful visual progression."
-    ))
+    _pillar_arc = PILLAR_NARRATIVES.get(
+        pillar,
+        (
+            "NARRATIVE: Structure with a clear beginning (hook moment), middle (key visual), "
+            "and end (resolution). Show meaningful visual progression."
+        ),
+    )
     parts.append(_pillar_arc)
 
     # Scene relevance
@@ -135,7 +144,7 @@ def _build_prompt(caption: str, brand_profile: dict, platform: str,
     if has_brand_refs:
         parts.append(
             "Use the provided brand reference assets (logo, product images) faithfully — "
-            f"the brand name is exactly \"{brand_name}\". "
+            f'the brand name is exactly "{brand_name}". '
             "Do NOT add any other text, watermarks, or made-up logos beyond what is in "
             "the reference assets."
         )
@@ -181,15 +190,25 @@ async def generate_video_clip(
 
     hero_image = None
     if has_image:
-        mime = "image/png" if hero_image_bytes[:4] == b'\x89PNG' else "image/jpeg"
+        mime = "image/png" if hero_image_bytes[:4] == b"\x89PNG" else "image/jpeg"
         hero_image = types.Image(image_bytes=hero_image_bytes, mime_type=mime)
 
-    prompt = _build_prompt(caption, brand_profile, platform, has_brand_refs=False,
-                           edit_prompt=edit_prompt, content_theme=content_theme, pillar=pillar)
+    prompt = _build_prompt(
+        caption,
+        brand_profile,
+        platform,
+        has_brand_refs=False,
+        edit_prompt=edit_prompt,
+        content_theme=content_theme,
+        pillar=pillar,
+    )
 
     logger.info(
         "Starting Veo video generation: model=%s aspect=%s has_image=%s post_id=%s",
-        model_name, aspect_ratio, has_image, post_id,
+        model_name,
+        aspect_ratio,
+        has_image,
+        post_id,
     )
 
     loop = asyncio.get_running_loop()
@@ -214,7 +233,8 @@ async def generate_video_clip(
         except Exception as img_err:
             logger.warning(
                 "Veo rejected image-to-video (%s), retrying text-only: %s",
-                model_name, img_err,
+                model_name,
+                img_err,
             )
             operation = await loop.run_in_executor(
                 None,
@@ -239,12 +259,12 @@ async def generate_video_clip(
 
     # Poll until the operation is complete, with a hard timeout ceiling
     import time as _time
+
     poll_start = _time.monotonic()
     while not operation.done:
         if _time.monotonic() - poll_start > _VEO_POLL_TIMEOUT_S:
             raise TimeoutError(
-                f"Veo video generation timed out after {_VEO_POLL_TIMEOUT_S}s "
-                f"for post {post_id}"
+                f"Veo video generation timed out after {_VEO_POLL_TIMEOUT_S}s for post {post_id}"
             )
         await asyncio.sleep(10)
         operation = await loop.run_in_executor(

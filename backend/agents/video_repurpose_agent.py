@@ -7,12 +7,11 @@ import subprocess
 import tempfile
 import uuid
 
-from google import genai
 from google.genai import types
 
-from backend.config import GEMINI_MODEL, GOOGLE_API_KEY
 from backend.clients import get_genai_client
-from backend.constants import PILLARS, PILLAR_CLIP_CRITERIA
+from backend.config import GEMINI_MODEL
+from backend.constants import PILLAR_CLIP_CRITERIA
 
 logger = logging.getLogger(__name__)
 
@@ -21,10 +20,10 @@ _CLIP_PILLAR_CRITERIA = PILLAR_CLIP_CRITERIA
 
 # Platform aspect-ratio configurations
 _PLATFORM_CONFIGS: dict[str, dict] = {
-    "reels":          {"width": 1080, "height": 1920},
-    "tiktok":         {"width": 1080, "height": 1920},
+    "reels": {"width": 1080, "height": 1920},
+    "tiktok": {"width": 1080, "height": 1920},
     "youtube_shorts": {"width": 1080, "height": 1920},
-    "linkedin":       {"width": 1080, "height": 1080},
+    "linkedin": {"width": 1080, "height": 1080},
 }
 
 # Gemini Files API polling ceiling (10 minutes for very large videos)
@@ -36,11 +35,15 @@ _FFMPEG_TIMEOUT_S = 300
 
 # Platform-specific max clip duration (seconds) — used for timestamp validation
 _PLATFORM_MAX_S: dict[str, float] = {
-    "reels": 60, "tiktok": 60, "youtube_shorts": 60, "linkedin": 90,
+    "reels": 60,
+    "tiktok": 60,
+    "youtube_shorts": 60,
+    "linkedin": 90,
 }
 
 
 # ── FFmpeg helpers ─────────────────────────────────────────────────────────────
+
 
 def _run_ffmpeg(args: list[str]) -> None:
     """Run an FFmpeg command; raises RuntimeError on non-zero exit or timeout."""
@@ -48,8 +51,8 @@ def _run_ffmpeg(args: list[str]) -> None:
     logger.debug("FFmpeg: %s", " ".join(cmd))
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=_FFMPEG_TIMEOUT_S)
-    except subprocess.TimeoutExpired:
-        raise RuntimeError(f"FFmpeg timed out after {_FFMPEG_TIMEOUT_S}s")
+    except subprocess.TimeoutExpired as err:
+        raise RuntimeError(f"FFmpeg timed out after {_FFMPEG_TIMEOUT_S}s") from err
     if result.returncode != 0:
         logger.error("FFmpeg stderr: %s", result.stderr[-2000:])
         raise RuntimeError(f"FFmpeg failed (exit {result.returncode})")
@@ -66,22 +69,29 @@ def _extract_and_format_clip(
     cfg = _PLATFORM_CONFIGS.get(platform, _PLATFORM_CONFIGS["reels"])
     w, h = cfg["width"], cfg["height"]
     duration = end - start
-    vf = (
-        f"scale={w}:{h}:force_original_aspect_ratio=decrease,"
-        f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:black"
-    )
+    vf = f"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:black"
     # Place -ss before -i for fast keyframe seek; -t is relative to seek point
-    _run_ffmpeg([
-        "-ss", str(start),
-        "-i", input_path,
-        "-t", str(duration),
-        "-vf", vf,
-        "-c:v", "libx264", "-c:a", "aac",
-        output_path,
-    ])
+    _run_ffmpeg(
+        [
+            "-ss",
+            str(start),
+            "-i",
+            input_path,
+            "-t",
+            str(duration),
+            "-vf",
+            vf,
+            "-c:v",
+            "libx264",
+            "-c:a",
+            "aac",
+            output_path,
+        ]
+    )
 
 
 # ── Gemini video analysis ──────────────────────────────────────────────────────
+
 
 async def _upload_to_gemini_files(video_path: str, mime_type: str) -> tuple:
     """Upload a video file to the Gemini Files API and wait until ACTIVE.
@@ -120,11 +130,18 @@ async def _upload_to_gemini_files(video_path: str, mime_type: str) -> tuple:
     return video_file, client
 
 
-async def _analyze_video(video_file: object, client: object, brand_profile: dict,
-                         pillar: str = "", content_theme: str = "") -> list[dict]:
+async def _analyze_video(
+    video_file: object,
+    client: object,
+    brand_profile: dict,
+    pillar: str = "",
+    content_theme: str = "",
+) -> list[dict]:
     """Ask Gemini to identify the top 3 clip-worthy moments in the video."""
     # Sanitize brand fields to prevent prompt injection
-    business = (brand_profile.get("business_name") or brand_profile.get("name") or "this brand")[:80]
+    business = (brand_profile.get("business_name") or brand_profile.get("name") or "this brand")[
+        :80
+    ]
     tone = str(brand_profile.get("tone", "professional"))[:40]
     industry = str(brand_profile.get("industry", "business"))[:40]
     caption_hint = str(brand_profile.get("caption_style_directive", ""))[:120]
@@ -144,7 +161,9 @@ async def _analyze_video(video_file: object, client: object, brand_profile: dict
             parts.append(f"Brand topics: {themes_str}")
         if competitors_str:
             parts.append(f"Key competitors: {competitors_str}")
-        parts.append("For each clip, tag it to the most relevant brand topic from the list above. Prioritize clips covering DIFFERENT topics.")
+        parts.append(
+            "For each clip, tag it to the most relevant brand topic from the list above. Prioritize clips covering DIFFERENT topics."
+        )
         strategy_lines = "\n".join(parts) + "\n"
 
     # Pillar-aware clip selection guidance
@@ -233,14 +252,19 @@ def _validate_clip_spec(spec: dict, index: int) -> tuple[float, float, str]:
 
     platform = str(spec.get("platform", "reels")).lower()
     if platform not in _PLATFORM_CONFIGS:
-        logger.warning("Clip %d: unknown platform %r from Gemini, defaulting to 'reels'", index + 1, platform)
+        logger.warning(
+            "Clip %d: unknown platform %r from Gemini, defaulting to 'reels'", index + 1, platform
+        )
         platform = "reels"
 
     max_dur = _PLATFORM_MAX_S.get(platform, 90)
     if (end - start) > max_dur:
         logger.warning(
             "Clip %d: duration %.1fs exceeds %s max (%ds), trimming",
-            index + 1, end - start, platform, max_dur,
+            index + 1,
+            end - start,
+            platform,
+            max_dur,
         )
         end = start + max_dur
 
@@ -248,6 +272,7 @@ def _validate_clip_spec(spec: dict, index: int) -> tuple[float, float, str]:
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────
+
 
 async def analyze_and_repurpose(
     video_bytes: bytes,
@@ -283,13 +308,16 @@ async def analyze_and_repurpose(
             f.write(video_bytes)
 
         # 2 ─ Upload to Gemini Files API
-        logger.info("Uploading %d-byte video (%s) to Gemini Files API…", len(video_bytes), mime_type)
+        logger.info(
+            "Uploading %d-byte video (%s) to Gemini Files API…", len(video_bytes), mime_type
+        )
         video_file, client = await _upload_to_gemini_files(source_path, mime_type)
         logger.info("Gemini file ready: %s", video_file.name)
 
         # 3 ─ Analyze for clip-worthy moments
-        clip_specs = await _analyze_video(video_file, client, brand_profile,
-                                          pillar=pillar, content_theme=content_theme)
+        clip_specs = await _analyze_video(
+            video_file, client, brand_profile, pillar=pillar, content_theme=content_theme
+        )
         logger.info("Gemini identified %d clips", len(clip_specs))
 
         # 4 ─ Clean up Gemini file (awaited, so errors don't swallow silently)
@@ -316,18 +344,20 @@ async def analyze_and_repurpose(
             if len(clip_bytes_data) == 0:
                 raise RuntimeError(f"FFmpeg produced an empty file for clip {i + 1}")
 
-            clips.append({
-                "platform": platform,
-                "start_time": start,
-                "end_time": end,
-                "duration_seconds": round(end - start, 1),
-                "hook": spec.get("hook", ""),
-                "suggested_caption": spec.get("suggested_caption", ""),
-                "reason": spec.get("reason", ""),
-                "content_theme": spec.get("content_theme", ""),
-                "clip_bytes": clip_bytes_data,
-                "filename": f"{clip_tag}.mp4",
-            })
+            clips.append(
+                {
+                    "platform": platform,
+                    "start_time": start,
+                    "end_time": end,
+                    "duration_seconds": round(end - start, 1),
+                    "hook": spec.get("hook", ""),
+                    "suggested_caption": spec.get("suggested_caption", ""),
+                    "reason": spec.get("reason", ""),
+                    "content_theme": spec.get("content_theme", ""),
+                    "clip_bytes": clip_bytes_data,
+                    "filename": f"{clip_tag}.mp4",
+                }
+            )
 
         return clips
 

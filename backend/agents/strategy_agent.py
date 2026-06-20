@@ -1,19 +1,22 @@
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
-from google import genai
+from datetime import UTC, datetime
+
 from google.genai import types
-from backend.config import GOOGLE_API_KEY, GEMINI_MODEL
+
 from backend.clients import get_genai_client
-from backend.constants import PILLARS, DERIVATIVE_TYPES, get_proof_tier
-from backend.platforms import keys as platform_keys, get as get_platform
+from backend.config import GEMINI_MODEL
+from backend.constants import DERIVATIVE_TYPES, PILLARS, get_proof_tier
+from backend.platforms import get as get_platform
+from backend.platforms import keys as platform_keys
 from backend.services import firestore_client
 
 logger = logging.getLogger(__name__)
 
 
 # ── Platform intelligence ─────────────────────────────────────────────────────
+
 
 async def _research_best_platforms(
     brand_profile: dict,
@@ -90,7 +93,11 @@ async def _research_best_platforms(
 
         return valid[:5]
     except json.JSONDecodeError as jde:
-        logger.warning("Platform recommendation: invalid JSON from LLM (first 200 chars): %s — %s", raw[:200], jde)
+        logger.warning(
+            "Platform recommendation: invalid JSON from LLM (first 200 chars): %s — %s",
+            raw[:200],
+            jde,
+        )
         return []
     except Exception as e:
         logger.warning("Platform recommendation research failed: %s", e)
@@ -170,15 +177,23 @@ async def _research_posting_frequency(
 
         # Cache (best-effort)
         try:
-            await firestore_client.save_posting_frequency(industry, business_type, platforms, result)
+            await firestore_client.save_posting_frequency(
+                industry, business_type, platforms, result
+            )
         except Exception:
             pass
 
-        logger.info("Posting frequency researched for %s/%s: %s", industry, business_type,
-                     {p: v["posts_per_week"] for p, v in result.items()})
+        logger.info(
+            "Posting frequency researched for %s/%s: %s",
+            industry,
+            business_type,
+            {p: v["posts_per_week"] for p, v in result.items()},
+        )
         return result
     except json.JSONDecodeError as jde:
-        logger.warning("Posting frequency: invalid JSON from LLM (first 200 chars): %s — %s", raw[:200], jde)
+        logger.warning(
+            "Posting frequency: invalid JSON from LLM (first 200 chars): %s — %s", raw[:200], jde
+        )
         return {p: {"posts_per_week": 7, "best_times": []} for p in platforms}
     except Exception as e:
         logger.warning("Posting frequency research failed: %s", e)
@@ -211,7 +226,7 @@ async def _research_platform_trends(platform: str, industry: str) -> dict | None
             "- Algorithm preferences (what's being boosted vs suppressed?)\n"
             "- Best posting time recommendations\n"
             "- Character/length sweet spots for captions\n\n"
-            'Return ONLY a valid JSON object with these keys: '
+            "Return ONLY a valid JSON object with these keys: "
             '{"trending_formats": [...], "trending_hooks": [...], '
             '"algorithm_notes": "...", "best_posting_times": [...], '
             '"best_content_format": "...", "caption_sweet_spot": "..."}'
@@ -245,7 +260,11 @@ async def _research_platform_trends(platform: str, industry: str) -> dict | None
 
         return trends
     except json.JSONDecodeError as jde:
-        logger.warning("Platform trend research: invalid JSON from LLM (first 200 chars): %s — %s", raw[:200], jde)
+        logger.warning(
+            "Platform trend research: invalid JSON from LLM (first 200 chars): %s — %s",
+            raw[:200],
+            jde,
+        )
         return None
     except Exception as e:
         logger.warning("Platform trend research failed (%s/%s): %s", platform, industry, e)
@@ -305,7 +324,7 @@ async def _research_visual_trends(platform: str, industry: str) -> dict | None:
 
     # Fetch from Gemini with Google Search grounding
     try:
-        month_year = datetime.now(timezone.utc).strftime('%B %Y')
+        month_year = datetime.now(UTC).strftime("%B %Y")
         prompt = (
             f"Research what image styles and visual content formats are currently driving the\n"
             f"highest engagement for {industry} brands on {platform} in {month_year}.\n"
@@ -350,7 +369,11 @@ async def _research_visual_trends(platform: str, industry: str) -> dict | None:
 
         return result
     except json.JSONDecodeError as jde:
-        logger.warning("Visual trend research: invalid JSON from LLM (first 200 chars): %s — %s", raw[:200], jde)
+        logger.warning(
+            "Visual trend research: invalid JSON from LLM (first 200 chars): %s — %s",
+            raw[:200],
+            jde,
+        )
         return None
     except Exception as e:
         logger.warning("Visual trend research failed (%s/%s): %s", platform, industry, e)
@@ -374,7 +397,7 @@ async def _research_video_trends(platform: str, industry: str) -> dict | None:
 
     # Fetch from Gemini with Google Search grounding
     try:
-        month_year = datetime.now(timezone.utc).strftime('%B %Y')
+        month_year = datetime.now(UTC).strftime("%B %Y")
         prompt = (
             f"Research what short-form video formats and hook patterns are driving the highest\n"
             f"engagement for {industry} brands on {platform} in {month_year}.\n"
@@ -414,7 +437,9 @@ async def _research_video_trends(platform: str, industry: str) -> dict | None:
 
         return result
     except json.JSONDecodeError as jde:
-        logger.warning("Video trend research: invalid JSON from LLM (first 200 chars): %s — %s", raw[:200], jde)
+        logger.warning(
+            "Video trend research: invalid JSON from LLM (first 200 chars): %s — %s", raw[:200], jde
+        )
         return None
     except Exception as e:
         logger.warning("Video trend research failed (%s/%s): %s", platform, industry, e)
@@ -506,6 +531,7 @@ Choose IMAGE-based types ("original", "carousel") when the content is:
 
 # ── Main strategy agent ──────────────────────────────────────────────────────
 
+
 async def run_strategy(
     brand_id: str,
     brand_profile: dict,
@@ -527,8 +553,6 @@ async def run_strategy(
     """
     industry = brand_profile.get("industry", "")
     all_platforms = platform_keys()
-    original_platforms = platforms  # Save before mutation to track user-selected vs AI
-
     # ── Phase 0a: Determine platforms ─────────────────────────────────────────
     platform_reasoning = ""
     if platforms:
@@ -549,9 +573,6 @@ async def run_strategy(
         else:
             platforms = ["instagram", "linkedin", "x", "facebook"]
             platform_reasoning = ""
-
-    # Track whether platforms were user-selected (vs AI-recommended)
-    user_selected_platforms = original_platforms is not None
 
     # ── Phase 0b: Fetch trends + industry hooks + posting frequency ────────
     trend_platforms = platforms[:5]  # Limit to 5 to avoid rate limits
@@ -575,7 +596,8 @@ async def run_strategy(
     # Last two results: hook research, then posting frequency
     freq_result_raw = trend_results[-1]
     freq_result: dict[str, dict] = (
-        freq_result_raw if isinstance(freq_result_raw, dict)
+        freq_result_raw
+        if isinstance(freq_result_raw, dict)
         else {p: {"posts_per_week": 7, "best_times": []} for p in platforms}
     )
     trend_results = trend_results[:-1]  # Remove freq from trend_results
@@ -585,7 +607,7 @@ async def run_strategy(
     trend_results = trend_results[:-1]
     trends_context = ""
     platform_trends_map: dict[str, dict] = {}
-    for p, result in zip(trend_platforms, trend_results):
+    for p, result in zip(trend_platforms, trend_results, strict=False):
         if isinstance(result, dict):
             platform_trends_map[p] = result
             trends_context += (
@@ -669,12 +691,16 @@ async def run_strategy(
         )
 
     # Temporal awareness
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     _month = now.month
     _season = (
-        "Winter" if _month in (12, 1, 2) else
-        "Spring" if _month in (3, 4, 5) else
-        "Summer" if _month in (6, 7, 8) else "Fall"
+        "Winter"
+        if _month in (12, 1, 2)
+        else "Spring"
+        if _month in (3, 4, 5)
+        else "Summer"
+        if _month in (6, 7, 8)
+        else "Fall"
     )
     temporal_context = (
         f"TODAY: {now.strftime('%A, %B %d, %Y')} (Week {now.isocalendar()[1]})\n"
@@ -928,7 +954,7 @@ Return ONLY a valid JSON array of {total_briefs} objects. No markdown, no extra 
         # Platform concentration no longer needed — frequency research handles distribution
 
         trend_summary = {
-            "researched_at": datetime.now(timezone.utc).isoformat(),
+            "researched_at": datetime.now(UTC).isoformat(),
             "platform_trends": platform_trends_map,
             "visual_trends": visual_trends,
             "video_trends": video_trends,
@@ -936,7 +962,9 @@ Return ONLY a valid JSON array of {total_briefs} objects. No markdown, no extra 
         return validated, trend_summary
 
     except json.JSONDecodeError as jde:
-        logger.warning("Strategy agent: invalid JSON from LLM (first 200 chars): %s — %s", raw[:200], jde)
+        logger.warning(
+            "Strategy agent: invalid JSON from LLM (first 200 chars): %s — %s", raw[:200], jde
+        )
         return _fallback_plan(num_days, brand_profile, platforms), {}
     except Exception as e:
         logger.error(f"Strategy agent failed for brand {brand_id}: {e}")
@@ -952,7 +980,6 @@ def _normalize_day(
     hook_research: str = "",
 ) -> dict:
     """Ensure a day brief has all required fields with valid values."""
-    all_platforms = platform_keys()
     platform = get_platform(day.get("platform", "")).key
     if platform not in platforms:
         platform = platforms[index % len(platforms)]
@@ -979,7 +1006,12 @@ def _normalize_day(
         "content_theme": str(day.get("content_theme", f"Day {index + 1} content")),
         "caption_hook": str(day.get("caption_hook", "Something worth stopping for.")),
         "key_message": str(day.get("key_message", "Share your brand story.")),
-        "image_prompt": str(day.get("image_prompt", f"Scene depicting {brand_profile.get('industry', 'business')} professional context for {brand_profile.get('business_name', 'your brand')}. Clean composition with clear focal point. Natural, professional lighting.")),
+        "image_prompt": str(
+            day.get(
+                "image_prompt",
+                f"Scene depicting {brand_profile.get('industry', 'business')} professional context for {brand_profile.get('business_name', 'your brand')}. Clean composition with clear focal point. Natural, professional lighting.",
+            )
+        ),
         "hashtags": hashtags[:8],
         "derivative_type": derivative_type,
         "event_anchor": day.get("event_anchor", None),
@@ -1025,7 +1057,7 @@ def _fallback_day(
         "inspiration": f"Why we do what we do at {business_name}",
         "promotion": f"Discover what makes {business_name} different",
         "behind_the_scenes": f"A day in the life at {business_name}",
-        "user_generated": f"Our community shares their stories",
+        "user_generated": "Our community shares their stories",
     }
 
     hooks_by_pillar = {
@@ -1107,8 +1139,12 @@ def _enforce_platform_concentration(
             # Reassign to the most frequent platform
             old = day["platform"]
             day = {**day, "platform": top_platforms[0]}
-            logger.info("Platform concentration: moved day %d from %s to %s",
-                        day["day_index"], old, top_platforms[0])
+            logger.info(
+                "Platform concentration: moved day %d from %s to %s",
+                day["day_index"],
+                old,
+                top_platforms[0],
+            )
         result.append(day)
     return result
 
@@ -1124,7 +1160,9 @@ def _fallback_plan(
 
 
 async def refresh_research(
-    platforms: list[str], industry: str, primary_platform: str,
+    platforms: list[str],
+    industry: str,
+    primary_platform: str,
 ) -> dict:
     """Re-run all trend research tracks in parallel.
 
@@ -1155,12 +1193,12 @@ async def refresh_research(
 
     platform_trends_map = {}
     if isinstance(platform_trends_results, (list, tuple)):
-        for p, r in zip(platforms[:5], platform_trends_results):
+        for p, r in zip(platforms[:5], platform_trends_results, strict=False):
             if isinstance(r, dict):
                 platform_trends_map[p] = r
 
     return {
-        "researched_at": datetime.now(timezone.utc).isoformat(),
+        "researched_at": datetime.now(UTC).isoformat(),
         "platform_trends": platform_trends_map,
         "visual_trends": visual_result if isinstance(visual_result, dict) else None,
         "video_trends": video_result if isinstance(video_result, dict) else None,

@@ -90,7 +90,7 @@ export default function GeneratePage() {
         if (typeof cleanup === 'function') cleanup()
       }
     }
-  }, [planId, dayIndex, brandId, imageStyle, generate, viewPostId, loadExisting])
+  }, [planId, dayIndex, brandId, imageStyle, generate, reset, viewPostId, loadExisting])
 
   const handleRegenerate = (instructions?: string) => {
     if (planId && dayIndex !== undefined && brandId) {
