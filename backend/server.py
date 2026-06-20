@@ -1,5 +1,6 @@
 import logging
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,10 +24,23 @@ logging.root.handlers = [_handler]
 logging.root.setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    # No manual sleep here. Cloud Run sends SIGTERM then waits for the
+    # configured grace period (default 10 s). Sleeping unconditionally
+    # would delay exit without draining streams — and if the sleep exceeds
+    # the grace period, SIGKILL fires before the process exits cleanly.
+    # uvicorn's --timeout-graceful-shutdown handles in-flight request
+    # draining without any explicit sleep in the lifespan hook.
+
+
 app = FastAPI(
     title="Amplispark API",
     description="AI-powered social media content generation",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(RequestContextMiddleware)
@@ -35,7 +49,7 @@ app.add_middleware(
     allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "Accept", "X-Requested-With", "X-User-UID"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "X-Requested-With"],
 )
 
 
@@ -51,6 +65,7 @@ async def global_exception_handler(request, exc):
             "method": request.method,
             "error": str(exc),
             "type": type(exc).__name__,
+            "serviceContext": {"service": "amplifi", "version": app.version},
         },
     )
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})

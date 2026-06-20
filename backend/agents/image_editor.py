@@ -55,7 +55,7 @@ async def edit_image(
     # Gemini Flash Image: contents is a list of [prompt_string, PIL.Image]
     response = await asyncio.to_thread(
         gemini_client.models.generate_content,
-        model="gemini-3.1-flash-image-preview",
+        model="gemini-3.1-flash-image",
         contents=[edit_instruction, pil_image],
         config=types.GenerateContentConfig(
             response_modalities=["TEXT", "IMAGE"],
