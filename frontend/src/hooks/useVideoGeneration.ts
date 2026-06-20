@@ -1,9 +1,15 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { api } from '../api/client'
 
-type VideoStatus = 'idle' | 'generating' | 'complete' | 'error'
+export type VideoStatus = 'idle' | 'generating' | 'complete' | 'error'
 
-export function useVideoGeneration(postId: string, brandId: string, existingVideoUrl?: string | null) {
+export function useVideoGeneration(postId: string, brandId: string, existingVideoUrl?: string | null): {
+  status: VideoStatus
+  videoUrl: string | null
+  progress: number
+  error: string
+  startGeneration: (tier?: 'fast' | 'standard') => Promise<void>
+} {
   const [status, setStatus] = useState<VideoStatus>(existingVideoUrl ? 'complete' : 'idle')
   const [videoUrl, setVideoUrl] = useState<string | null>(existingVideoUrl ?? null)
   const [progress, setProgress] = useState(0)
