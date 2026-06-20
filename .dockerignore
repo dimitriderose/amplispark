@@ -1,0 +1,36 @@
+# Version control
+.git/
+
+# Environment / secrets — never send to Cloud Build
+.env
+.env.*
+
+# Python virtual environments and cache
+.venv/
+backend/.venv/
+__pycache__/
+backend/__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+coverage.xml
+
+# Frontend build artifacts and dependencies
+frontend/node_modules/
+frontend/dist/
+node_modules/
+
+# Terraform state (may contain secrets)
+terraform/
+*.tfstate
+*.tfstate.backup
+.terraform/
+
+# Claude / project tooling
+.claude/
+
+# Documentation (not needed at build time)
+docs/
+
+# Logs
+*.log
