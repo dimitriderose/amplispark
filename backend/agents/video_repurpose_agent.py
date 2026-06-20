@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import json
 import logging
 import os
@@ -366,4 +366,3 @@ async def analyze_and_repurpose(
             shutil.rmtree(tmpdir)
         except Exception as cleanup_err:
             logger.warning("Failed to clean up tmpdir %s: %s", tmpdir, cleanup_err)
-

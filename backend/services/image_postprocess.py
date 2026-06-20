@@ -1,4 +1,4 @@
-﻿"""Image post-processing: resize, text overlay, platform-specific treatments.
+"""Image post-processing: resize, text overlay, platform-specific treatments.
 
 Uses Pillow for all pixel-level operations. No AI calls â€” pure transforms.
 """
@@ -357,5 +357,3 @@ def create_tiktok_cover(
     buf = io.BytesIO()
     img.save(buf, format="PNG", optimize=True)
     return buf.getvalue()
-
-

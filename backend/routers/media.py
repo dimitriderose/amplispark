@@ -356,6 +356,7 @@ async def start_video_generation(
     )
     _background_tasks.add(_veo_task)
     _veo_task.add_done_callback(_background_tasks.discard)
+
     def _veo_task_done_cb(t: asyncio.Task) -> None:
         if not t.cancelled() and t.exception():
             logger.error(
@@ -495,6 +496,7 @@ async def upload_video_for_repurpose(
     task = asyncio.create_task(_run_video_repurposing(job_id, brand_id, source_gcs_uri, brand))
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)
+
     def _repurpose_task_done_cb(t: asyncio.Task) -> None:
         if not t.cancelled() and t.exception():
             logger.error(

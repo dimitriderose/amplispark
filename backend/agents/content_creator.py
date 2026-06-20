@@ -173,7 +173,7 @@ async def _generate_carousel_images(
                     ),
                 )
                 _c0 = resp.candidates[0].content if resp.candidates else None
-                for part in (_c0.parts if _c0 and _c0.parts else []):
+                for part in _c0.parts if _c0 and _c0.parts else []:
                     if part.inline_data and part.inline_data.data is not None:
                         _part_data: bytes = part.inline_data.data
                         return (_part_data, part.inline_data.mime_type or "image/png")
@@ -204,7 +204,7 @@ async def _generate_image_with_retry(
                 ),
             )
             _rc0 = resp.candidates[0].content if resp.candidates else None
-            for part in (_rc0.parts if _rc0 and _rc0.parts else []):
+            for part in _rc0.parts if _rc0 and _rc0.parts else []:
                 if part.inline_data and part.inline_data.data is not None:
                     data: bytes = part.inline_data.data
                     mime = part.inline_data.mime_type or "image/png"
@@ -1085,7 +1085,9 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
             _byop_cands = response.candidates
             _byop_content = _byop_cands[0].content if _byop_cands else None
             full_text = "".join(
-                part.text for part in (_byop_content.parts if _byop_content and _byop_content.parts else []) if part.text
+                part.text
+                for part in (_byop_content.parts if _byop_content and _byop_content.parts else [])
+                if part.text
             )
 
             if "HASHTAGS:" in full_text:
@@ -1167,9 +1169,17 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                         )
                     )
                     _byop_regen_cands = regen_response.candidates
-                    _byop_regen_content = _byop_regen_cands[0].content if _byop_regen_cands else None
+                    _byop_regen_content = (
+                        _byop_regen_cands[0].content if _byop_regen_cands else None
+                    )
                     regen_text = "".join(
-                        p.text for p in (_byop_regen_content.parts if _byop_regen_content and _byop_regen_content.parts else []) if p.text
+                        p.text
+                        for p in (
+                            _byop_regen_content.parts
+                            if _byop_regen_content and _byop_regen_content.parts
+                            else []
+                        )
+                        if p.text
                     )
                     if "HASHTAGS:" in regen_text:
                         regen_cap, regen_ht = regen_text.split("HASHTAGS:", 1)
@@ -1290,7 +1300,9 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
             _vid_cands = response.candidates
             _vid_content = _vid_cands[0].content if _vid_cands else None
             full_text = "".join(
-                part.text for part in (_vid_content.parts if _vid_content and _vid_content.parts else []) if part.text
+                part.text
+                for part in (_vid_content.parts if _vid_content and _vid_content.parts else [])
+                if part.text
             )
 
             if "HASHTAGS:" in full_text:
@@ -1341,7 +1353,13 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                     _vid_regen_cands = regen_response.candidates
                     _vid_regen_content = _vid_regen_cands[0].content if _vid_regen_cands else None
                     regen_text = "".join(
-                        p.text for p in (_vid_regen_content.parts if _vid_regen_content and _vid_regen_content.parts else []) if p.text
+                        p.text
+                        for p in (
+                            _vid_regen_content.parts
+                            if _vid_regen_content and _vid_regen_content.parts
+                            else []
+                        )
+                        if p.text
                     )
                     if "HASHTAGS:" in regen_text:
                         regen_cap, regen_ht = regen_text.split("HASHTAGS:", 1)
@@ -1503,7 +1521,7 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
 
         _txt_cands = response.candidates
         _txt_content = _txt_cands[0].content if _txt_cands else None
-        for part in (_txt_content.parts if _txt_content and _txt_content.parts else []):
+        for part in _txt_content.parts if _txt_content and _txt_content.parts else []:
             if part.text:
                 text = part.text
                 if "HASHTAGS:" in text:
@@ -1568,7 +1586,9 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                 retry_text = ""
                 _retry_cands = retry_response.candidates
                 _retry_content = _retry_cands[0].content if _retry_cands else None
-                for rpart in (_retry_content.parts if _retry_content and _retry_content.parts else []):
+                for rpart in (
+                    _retry_content.parts if _retry_content and _retry_content.parts else []
+                ):
                     if rpart.text:
                         retry_text += rpart.text
                 if retry_text.strip():
