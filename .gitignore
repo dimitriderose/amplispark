@@ -55,7 +55,6 @@ yarn-error.log*
 .env.production.local
 
 # Google Cloud
-.gcloudignore
 service-account-key.json
 *.json.key
 credentials.json
