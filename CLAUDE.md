@@ -78,6 +78,12 @@ Live URL: https://amplifi-seimyaykpa-uc.a.run.app
 | `/qa-test` | QA Testers implement test plan as pytest tests |
 | `/commit` | Local CI gate (tests + build + lint) then commit |
 | `/deploy` | Manual deploy to production with confirmation gate |
+| `/sdlc` | Full SDLC cycle: plan → code → review → qa → commit → deploy |
+| `/rollback` | Roll back Cloud Run to a previous revision |
+| `/check-prod` | Health snapshot — revision, instance count, recent errors |
+| `/tail-logs` | Pull recent prod logs filtered by severity or keyword |
+| `/db-backup` | Export Firestore to GCS with a timestamped path |
+| `/incident` | Guided incident runbook — diagnose, rollback or hotfix, verify |
 
 ## Git
 - Username: `dimitriderose`

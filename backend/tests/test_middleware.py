@@ -69,15 +69,31 @@ class TestGetAuthenticatedUid:
         assert uid is None
 
     @pytest.mark.asyncio
-    async def test_x_user_uid_fallback(self, mock_verify_token):
+    async def test_no_bearer_token_returns_none(self, mock_verify_token):
         from backend.middleware import get_authenticated_uid
 
         request = MagicMock()
+        # X-User-UID alone (no Authorization header) must not authenticate.
         request.headers = {"X-User-UID": "fallback-uid"}
         request.url.path = "/api/brands"
 
         uid = await get_authenticated_uid(request)
-        assert uid == "fallback-uid"
+        assert uid is None
+        # Firebase must never be consulted — the header should be silently ignored.
+        mock_verify_token.verify_id_token.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_x_user_uid_plus_valid_bearer_authenticates_via_bearer(self, mock_verify_token):
+        from backend.middleware import get_authenticated_uid
+
+        # Even when X-User-UID is present, only the Bearer token determines identity.
+        request = MagicMock()
+        request.headers = {"Authorization": "Bearer valid-token", "X-User-UID": "other-uid"}
+        request.url.path = "/api/brands"
+
+        uid = await get_authenticated_uid(request)
+        assert uid == TEST_UID
+        mock_verify_token.verify_id_token.assert_called_once_with("valid-token")
 
     @pytest.mark.asyncio
     async def test_generic_exception_raises_401(self, mock_verify_token):

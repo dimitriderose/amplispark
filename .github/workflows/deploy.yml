@@ -51,10 +51,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Node 20
+      - name: Set up Node 24
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
@@ -88,13 +88,17 @@ jobs:
   deploy:
     needs: [backend, frontend]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
 
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          workload_identity_provider: projects/282839045411/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          service_account: amplispark-cicd@amplifi-488503-a0bd0.iam.gserviceaccount.com
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
@@ -110,13 +114,9 @@ jobs:
           VITE_FIREBASE_APP_ID=${{ secrets.VITE_FIREBASE_APP_ID }}
           GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}
           GCP_REGION=${{ secrets.GCP_REGION }}
-          GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}
           CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}
-          RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}
           NOTION_CLIENT_ID=${{ secrets.NOTION_CLIENT_ID }}
-          NOTION_CLIENT_SECRET=${{ secrets.NOTION_CLIENT_SECRET }}
           NOTION_REDIRECT_URI=${{ secrets.NOTION_REDIRECT_URI }}
-          TOKEN_ENCRYPT_KEY=${{ secrets.TOKEN_ENCRYPT_KEY }}
           ENVEOF
 
       - name: Deploy via Cloud Build
