@@ -119,8 +119,8 @@ export default function VideoRepurpose({ brandId }: Props) {
       }
       setJob(newJob)
       startPolling(res.job_id)
-    } catch (err: any) {
-      setError(err.message || 'Upload failed')
+    } catch (err: unknown) {
+      setError((err as Error).message || 'Upload failed')
     } finally {
       setUploading(false)
     }

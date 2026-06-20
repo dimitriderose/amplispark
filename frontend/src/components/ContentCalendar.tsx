@@ -36,9 +36,9 @@ interface Props {
   onPhotoUploaded?: (dayIndex: number, photoUrl: string | null) => void
   trendSummary?: {
     researched_at: string
-    platform_trends: Record<string, any>
-    visual_trends: Record<string, any> | null
-    video_trends: Record<string, any> | null
+    platform_trends: Record<string, Record<string, unknown>>
+    visual_trends: Record<string, unknown> | null
+    video_trends: Record<string, unknown> | null
   }
   onRefreshResearch?: () => void
 }
@@ -162,31 +162,38 @@ export default function ContentCalendar({ plan, brandId, posts, defaultImageStyl
               <strong>Captions:</strong>{' '}
               {isMobile
                 ? Object.values(trendSummary.platform_trends)
-                    .flatMap((t: any) => t?.trending_hooks?.slice(0, 2) ?? [])
+                    .flatMap((t) => (Array.isArray((t as Record<string, unknown>)?.trending_hooks) ? ((t as Record<string, unknown[]>).trending_hooks).slice(0, 2) : []))
                     .slice(0, 4)
-                    .map((hook: string, i: number) => <div key={i} style={{ marginLeft: 8, marginTop: 2 }}>• {hook}</div>)
+                    .map((hook, i) => <div key={i} style={{ marginLeft: 8, marginTop: 2 }}>• {String(hook)}</div>)
                 : Object.values(trendSummary.platform_trends)
-                    .flatMap((t: any) => t?.trending_hooks?.slice(0, 2) ?? [])
+                    .flatMap((t) => (Array.isArray((t as Record<string, unknown>)?.trending_hooks) ? ((t as Record<string, unknown[]>).trending_hooks).slice(0, 2) : []))
                     .slice(0, 4)
+                    .map(String)
                     .join(' · ')}
             </div>
           )}
           {trendSummary.visual_trends && (
             <div style={{ fontSize: 11, color: '#555', marginBottom: 3 }}>
               <strong>Visuals:</strong>{' '}
-              {isMobile
-                ? [...(trendSummary.visual_trends.trending_styles?.slice(0, 2) ?? []), trendSummary.visual_trends.format_performance].filter(Boolean)
-                    .map((item: string, i: number) => <div key={i} style={{ marginLeft: 8, marginTop: 2 }}>• {item}</div>)
-                : [...(trendSummary.visual_trends.trending_styles?.slice(0, 2) ?? []), trendSummary.visual_trends.format_performance].filter(Boolean).join(' · ').slice(0, 120)}
+              {(() => {
+                const vt = trendSummary.visual_trends as { trending_styles?: string[]; format_performance?: string }
+                const items = [...(vt.trending_styles?.slice(0, 2) ?? []), vt.format_performance].filter(Boolean) as string[]
+                return isMobile
+                  ? items.map((item, i) => <div key={i} style={{ marginLeft: 8, marginTop: 2 }}>• {item}</div>)
+                  : items.join(' · ').slice(0, 120)
+              })()}
             </div>
           )}
           {trendSummary.video_trends && (
             <div style={{ fontSize: 11, color: '#555' }}>
               <strong>Video:</strong>{' '}
-              {isMobile
-                ? [...(trendSummary.video_trends.trending_formats?.slice(0, 2) ?? []), trendSummary.video_trends.optimal_lengths].filter(Boolean)
-                    .map((item: string, i: number) => <div key={i} style={{ marginLeft: 8, marginTop: 2 }}>• {item}</div>)
-                : [...(trendSummary.video_trends.trending_formats?.slice(0, 2) ?? []), trendSummary.video_trends.optimal_lengths].filter(Boolean).join(' · ').slice(0, 120)}
+              {(() => {
+                const vd = trendSummary.video_trends as { trending_formats?: string[]; optimal_lengths?: string }
+                const items = [...(vd.trending_formats?.slice(0, 2) ?? []), vd.optimal_lengths].filter(Boolean) as string[]
+                return isMobile
+                  ? items.map((item, i) => <div key={i} style={{ marginLeft: 8, marginTop: 2 }}>• {item}</div>)
+                  : items.join(' · ').slice(0, 120)
+              })()}
             </div>
           )}
         </div>
@@ -298,10 +305,10 @@ function DayCard({ day, dayName, brandId, planId, arrayIndex, seriesColor, post,
     fd.append('file', file)
 
     try {
-      const res = await api.uploadDayPhoto(brandId, planId, dayIndex, fd) as any
+      const res = await api.uploadDayPhoto(brandId, planId, dayIndex, fd) as { custom_photo_url: string }
       onPhotoUploaded(res.custom_photo_url)
-    } catch (err: any) {
-      setPhotoError(err.message || 'Upload failed')
+    } catch (err: unknown) {
+      setPhotoError((err as Error).message || 'Upload failed')
     } finally {
       setUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -316,15 +323,15 @@ function DayCard({ day, dayName, brandId, planId, arrayIndex, seriesColor, post,
     try {
       await api.deleteDayPhoto(brandId, planId, dayIndex)
       onPhotoUploaded(null)
-    } catch (err: any) {
-      setPhotoError(err.message || 'Remove failed')
+    } catch (err: unknown) {
+      setPhotoError((err as Error).message || 'Remove failed')
     } finally {
       setUploading(false)
     }
   }
 
   // Review score from the post
-  const reviewScore = (post as any)?.review?.score as number | undefined
+  const reviewScore = (post as { review?: { score?: number } })?.review?.score
 
   return (
     <div

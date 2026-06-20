@@ -79,8 +79,8 @@ function PlatformCard({ platformKey, config, brandId, isConnected, existingAnaly
       onConnected(platformKey, res.voice_analysis)
       setToken('')
       setExpanded(false)
-    } catch (err: any) {
-      setError(err.message || 'Connection failed')
+    } catch (err: unknown) {
+      setError((err as Error).message || 'Connection failed')
     } finally {
       setLoading(false)
     }

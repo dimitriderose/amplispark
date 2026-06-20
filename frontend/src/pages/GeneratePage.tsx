@@ -4,7 +4,7 @@ import { A } from '../theme'
 import { usePostGeneration } from '../hooks/usePostGeneration'
 import { api } from '../api/client'
 import PostGenerator from '../components/PostGenerator'
-import ReviewPanel from '../components/ReviewPanel'
+import ReviewPanel, { type ReviewResult } from '../components/ReviewPanel'
 import EditMediaSection from '../components/EditMediaSection'
 import PageContainer from '../components/ui/PageContainer'
 
@@ -104,6 +104,7 @@ export default function GeneratePage() {
   useEffect(() => {
     if (state.status === 'complete' && hasRegenerated.current) {
       hasRegenerated.current = false
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setReviewKey(k => k + 1)
     }
   }, [state.status])
@@ -213,7 +214,7 @@ export default function GeneratePage() {
             postId={state.postId}
             reviewKey={reviewKey}
             onApproved={() => navigate(`/dashboard/${brandId}?approved=${state.postId}`)}
-            initialReview={state.review as any}
+            initialReview={state.review as ReviewResult | null}
           />
 
           {/* L-8: Next Day CTA — shown after post is complete */}

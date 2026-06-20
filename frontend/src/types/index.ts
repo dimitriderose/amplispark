@@ -69,7 +69,7 @@ export interface Post {
 
 export interface Plan {
   plan_id: string
-  days: any[]
+  days: DayBrief[]
   num_days?: number
   status?: string
   created_at?: string
@@ -78,9 +78,9 @@ export interface Plan {
 
 export interface TrendSummary {
   researched_at: string
-  platform_trends: Record<string, any>
-  visual_trends: Record<string, any> | null
-  video_trends: Record<string, any> | null
+  platform_trends: Record<string, Record<string, unknown>>
+  visual_trends: Record<string, unknown> | null
+  video_trends: Record<string, unknown> | null
 }
 
 export interface DayBrief {

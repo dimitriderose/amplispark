@@ -51,7 +51,8 @@ export function useWizardState() {
 
   // Persist text fields to sessionStorage on change (files excluded — can't serialize)
   useEffect(() => {
-    const { logoFile: _l, assets: _a, ...serializable } = data
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { logoFile: _logoFile, assets: _assets, ...serializable } = data
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ step, data: serializable }))
   }, [step, data])
 

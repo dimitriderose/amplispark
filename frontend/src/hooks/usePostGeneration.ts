@@ -15,7 +15,7 @@ export interface GenerationState {
   audioNote: string | null   // tip for video_first posts (add audio before publishing)
   postId: string | null
   error: string | null
-  review: Record<string, any> | null  // inline review from review gate
+  review: Record<string, unknown> | null  // inline review from review gate
 }
 
 export function usePostGeneration() {

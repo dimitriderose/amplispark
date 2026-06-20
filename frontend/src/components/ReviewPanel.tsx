@@ -9,7 +9,7 @@ interface EngagementScores {
   platform_fit: number
 }
 
-interface ReviewResult {
+export interface ReviewResult {
   score: number
   brand_alignment: 'strong' | 'moderate' | 'weak'
   strengths: string[]
@@ -81,8 +81,8 @@ export default function ReviewPanel({ brandId, postId, reviewKey, onApproved, in
       const res = await api.reviewPost(brandId, postId, force) as unknown as { review: ReviewResult }
       setReview(res.review)
       // Don't auto-navigate on approval — let the user see the review first
-    } catch (err: any) {
-      setError(err.message || 'Review failed')
+    } catch (err: unknown) {
+      setError((err as Error).message || 'Review failed')
     } finally {
       setLoading(false)
     }
@@ -93,8 +93,8 @@ export default function ReviewPanel({ brandId, postId, reviewKey, onApproved, in
       await api.approvePost(brandId, postId)
       setApproved(true)
       onApproved?.()
-    } catch (err: any) {
-      setError(err.message || 'Approval failed')
+    } catch (err: unknown) {
+      setError((err as Error).message || 'Approval failed')
     }
   }
 

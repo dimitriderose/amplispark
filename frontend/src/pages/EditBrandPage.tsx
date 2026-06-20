@@ -109,8 +109,8 @@ export default function EditBrandPage() {
       setSaveMsg('Saved successfully')
       setTimeout(() => setSaveMsg(''), 3000)
       await refetch()
-    } catch (err: any) {
-      setSaveError(err.message || 'Save failed')
+    } catch (err: unknown) {
+      setSaveError((err as Error).message || 'Save failed')
     } finally {
       setSaving(false)
     }
@@ -133,8 +133,8 @@ export default function EditBrandPage() {
         description,
       })
       navigate(`/dashboard/${brandId}`)
-    } catch (err: any) {
-      setSaveError(err.message || 'Re-analysis failed')
+    } catch (err: unknown) {
+      setSaveError((err as Error).message || 'Re-analysis failed')
       setAnalyzing(false)
     }
   }
@@ -144,8 +144,8 @@ export default function EditBrandPage() {
     try {
       await api.deleteBrandAsset(brandId, index)
       setAssets(prev => prev.filter((_, i) => i !== index))
-    } catch (err: any) {
-      setSaveError(err.message || 'Failed to remove asset')
+    } catch (err: unknown) {
+      setSaveError((err as Error).message || 'Failed to remove asset')
     }
   }
 
@@ -154,8 +154,8 @@ export default function EditBrandPage() {
     try {
       await api.setBrandLogo(brandId, assetUrl)
       setLogoUrl(assetUrl)
-    } catch (err: any) {
-      setSaveError(err.message || 'Failed to set logo')
+    } catch (err: unknown) {
+      setSaveError((err as Error).message || 'Failed to set logo')
     }
   }
 
@@ -164,8 +164,8 @@ export default function EditBrandPage() {
     try {
       await api.setBrandLogo(brandId, null)
       setLogoUrl(null)
-    } catch (err: any) {
-      setSaveError(err.message || 'Failed to remove logo')
+    } catch (err: unknown) {
+      setSaveError((err as Error).message || 'Failed to remove logo')
     }
   }
 
@@ -178,8 +178,8 @@ export default function EditBrandPage() {
       if (res.uploaded) {
         setAssets(prev => [...prev, ...res.uploaded])
       }
-    } catch (err: any) {
-      setSaveError(err.message || 'Upload failed')
+    } catch (err: unknown) {
+      setSaveError((err as Error).message || 'Upload failed')
     }
   }
 
@@ -195,8 +195,8 @@ export default function EditBrandPage() {
         setLogoUrl(gcsUrl)
         setAssets(prev => [...prev, ...res.uploaded])
       }
-    } catch (err: any) {
-      setSaveError(err.message || 'Logo upload failed')
+    } catch (err: unknown) {
+      setSaveError((err as Error).message || 'Logo upload failed')
     }
   }
 

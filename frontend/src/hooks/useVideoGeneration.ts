@@ -27,7 +27,7 @@ export function useVideoGeneration(postId: string, brandId: string, existingVide
       setError('')
 
       try {
-        const res = (await api.generateVideo(postId, tier, brandId)) as any
+        const res = (await api.generateVideo(postId, tier, brandId)) as unknown as { job_id: string; estimated_seconds: number }
         const { job_id, estimated_seconds } = res
         const startTime = Date.now()
         const MAX_POLL_MS = 25 * 60 * 1000 // 25 minutes
@@ -41,7 +41,7 @@ export function useVideoGeneration(postId: string, brandId: string, existingVide
             return
           }
           try {
-            const job = (await api.getVideoJob(job_id)) as any
+            const job = (await api.getVideoJob(job_id)) as { status: string; result?: { video_url?: string; error?: string } }
             const elapsed = (Date.now() - startTime) / 1000
             setProgress(Math.min(95, (elapsed / (estimated_seconds || 150)) * 100))
 
@@ -61,9 +61,9 @@ export function useVideoGeneration(postId: string, brandId: string, existingVide
             // keep polling — transient network errors are expected
           }
         }, 5000)
-      } catch (err: any) {
+      } catch (err: unknown) {
         isGeneratingRef.current = false
-        setError(err.message || 'Failed to start video generation')
+        setError((err as Error).message || 'Failed to start video generation')
         setStatus('error')
       }
     },
@@ -79,6 +79,7 @@ export function useVideoGeneration(postId: string, brandId: string, existingVide
       intervalRef.current = null
     }
     if (existingVideoUrl) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setStatus('complete')
       setVideoUrl(existingVideoUrl)
       setProgress(100)

@@ -1,17 +1,17 @@
 import { useState, useEffect } from 'react'
 import { api } from '../api/client'
-import type { Plan } from '../types'
+import type { Plan, DayBrief } from '../types'
 
 export type { Plan, TrendSummary } from '../types'
 
-function normalizePlan(raw: any): Plan {
+function normalizePlan(raw: Record<string, unknown>): Plan {
   return {
-    plan_id: raw.plan_id,
-    days: raw.days ?? [],
-    num_days: raw.num_days,
-    status: raw.status,
-    created_at: raw.created_at,
-    trend_summary: raw.trend_summary ?? undefined,
+    plan_id: raw.plan_id as string,
+    days: (raw.days as DayBrief[]) ?? [],
+    num_days: raw.num_days as number | undefined,
+    status: raw.status as string | undefined,
+    created_at: raw.created_at as string | undefined,
+    trend_summary: raw.trend_summary as Plan['trend_summary'] ?? undefined,
   }
 }
 
@@ -21,17 +21,16 @@ export function useContentPlan(brandId: string) {
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState('')
 
-  // Load the most recent plan on mount (so page refresh restores the calendar)
   useEffect(() => {
     if (!brandId) return
     setLoading(true)
     api.listPlans(brandId)
-      .then((res: any) => {
-        const plans: any[] = res.plans || []
+      .then((res: unknown) => {
+        const plans = ((res as Record<string, unknown>).plans as Record<string, unknown>[]) || []
         if (plans.length > 0) setPlan(normalizePlan(plans[0]))
       })
-      .catch((err: any) => {
-        setError(err.message || 'Failed to load your saved plan. You can generate a new one below.')
+      .catch((err: unknown) => {
+        setError((err as Error).message || 'Failed to load your saved plan. You can generate a new one below.')
       })
       .finally(() => setLoading(false))
   }, [brandId])
@@ -40,26 +39,25 @@ export function useContentPlan(brandId: string) {
     setGenerating(true)
     setError('')
     try {
-      const result = await api.createPlan(brandId, numDays, businessEvents, platforms) as any
+      const result = await api.createPlan(brandId, numDays, businessEvents, platforms) as unknown as Record<string, unknown>
       setPlan(normalizePlan(result))
-    } catch (err: any) {
-      setError(err.message || 'Failed to generate plan')
+    } catch (err: unknown) {
+      setError((err as Error).message || 'Failed to generate plan')
     } finally {
       setGenerating(false)
     }
   }
 
-  const updateDay = async (planId: string, dayIndex: number, data: any) => {
+  const updateDay = async (planId: string, dayIndex: number, data: Record<string, unknown>) => {
     setLoading(true)
     try {
       await api.updateDay(brandId, planId, dayIndex, data)
-      // Refresh plan after updating a day
-      const updated = await api.getPlan(brandId, planId) as any
+      const updated = await api.getPlan(brandId, planId) as unknown as Record<string, unknown>
       if (updated?.plan_profile) {
-        setPlan(normalizePlan({ plan_id: planId, ...updated.plan_profile }))
+        setPlan(normalizePlan({ plan_id: planId, ...(updated.plan_profile as Record<string, unknown>) }))
       }
-    } catch (err: any) {
-      setError(err.message || 'Failed to update day')
+    } catch (err: unknown) {
+      setError((err as Error).message || 'Failed to update day')
     } finally {
       setLoading(false)
     }

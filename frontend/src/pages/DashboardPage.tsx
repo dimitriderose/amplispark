@@ -18,6 +18,7 @@ import VideoRepurpose from '../components/VideoRepurpose'
 import Spinner from '../components/Spinner'
 import GuidedTour from '../components/GuidedTour'
 import type { TourStep } from '../components/GuidedTour'
+import type { TrendSummary } from '../types'
 import { useTour } from '../hooks/useTour'
 import { useIsMobile } from '../hooks/useIsMobile'
 
@@ -37,15 +38,14 @@ export default function DashboardPage() {
   const { brandId } = useParams<{ brandId: string }>()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const { brand, loading: brandLoading, error: brandError, updateBrand: _updateBrand, refetch: refetchBrand } = useBrandProfile(brandId)
+  const { brand, loading: brandLoading, error: brandError, refetch: refetchBrand } = useBrandProfile(brandId)
   const { plan, loading: planLoading, generating, error: planError, generatePlan, setDayCustomPhoto, clearPlan } = useContentPlan(brandId ?? '')
   const { posts: calendarPosts } = usePostLibrary(brandId ?? '', plan?.plan_id)
   const [activeTab, setActiveTab] = useState<Tab>('calendar')
   const [postsSubTab, setPostsSubTab] = useState<'weekly' | 'history'>('weekly')
-  const [trendSummaryOverride, setTrendSummaryOverride] = useState<any | null>(null)
+  const [trendSummaryOverride, setTrendSummaryOverride] = useState<TrendSummary | null>(null)
 
   // Tour steps — memoized to prevent effect cascade on every render
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const tourSteps: TourStep[] = useMemo(() => [
     {
       targetSelector: 'brand-summary',
@@ -122,11 +122,11 @@ export default function DashboardPage() {
   const handleRefreshResearch = async () => {
     if (!brandId || !plan?.plan_id) return
     try {
-      const result = await api.refreshPlanResearch(brandId, plan.plan_id) as any
+      const result = await api.refreshPlanResearch(brandId, plan.plan_id) as { trend_summary?: Record<string, unknown> }
       if (result?.trend_summary) {
-        setTrendSummaryOverride(result.trend_summary)
+        setTrendSummaryOverride(result.trend_summary as unknown as TrendSummary)
       }
-    } catch (err) {
+    } catch {
       // Silently fail — research is optional enhancement
     }
   }
