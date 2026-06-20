@@ -32,7 +32,7 @@ export interface CreatePlanResponse {
   trend_summary: Record<string, unknown>
 }
 
-export interface PostResponse extends Post {}
+export type PostResponse = Post
 
 export interface UpdatePostResponse {
   post: Post

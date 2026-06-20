@@ -4,9 +4,6 @@ import logging
 import time
 
 from fastapi import APIRouter, HTTPException, Query
-
-# Strong references to background tasks to prevent GC before completion
-_background_tasks: set[asyncio.Task] = set()
 from sse_starlette.sse import EventSourceResponse
 
 from backend.agents.content_creator import generate_post
@@ -14,6 +11,9 @@ from backend.services import firestore_client
 from backend.services.storage_client import download_gcs_uri
 
 logger = logging.getLogger(__name__)
+
+# Strong references to background tasks to prevent GC before completion
+_background_tasks: set[asyncio.Task] = set()
 
 # In-memory cache for brand profiles during generation (30s TTL)
 _brand_cache: dict[str, tuple[dict, float]] = {}
@@ -43,6 +43,7 @@ async def stream_generate(
 
     day_brief = days[day_index]
 
+    brand: dict | None = None
     if brand_id in _brand_cache and time.time() - _brand_cache[brand_id][1] < 30:
         brand = _brand_cache[brand_id][0]
     else:
@@ -81,37 +82,46 @@ async def stream_generate(
                 try:
                     await firestore_client.delete_post(brand_id, ep["post_id"])
                 except Exception as e:
-                    logger.warning("Best-effort cleanup failed for post %s: %s", ep.get("post_id"), e)
+                    logger.warning(
+                        "Best-effort cleanup failed for post %s: %s", ep.get("post_id"), e
+                    )
             else:
                 try:
                     await firestore_client.delete_post(brand_id, ep["post_id"])
                 except Exception as e:
-                    logger.warning("Best-effort cleanup failed for post %s: %s", ep.get("post_id"), e)
+                    logger.warning(
+                        "Best-effort cleanup failed for post %s: %s", ep.get("post_id"), e
+                    )
 
     # Extract prior hooks from already-generated posts for deduplication
     prior_hooks = [
         p.get("caption", "").split("\n")[0][:100]
         for p in existing_posts
-        if p.get("status") in ("complete", "approved") and p.get("caption")
+        if p.get("status") in ("complete", "approved")
+        and p.get("caption")
         and not (p.get("brief_index") == day_index and p.get("platform", "") == brief_platform)
     ]
 
     # Create a pending post record in Firestore.
-    post_id = await firestore_client.save_post(brand_id, plan_id, {
-        "day_index": day_brief.get("day_index", day_index),
-        "brief_index": day_index,
-        "platform": day_brief.get("platform", "instagram"),
-        "pillar": day_brief.get("pillar", ""),
-        "content_theme": day_brief.get("content_theme", ""),
-        "format": day_brief.get("format"),
-        "cta_type": day_brief.get("cta_type"),
-        "derivative_type": day_brief.get("derivative_type", "original"),
-        "status": "generating",
-        "caption": "",
-        "hashtags": [],
-        "image_url": None,
-        "byop": custom_photo_bytes is not None,
-    })
+    post_id = await firestore_client.save_post(
+        brand_id,
+        plan_id,
+        {
+            "day_index": day_brief.get("day_index", day_index),
+            "brief_index": day_index,
+            "platform": day_brief.get("platform", "instagram"),
+            "pillar": day_brief.get("pillar", ""),
+            "content_theme": day_brief.get("content_theme", ""),
+            "format": day_brief.get("format"),
+            "cta_type": day_brief.get("cta_type"),
+            "derivative_type": day_brief.get("derivative_type", "original"),
+            "status": "generating",
+            "caption": "",
+            "hashtags": [],
+            "image_url": None,
+            "byop": custom_photo_bytes is not None,
+        },
+    )
 
     # Run generation as a background task so it completes (and saves to
     # Firestore) even if the user navigates away and the SSE stream closes.
@@ -135,17 +145,22 @@ async def stream_generate(
                     await asyncio.sleep(15)
                     if asyncio.get_event_loop().time() - _last_event_time > 12:
                         try:
-                            event_queue.put_nowait({
-                                "event": "status",
-                                "data": {"message": "Still working..."},
-                            })
+                            event_queue.put_nowait(
+                                {
+                                    "event": "status",
+                                    "data": {"message": "Still working..."},
+                                }
+                            )
                         except asyncio.QueueFull:
                             logger.warning("SSE event queue full, dropping event")
 
             gen_hb = asyncio.create_task(_gen_heartbeat())
             try:
                 async for event in generate_post(
-                    plan_id, day_brief, brand, post_id,
+                    plan_id,
+                    day_brief,
+                    brand,
+                    post_id,
                     custom_photo_bytes=custom_photo_bytes,
                     custom_photo_mime=custom_photo_mime,
                     instructions=instructions,
@@ -196,19 +211,26 @@ async def stream_generate(
                             await firestore_client.update_post(brand_id, post_id, update_data)
                         except Exception as fs_err:
                             logger.error("Firestore update failed for post %s: %s", post_id, fs_err)
-                        logger.info("metric", extra={
-                            "metric_name": "generation_complete",
-                            "duration_ms": round((time.time() - _gen_start) * 1000),
-                            "platform": day_brief.get("platform", "unknown"),
-                            "derivative_type": day_brief.get("derivative_type", "original"),
-                            "post_id": post_id,
-                            "brand_id": brand_id,
-                        })
+                        logger.info(
+                            "metric",
+                            extra={
+                                "metric_name": "generation_complete",
+                                "duration_ms": round((time.time() - _gen_start) * 1000),
+                                "platform": day_brief.get("platform", "unknown"),
+                                "derivative_type": day_brief.get("derivative_type", "original"),
+                                "post_id": post_id,
+                                "brand_id": brand_id,
+                            },
+                        )
                     elif event_name == "error":
                         try:
-                            await firestore_client.update_post(brand_id, post_id, {"status": "failed"})
+                            await firestore_client.update_post(
+                                brand_id, post_id, {"status": "failed"}
+                            )
                         except Exception as fs_err:
-                            logger.error("Firestore error-update failed for post %s: %s", post_id, fs_err)
+                            logger.error(
+                                "Firestore error-update failed for post %s: %s", post_id, fs_err
+                            )
 
                     try:
                         event_queue.put_nowait(event)
@@ -222,18 +244,27 @@ async def stream_generate(
                 # Gate Veo on review score -- skip if caption quality < 7
                 _veo_gate_score = (gate_review or {}).get("score", 0) if gate_review else 0
                 if _veo_gate_score < 7:
-                    logger.warning("Skipping Veo -- review score %d < 7 for video_first post %s",
-                                   _veo_gate_score, post_id)
+                    logger.warning(
+                        "Skipping Veo -- review score %d < 7 for video_first post %s",
+                        _veo_gate_score,
+                        post_id,
+                    )
                     try:
-                        event_queue.put_nowait({
-                            "event": "video_error",
-                            "data": {"message": f"Video skipped -- caption scored {_veo_gate_score}/10. Regenerate for a higher-quality result."},
-                        })
+                        event_queue.put_nowait(
+                            {
+                                "event": "video_error",
+                                "data": {
+                                    "message": f"Video skipped -- caption scored {_veo_gate_score}/10. Regenerate for a higher-quality result."
+                                },
+                            }
+                        )
                     except asyncio.QueueFull:
                         logger.warning("SSE event queue full, dropping event")
                 else:
                     try:
-                        event_queue.put_nowait({"event": "status", "data": {"message": "Generating video..."}})
+                        event_queue.put_nowait(
+                            {"event": "status", "data": {"message": "Generating video..."}}
+                        )
                     except asyncio.QueueFull:
                         logger.warning("SSE event queue full, dropping event")
 
@@ -242,13 +273,16 @@ async def stream_generate(
                         while True:
                             await asyncio.sleep(15)
                             try:
-                                event_queue.put_nowait({"event": "status", "data": {"message": "Generating video..."}})
+                                event_queue.put_nowait(
+                                    {"event": "status", "data": {"message": "Generating video..."}}
+                                )
                             except asyncio.QueueFull:
                                 logger.warning("SSE event queue full, dropping event")
 
                     heartbeat_task = asyncio.create_task(_heartbeat())
                     try:
                         from backend.agents.video_creator import generate_video_clip
+
                         video_result = await generate_video_clip(
                             hero_image_bytes=None,  # text-to-video
                             caption=final_caption,
@@ -260,33 +294,45 @@ async def stream_generate(
                             pillar=day_brief.get("pillar", ""),
                         )
                         # Update Firestore with video metadata
-                        await firestore_client.update_post(brand_id, post_id, {
-                            "video_url": video_result["video_url"],
-                            "video": {
-                                "url": video_result["video_url"],
-                                "video_gcs_uri": video_result.get("video_gcs_uri"),
-                                "duration_seconds": 8,
-                                "model": video_result.get("model", "veo-3.1"),
-                            },
-                        })
-                        try:
-                            event_queue.put_nowait({
-                                "event": "video_complete",
-                                "data": {
-                                    "video_url": video_result["video_url"],
+                        await firestore_client.update_post(
+                            brand_id,
+                            post_id,
+                            {
+                                "video_url": video_result["video_url"],
+                                "video": {
+                                    "url": video_result["video_url"],
                                     "video_gcs_uri": video_result.get("video_gcs_uri"),
-                                    "audio_note": "Add trending audio before publishing -- silent video underperforms on this platform.",
+                                    "duration_seconds": 8,
+                                    "model": video_result.get("model", "veo-3.1"),
                                 },
-                            })
+                            },
+                        )
+                        try:
+                            event_queue.put_nowait(
+                                {
+                                    "event": "video_complete",
+                                    "data": {
+                                        "video_url": video_result["video_url"],
+                                        "video_gcs_uri": video_result.get("video_gcs_uri"),
+                                        "audio_note": "Add trending audio before publishing -- silent video underperforms on this platform.",
+                                    },
+                                }
+                            )
                         except asyncio.QueueFull:
                             logger.warning("SSE event queue full, dropping event")
                     except Exception as video_err:
-                        logger.error("Video generation failed for video_first post %s: %s", post_id, video_err)
+                        logger.error(
+                            "Video generation failed for video_first post %s: %s",
+                            post_id,
+                            video_err,
+                        )
                         try:
-                            event_queue.put_nowait({
-                                "event": "video_error",
-                                "data": {"message": str(video_err)},
-                            })
+                            event_queue.put_nowait(
+                                {
+                                    "event": "video_error",
+                                    "data": {"message": str(video_err)},
+                                }
+                            )
                         except asyncio.QueueFull:
                             logger.warning("SSE event queue full, dropping event")
                     finally:
@@ -294,12 +340,15 @@ async def stream_generate(
 
         except Exception as exc:
             logger.error("Generation task error for post %s: %s", post_id, exc)
-            logger.info("metric", extra={
-                "metric_name": "generation_failed",
-                "post_id": post_id,
-                "brand_id": brand_id,
-                "error": str(exc)[:200],
-            })
+            logger.info(
+                "metric",
+                extra={
+                    "metric_name": "generation_failed",
+                    "post_id": post_id,
+                    "brand_id": brand_id,
+                    "error": str(exc)[:200],
+                },
+            )
             try:
                 await firestore_client.update_post(brand_id, post_id, {"status": "failed"})
             except Exception as e:

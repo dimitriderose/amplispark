@@ -1,31 +1,32 @@
 """Image post-processing: resize, text overlay, platform-specific treatments.
 
-Uses Pillow for all pixel-level operations. No AI calls — pure transforms.
+Uses Pillow for all pixel-level operations. No AI calls â€” pure transforms.
 """
 
 import io
 from pathlib import Path
+from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
-# ── Pixel dimensions for each aspect ratio ────────────────────────────────────
+# â”€â”€ Pixel dimensions for each aspect ratio â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 ASPECT_TO_PIXELS: dict[str, tuple[int, int]] = {
-    "1:1":    (1080, 1080),
-    "4:5":    (1080, 1350),
+    "1:1": (1080, 1080),
+    "4:5": (1080, 1350),
     "1.91:1": (1200, 628),
-    "9:16":   (1080, 1920),
-    "16:9":   (1920, 1080),
-    "2:3":    (1000, 1500),
+    "9:16": (1080, 1920),
+    "16:9": (1920, 1080),
+    "2:3": (1000, 1500),
 }
 
-# ── Font loading ──────────────────────────────────────────────────────────────
+# â”€â”€ Font loading â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 _FONT_DIR = Path(__file__).parent.parent / "assets" / "fonts"
-_FONT_CACHE: dict[tuple[str, int], ImageFont.FreeTypeFont] = {}
+_FONT_CACHE: dict[tuple[str, int], Any] = {}
 
 
-def _get_font(bold: bool = False, size: int = 72) -> ImageFont.FreeTypeFont:
+def _get_font(bold: bool = False, size: int = 72) -> Any:
     """Load Inter font, cached. Falls back to default if file missing."""
     key = ("bold" if bold else "regular", size)
     if key not in _FONT_CACHE:
@@ -33,7 +34,7 @@ def _get_font(bold: bool = False, size: int = 72) -> ImageFont.FreeTypeFont:
         font_path = _FONT_DIR / fname
         try:
             _FONT_CACHE[key] = ImageFont.truetype(str(font_path), size)
-        except (OSError, IOError):
+        except OSError:
             _FONT_CACHE[key] = ImageFont.load_default()
     return _FONT_CACHE[key]
 
@@ -43,7 +44,8 @@ def _scale_font_size(base_size: int, canvas_width: int) -> int:
     return max(16, int(base_size * canvas_width / 1080))
 
 
-# ── Color utilities ───────────────────────────────────────────────────────────
+# â”€â”€ Color utilities â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
 
 def _hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
     """Convert '#RRGGBB' to (R, G, B). Returns white on parse failure."""
@@ -58,9 +60,11 @@ def _hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
 
 def _srgb_luminance(rgb: tuple[int, int, int]) -> float:
     """WCAG 2.1 relative luminance with sRGB linearization."""
+
     def _lin(c: int) -> float:
         s = c / 255.0
         return s / 12.92 if s <= 0.04045 else ((s + 0.055) / 1.055) ** 2.4
+
     return 0.2126 * _lin(rgb[0]) + 0.7152 * _lin(rgb[1]) + 0.0722 * _lin(rgb[2])
 
 
@@ -90,7 +94,8 @@ def _gradient_color(brand_colors: list[str]) -> tuple[int, int, int]:
     return (20, 20, 20)
 
 
-# ── Core functions ────────────────────────────────────────────────────────────
+# â”€â”€ Core functions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
 
 def resize_to_aspect(image_bytes: bytes, aspect_ratio: str) -> bytes:
     """Resize image to exact pixel dimensions for the given aspect ratio.
@@ -112,13 +117,13 @@ def _draw_text_with_shadow(
     draw: ImageDraw.ImageDraw,
     position: tuple[int, int],
     text: str,
-    font: ImageFont.FreeTypeFont,
+    font: Any,
     fill: tuple[int, int, int],
     shadow_offset: int = 2,
 ) -> None:
     """Draw text with a drop shadow for readability."""
     x, y = position
-    # Shadow renders as solid black on RGB canvas (alpha ignored) — standard text shadow
+    # Shadow renders as solid black on RGB canvas (alpha ignored) â€” standard text shadow
     draw.text((x + shadow_offset, y + shadow_offset), text, font=font, fill=(0, 0, 0))
     draw.text((x, y), text, font=font, fill=fill)
 
@@ -160,7 +165,7 @@ def _add_gradient_overlay(
     return img.convert("RGB")
 
 
-def _wrap_text(text: str, font: ImageFont.FreeTypeFont, max_width: int) -> list[str]:
+def _wrap_text(text: str, font: Any, max_width: int) -> list[str]:
     """Word-wrap text to fit within max_width pixels."""
     words = text.split()
     lines: list[str] = []
@@ -181,7 +186,8 @@ def _wrap_text(text: str, font: ImageFont.FreeTypeFont, max_width: int) -> list[
     return lines or [text]
 
 
-# ── Platform-specific overlay functions ───────────────────────────────────────
+# â”€â”€ Platform-specific overlay functions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
 
 def create_carousel_cover(
     image_bytes: bytes,
@@ -225,7 +231,7 @@ def create_carousel_slide(
     brand_colors: list[str],
     aspect_ratio: str = "4:5",
 ) -> bytes:
-    """Add title overlay to carousel slide (no badge — Instagram shows native counter)."""
+    """Add title overlay to carousel slide (no badge â€” Instagram shows native counter)."""
     img = Image.open(io.BytesIO(image_bytes))
     w, h = img.size
     grad_color = _gradient_color(brand_colors)
@@ -234,7 +240,7 @@ def create_carousel_slide(
     draw = ImageDraw.Draw(img)
     text_fill = _text_color_for_bg(brand_colors)
 
-    # Title at bottom — max 2 lines to keep overlay clean
+    # Title at bottom â€” max 2 lines to keep overlay clean
     font_size = _scale_font_size(48, w)
     font = _get_font(bold=True, size=font_size)
     max_text_w = int(w * 0.85)
@@ -242,9 +248,9 @@ def create_carousel_slide(
     if len(lines) > 2:
         # Re-wrap with a shorter title to fit in 2 lines
         shorter = title[:50]
-        last_space = shorter.rfind(' ')
+        last_space = shorter.rfind(" ")
         if last_space > 0:
-            shorter = shorter[:last_space] + '…'
+            shorter = shorter[:last_space] + "â€¦"
         lines = _wrap_text(shorter, font, max_text_w)[:2]
     line_height = int(font_size * 1.3)  # 130% leading for readability
     total_h = len(lines) * line_height
@@ -279,7 +285,7 @@ def create_pinterest_pin(
     text_fill = _text_color_for_bg(brand_colors)
     max_text_w = int(w * 0.85)
 
-    # Large title — centered vertically in bottom 50%
+    # Large title â€” centered vertically in bottom 50%
     title_size = _scale_font_size(72, w)
     title_font = _get_font(bold=True, size=title_size)
     title_lines = _wrap_text(title[:100], title_font, max_text_w)

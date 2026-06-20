@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from backend.config import IMAGE_COST_PER_UNIT, VIDEO_COST_FAST, VIDEO_COST_STD, TOTAL_BUDGET
+from backend.config import IMAGE_COST_PER_UNIT, TOTAL_BUDGET, VIDEO_COST_FAST, VIDEO_COST_STD
 
 
 class TestBudgetTracker:
@@ -12,13 +12,16 @@ class TestBudgetTracker:
 
     def _make_tracker(self):
         from backend.services.budget_tracker import BudgetTracker
+
         tracker = BudgetTracker()
         tracker._loaded = True  # Skip Firestore load
         return tracker
 
     @pytest.fixture
     def mock_persist(self):
-        with patch("backend.services.budget_tracker.BudgetTracker._persist", new_callable=AsyncMock):
+        with patch(
+            "backend.services.budget_tracker.BudgetTracker._persist", new_callable=AsyncMock
+        ):
             yield
 
     @pytest.mark.asyncio

@@ -5,7 +5,11 @@ import { A } from '../theme'
 export default function NotionCallbackPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const [error, setError] = useState('')
+  const [error, setError] = useState(() => {
+    if (searchParams.get('error')) return 'Notion authorization was cancelled.'
+    if (!searchParams.get('code') || !searchParams.get('state')) return 'Missing authorization parameters.'
+    return ''
+  })
 
   useEffect(() => {
     const code = searchParams.get('code')
@@ -13,13 +17,11 @@ export default function NotionCallbackPage() {
     const errorParam = searchParams.get('error')
 
     if (errorParam) {
-      setError('Notion authorization was cancelled.')
       setTimeout(() => navigate(state ? `/dashboard/${state}` : '/'), 2000)
       return
     }
 
     if (!code || !state) {
-      setError('Missing authorization parameters.')
       setTimeout(() => navigate('/'), 2000)
       return
     }

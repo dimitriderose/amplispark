@@ -652,13 +652,12 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
                   <div style={{ textAlign: 'center', padding: 20 }}>
                     <button
                       onClick={() => startGeneration('fast')}
-                      disabled={videoStatus === 'generating'}
                       style={{
                         padding: '12px 24px', borderRadius: 10, border: 'none',
-                        background: videoStatus === 'generating' ? A.surfaceAlt : `linear-gradient(135deg, ${A.violet}, ${A.indigo})`,
-                        color: videoStatus === 'generating' ? A.textMuted : 'white',
+                        background: `linear-gradient(135deg, ${A.violet}, ${A.indigo})`,
+                        color: 'white',
                         fontSize: 13, fontWeight: 600,
-                        cursor: videoStatus === 'generating' ? 'not-allowed' : 'pointer',
+                        cursor: 'pointer',
                       }}
                     >
                       Generate 8-sec Clip

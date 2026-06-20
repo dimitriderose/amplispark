@@ -1,10 +1,9 @@
 """Tests for post CRUD and listing behavior."""
 
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 
 import pytest
-from backend.tests.conftest import TEST_UID, TEST_BRAND_ID
 
 
 class TestPostSoftDelete:
@@ -23,6 +22,7 @@ class TestPostSoftDelete:
 
         with patch("backend.services.firestore_client.get_client", return_value=mock_db):
             from backend.services import firestore_client
+
             await firestore_client.delete_post("brand-1", "post-1")
 
         # Verify update was called (soft delete) rather than delete
@@ -54,14 +54,15 @@ class TestStalePostCleanup:
 
     def test_stale_detection_logic(self):
         """Posts generating for >10 minutes should be considered stale."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         fresh = {"status": "generating", "created_at": (now - timedelta(minutes=2)).isoformat()}
         stale = {"status": "generating", "created_at": (now - timedelta(minutes=15)).isoformat()}
         complete = {"status": "complete", "created_at": (now - timedelta(hours=1)).isoformat()}
 
         posts = [fresh, stale, complete]
         stale_posts = [
-            p for p in posts
+            p
+            for p in posts
             if p.get("status") == "generating"
             and datetime.fromisoformat(p["created_at"]) < now - timedelta(minutes=10)
         ]

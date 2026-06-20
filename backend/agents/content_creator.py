@@ -2,44 +2,52 @@ import asyncio
 import base64
 import logging
 import re
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
-from google import genai
 from google.genai import types
 
-from backend.config import GOOGLE_API_KEY, GEMINI_MODEL
+from backend.agents.caption_pipeline import (
+    _enforce_char_limit,
+    _fix_mojibake,
+    _smart_condense,
+    _strip_markdown,
+)
+from backend.agents.carousel_builder import (
+    _extract_slide_headline,
+    _parse_slide_descriptions,
+)
+from backend.agents.hashtag_engine import _sanitize_hashtags
+from backend.agents.image_prompt_builder import (
+    _build_carousel_slide_prompt,
+    _build_image_prompt,
+    _get_image_style,
+)
+from backend.agents.quality_gates import (
+    _quality_retry,
+    _review_gate,
+)
+from backend.agents.review_agent import review_post
 from backend.clients import get_genai_client
+from backend.config import GEMINI_MODEL
 from backend.constants import get_proof_tier
 from backend.platforms import get as get_platform
+from backend.services import budget_tracker as bt
+from backend.services.brand_assets import get_brand_reference_images
+from backend.services.image_postprocess import (
+    create_carousel_cover,
+    create_carousel_slide,
+    create_pinterest_pin,
+    create_tiktok_cover,
+    resize_to_aspect,
+)
+from backend.services.storage_client import upload_image_to_gcs
 
 # Interleaved text+image generation requires an image-capable model
 GEMINI_IMAGE_MODEL = "gemini-3.1-flash-image-preview"
-from backend.services import budget_tracker as bt
-from backend.services.storage_client import upload_image_to_gcs
-from backend.services.brand_assets import get_brand_reference_images
-from backend.services.image_postprocess import (
-    resize_to_aspect, create_carousel_cover, create_carousel_slide,
-    create_pinterest_pin, create_tiktok_cover,
-)
-from backend.agents.review_agent import review_post
-
-# ── Extracted modules ──
-from backend.agents.caption_pipeline import (
-    _smart_condense, _enforce_char_limit, _fix_mojibake, _strip_markdown,
-)
-from backend.agents.carousel_builder import (
-    _parse_slide_descriptions, _extract_slide_headline, _SLIDE_RE,
-)
-from backend.agents.hashtag_engine import _sanitize_hashtags
-from backend.agents.quality_gates import (
-    _review_gate, _check_quality_violations, _quality_retry,
-)
-from backend.agents.image_prompt_builder import (
-    _build_image_prompt, _build_carousel_slide_prompt,
-    _get_image_style, _IMAGE_STYLE_MAP,
-)
 
 logger = logging.getLogger(__name__)
+
 
 def _validate_format(caption: str, derivative_type: str) -> bool:
     """Check if the caption follows the expected derivative format. Log warnings on mismatch."""
@@ -99,14 +107,11 @@ def _wrap_caption_style_directive(raw: str) -> str:
     """
     if not raw or not raw.strip():
         return ""
-    sentences = re.split(r'(?<=[.!?])\s+', raw.strip())
+    sentences = re.split(r"(?<=[.!?])\s+", raw.strip())
     clean = [s for s in sentences if not _STRUCTURAL_PATTERNS_RE.search(s)]
     if not clean:
         return ""
-    return (
-        "BRAND WRITING RHYTHM (tone and cadence ONLY):\n"
-        f"{' '.join(clean)}\n"
-    )
+    return f"BRAND WRITING RHYTHM (tone and cadence ONLY):\n{' '.join(clean)}\n"
 
 
 async def _generate_carousel_images(
@@ -154,9 +159,9 @@ async def _generate_carousel_images(
                     "The following image is the carousel COVER — match its visual style, "
                     "color grading, lighting, and photographic approach exactly."
                 )
-                contents.append(types.Part.from_bytes(
-                    data=cover_image_bytes, mime_type="image/png"
-                ))
+                contents.append(
+                    types.Part.from_bytes(data=cover_image_bytes, mime_type="image/png")
+                )
             try:
                 resp = await asyncio.to_thread(
                     get_genai_client().models.generate_content,
@@ -167,9 +172,11 @@ async def _generate_carousel_images(
                         temperature=0.7,
                     ),
                 )
-                for part in resp.candidates[0].content.parts:
-                    if part.inline_data:
-                        return (part.inline_data.data, part.inline_data.mime_type or "image/png")
+                _c0 = resp.candidates[0].content if resp.candidates else None
+                for part in _c0.parts if _c0 and _c0.parts else []:
+                    if part.inline_data and part.inline_data.data is not None:
+                        _part_data: bytes = part.inline_data.data
+                        return (_part_data, part.inline_data.mime_type or "image/png")
             except Exception as e:
                 logger.error("Carousel slide %d generation failed: %s", slide_num, e)
             return None
@@ -196,15 +203,20 @@ async def _generate_image_with_retry(
                     temperature=0.7,
                 ),
             )
-            for part in resp.candidates[0].content.parts:
-                if part.inline_data:
-                    data = part.inline_data.data
+            _rc0 = resp.candidates[0].content if resp.candidates else None
+            for part in _rc0.parts if _rc0 and _rc0.parts else []:
+                if part.inline_data and part.inline_data.data is not None:
+                    data: bytes = part.inline_data.data
                     mime = part.inline_data.mime_type or "image/png"
                     if len(data) > 5000:  # Minimum viable image (~5KB)
                         return data, mime
-                    logger.warning("Image too small (%dB), retry %d/%d", len(data), attempt + 1, max_retries)
+                    logger.warning(
+                        "Image too small (%dB), retry %d/%d", len(data), attempt + 1, max_retries
+                    )
         except Exception as e:
-            logger.warning("Image generation failed (attempt %d/%d): %s", attempt + 1, max_retries, e)
+            logger.warning(
+                "Image generation failed (attempt %d/%d): %s", attempt + 1, max_retries, e
+            )
         if attempt < max_retries:
             await asyncio.sleep(1)
     return None, "image/png"
@@ -224,19 +236,21 @@ async def _generate_alt_text(
         return None
 
     try:
-        result = await asyncio.to_thread(
-            get_genai_client().models.generate_content,
-            model="gemini-2.5-flash",
-            contents=[
-                types.Part.from_bytes(data=image_bytes, mime_type="image/png"),
-                (
-                    f"Write alt-text for this image (for screen readers). Context: {content_theme[:150]}.\n"
-                    "Be factual and descriptive: what's in the image, colors, composition.\n"
-                    "Do NOT say 'AI-generated' or 'stock photo'. Max 300 characters."
-                ),
-            ],
+        _alt_client = get_genai_client()
+        _alt_img = types.Part.from_bytes(data=image_bytes, mime_type="image/png")
+        _alt_txt = (
+            f"Write alt-text for this image (for screen readers). Context: {content_theme[:150]}.\n"
+            "Be factual and descriptive: what's in the image, colors, composition.\n"
+            "Do NOT say 'AI-generated' or 'stock photo'. Max 300 characters."
         )
-        alt = result.text.strip()[:500]
+        _alt_contents: Any = [_alt_img, _alt_txt]
+        result = await asyncio.to_thread(
+            lambda: _alt_client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=_alt_contents,
+            )
+        )
+        alt = (result.text or "").strip()[:500]
         return alt
     except Exception as e:
         logger.warning("Alt-text generation failed (non-fatal): %s", e)
@@ -322,24 +336,24 @@ async def generate_post(
         "FORMATTING: Write plain text only. No **bold**, *italic*, __underline__, or [links](url). "
         "Use CAPS or emoji for emphasis sparingly.\n\n"
         "BANNED PATTERNS (instant fail if any appear):\n"
-        "- \"Are you ready to...?\" / \"Did you know...?\" / \"What if...?\" / \"In today's [adjective] world...\"\n"
-        "- \"As a [profession]...\" / \"When it comes to...\" / \"Let's dive in\"\n"
-        "- \"Still [verb]-ing...?\" (e.g., \"Still handling your own marketing?\")\n"
-        "- \"[Role] won't tell you this about...\" (clickbait hook family)\n"
-        "- \"You might be [missing/leaving/losing]...\" (fear-based hook)\n"
-        "- \"Imagine [positive outcome]...\" (wish-casting hook)\n"
-        "- \"Game-changer\" / \"unlock your potential\" / \"take it to the next level\"\n"
-        "- \"Drop a comment below!\" / \"Follow for more!\" / \"Like and share\"\n"
-        "- \"Here's the thing:\" / \"The truth is:\" / \"Let me tell you something:\"\n"
-        "- \"Sound familiar?\" / \"Let's break it down\" / \"Here's why it matters\" / "
-        "\"Let's talk about it\" / \"Let me explain\" (momentum-killing filler after hooks)\n"
-        "- Starting 3+ sentences with \"It's\" or \"This is\"\n"
+        '- "Are you ready to...?" / "Did you know...?" / "What if...?" / "In today\'s [adjective] world..."\n'
+        '- "As a [profession]..." / "When it comes to..." / "Let\'s dive in"\n'
+        '- "Still [verb]-ing...?" (e.g., "Still handling your own marketing?")\n'
+        '- "[Role] won\'t tell you this about..." (clickbait hook family)\n'
+        '- "You might be [missing/leaving/losing]..." (fear-based hook)\n'
+        '- "Imagine [positive outcome]..." (wish-casting hook)\n'
+        '- "Game-changer" / "unlock your potential" / "take it to the next level"\n'
+        '- "Drop a comment below!" / "Follow for more!" / "Like and share"\n'
+        '- "Here\'s the thing:" / "The truth is:" / "Let me tell you something:"\n'
+        '- "Sound familiar?" / "Let\'s break it down" / "Here\'s why it matters" / '
+        '"Let\'s talk about it" / "Let me explain" (momentum-killing filler after hooks)\n'
+        '- Starting 3+ sentences with "It\'s" or "This is"\n'
         "- Emoji bullet lists (fire Point one, pin Point two, lightbulb Point three)\n"
         "- More than 2 emojis in any single post\n"
         "- Generic advice that could apply to any business in any industry\n"
         "- Ending with an exclamation mark on more than 1 sentence\n"
         "- Fabricated statistics, percentages, or specific numbers not from the brand profile\n"
-        "- \"We've seen countless...\" / \"Many businesses...\" / \"So many [people/clients/owners]...\" "
+        '- "We\'ve seen countless..." / "Many businesses..." / "So many [people/clients/owners]..." '
         "(vague social proof — use the brand's real data or skip social proof entirely)\n\n"
         "REQUIRED:\n"
         "- VALUE FIRST: The caption must TEACH — a specific tip, fact, insight, "
@@ -350,10 +364,10 @@ async def generate_post(
         "history, or value proposition. The brand name should appear at most ONCE, "
         "embedded naturally in a sentence that's primarily about the reader's problem or the insight.\n"
         "- At least one SPECIFIC detail (number, name, timeframe, scenario) from the brand profile\n"
-        "- A human perspective — first person (\"we\", \"I\", \"our clients\") not third person\n"
+        '- A human perspective — first person ("we", "I", "our clients") not third person\n'
         "- Content that could ONLY come from this brand, not a generic template\n"
         "- CTA DISCIPLINE: End with ONE type of CTA — either an engagement question "
-        "(\"What's your approach?\") OR a conversion action (\"Book a call\" / \"DM us\"), NEVER both. "
+        '("What\'s your approach?") OR a conversion action ("Book a call" / "DM us"), NEVER both. '
         "Engagement questions get more reach; conversion CTAs get more leads. Pick one per post.\n"
         "  BY DERIVATIVE TYPE:\n"
         "  - video_first: CTA is optional — a cliffhanger or curiosity hook works better than a forced CTA.\n"
@@ -376,23 +390,23 @@ async def generate_post(
     _HOOK_BLOCK = (
         "HOOK RULES (your opening line determines if anyone reads the rest):\n"
         "1. SPECIFICITY: Include a number, timeframe, or concrete detail from the brand's real experience.\n"
-        "   BAD: \"Growing your business is hard\"\n"
-        "   GOOD: \"After 20 years in this industry, here's the one mistake we still see every quarter\"\n"
+        '   BAD: "Growing your business is hard"\n'
+        '   GOOD: "After 20 years in this industry, here\'s the one mistake we still see every quarter"\n'
         "2. PATTERN INTERRUPT — use one of these structures (rotate, NEVER repeat same pattern in a week):\n"
-        "   - Contrarian flip: \"[Common belief] is actually costing you [specific consequence].\"\n"
-        "   - Data-driven: \"[X]% of [audience] make this mistake. Here's the pattern.\"\n"
-        "   - Story opener: \"A client came to us last [season] because...\"\n"
-        "   - Number: \"[X] mistakes we see every [timeframe] in [industry]\"\n"
-        "   - Question: \"What would change if you [specific outcome]?\"\n"
-        "   - Confession: \"We almost made this mistake ourselves.\"\n"
+        '   - Contrarian flip: "[Common belief] is actually costing you [specific consequence]."\n'
+        '   - Data-driven: "[X]% of [audience] make this mistake. Here\'s the pattern."\n'
+        '   - Story opener: "A client came to us last [season] because..."\n'
+        '   - Number: "[X] mistakes we see every [timeframe] in [industry]"\n'
+        '   - Question: "What would change if you [specific outcome]?"\n'
+        '   - Confession: "We almost made this mistake ourselves."\n'
         "   - Observation: \"I've reviewed [X] [items] this year. Here's the pattern.\"\n"
-        "   - Comparison: \"[Thing A] vs [Thing B] — and why most people pick wrong.\"\n"
+        '   - Comparison: "[Thing A] vs [Thing B] — and why most people pick wrong."\n'
         "   BANNED HOOK FORMATS (overused — except TikTok/Reels where imperatives are native):\n"
         "   - \"Stop [verb]-ing...\" (the 'Stop doing X' formula)\n"
-        "   - \"Most people don't realize...\"\n"
-        "   - \"Here's the truth about...\"\n"
-        "   - \"Nobody is talking about...\"\n"
-        "3. NEVER start with: \"Are you...?\", \"Did you know...?\", \"What if...?\", \"In today's...\", \"As a...\", \"When it comes to...\"\n"
+        '   - "Most people don\'t realize..."\n'
+        '   - "Here\'s the truth about..."\n'
+        '   - "Nobody is talking about..."\n'
+        '3. NEVER start with: "Are you...?", "Did you know...?", "What if...?", "In today\'s...", "As a...", "When it comes to..."\n'
         "4. The hook from the brief is a STARTING POINT — rewrite it to be specific and surprising.\n"
         "5. PLATFORM FOLD: Your hook MUST land BEFORE the fold (Instagram: 125 chars, "
         "LinkedIn: 140 chars, Facebook: ~140 chars). Everything after the fold requires "
@@ -416,7 +430,6 @@ async def generate_post(
         "\n--- SELF-REVIEW (run EVERY check before outputting. If ANY check fails, "
         "rewrite BEFORE outputting. Output ONLY the final corrected caption — no drafts, "
         "no explanations.) ---\n\n"
-
         "☐ HOOK: Does my first line match a banned opener? "
         "(Are you...?, Did you know...?, What if...?, In today's..., As a..., "
         "When it comes to..., Still [verb]-ing...?, [Role] won't tell you..., "
@@ -434,7 +447,6 @@ async def generate_post(
         "  TONE — X: tight and opinionated, sentence fragments OK. "
         "TikTok: lowercase and casual, if it reads like a press release rewrite as a text message. "
         "Facebook: warm and relational, first-person stories over informational statements.\n\n"
-
         "☐ BRAND PARAGRAPH & VOICE: Did I write a sentence where the brand is the subject "
         "and the verb describes what the brand does, offers, or believes? "
         "(e.g., '[Brand] specializes in...', '[Brand] has been helping...', 'At [Brand], we...') "
@@ -444,7 +456,6 @@ async def generate_post(
         "the reader's problem, never as the topic. Pick one voice (first-person singular for "
         "thought leadership, second-person for educational, first-person plural for brand voice) "
         "and hold it for the entire caption. Pinterest: no first person in titles or descriptions.\n\n"
-
         "☐ FORMATTING & HASHTAGS: Did I use emoji bullet lists, emoji as section markers, "
         "more than 2 emoji total, markdown syntax (**bold**, ### headers, [links]()), "
         "or numbered lists (LinkedIn permits short numbered lists ≤5 items)? "
@@ -459,31 +470,26 @@ async def generate_post(
         "TikTok: 3–5 niche-specific at caption end (never #fyp #viral). "
         "Facebook: 0–1 max. Instagram: ≤5, in a separate block after the caption body, "
         "no inline hashtags mid-sentence.\n\n"
-
         "☐ FILLER & PACING: Did I include a stalling phrase? "
         "(Here's the thing, Let's break it down, Here's why this matters, Here's the truth, "
         "The reality is, Think about it, Let me explain, It's no secret that, It's simple, "
         "The good news is, Sound familiar?)\n"
         "  → DELETE the phrase. Start the sentence with the actual content that follows it.\n\n"
-
         "☐ SPECIFICITY: Did I use a generic claim or advice not tied to this brand's actual data, "
         "niche, or offering? (post consistently, engage with your audience, stay ahead of the curve, "
         "take your business to the next level, in today's competitive landscape, unlock your potential, "
         "it's a game-changer) Did I restate the brand's industry category as a value proposition?\n"
         "  → REPLACE with a concrete detail from the brand brief or DELETE entirely. "
         "If I cannot make it specific, it does not belong.\n\n"
-
         "☐ SOCIAL PROOF: Did I use a vague quantifier? "
         "(countless, many businesses, many clients, so many, numerous, a growing number of, "
         "tons of, hundreds of)\n"
         "  → REPLACE with a specific number from the brand profile. "
         "If no number exists, REMOVE the claim — do not fabricate.\n\n"
-
         "☐ FABRICATION: Did I invent a statistic, percentage, dollar amount, timeframe, "
         "or regulatory/legal claim not provided in the brand brief?\n"
         "  → DELETE and restate qualitatively (e.g., 'improved cash flow' not "
         "'boosted revenue by 30%'). Never invent numbers.\n\n"
-
         "☐ CTA: Do I have more than one call to action (engagement question + conversion CTA, "
         "or two of either)? Does my CTA violate platform norms?\n"
         "  PLATFORM RULES — Mastodon: ZERO CTAs, no engagement bait; prepend CW: [topic] for "
@@ -498,7 +504,6 @@ async def generate_post(
         "Bluesky: no generic engagement bait ('Thoughts?' = spam) — ask a specific question or omit. "
         "LinkedIn: no raw URLs in caption body (suppresses reach).\n"
         "  → KEEP only one. Match platform tone. When in doubt, cut the CTA entirely.\n\n"
-
         "☐ LENGTH & FOLD: Does my caption fit the platform character limit? "
         "Does my strongest hook land BEFORE the fold?\n"
         "  LIMITS — X: 280 chars hard limit, no fold. "
@@ -515,15 +520,16 @@ async def generate_post(
         "pre-fold window. Avoid the 400–700 char dead zone on Instagram. "
         "For carousel slides: each slide carries one complete idea in ≤15 words; "
         "do not split a sentence across slides.\n\n"
-
         "--- END SELF-REVIEW ---\n"
     )
 
     # Industry hook research context (from strategy agent web search)
     _hook_research = day_brief.get("hook_research", "")
     _hook_context = (
-        f"\nINDUSTRY HOOK RESEARCH (use these patterns as inspiration):\n{_hook_research}\n"
-    ) if _hook_research else ""
+        (f"\nINDUSTRY HOOK RESEARCH (use these patterns as inspiration):\n{_hook_research}\n")
+        if _hook_research
+        else ""
+    )
 
     # ── Storytelling + Social Proof Strategy ──
     _story_details = []
@@ -594,8 +600,10 @@ async def generate_post(
 
         _storytelling_block = (
             "VERIFIED BRAND DATA (you may reference these — they are real):\n"
-            + "\n".join(f"  - {d}" for d in _story_details) + "\n\n"
-            + _proof_strategy + "\n"
+            + "\n".join(f"  - {d}" for d in _story_details)
+            + "\n\n"
+            + _proof_strategy
+            + "\n"
             "FABRICATION RULES:\n"
             "- You MAY reference: years in business, client count, location, industry, brand values.\n"
             "- You MAY use hypothetical framing: 'Imagine discovering...', "
@@ -713,12 +721,18 @@ async def generate_post(
 
     # Dynamic char limit for self-review checklist
     _spec = get_platform(platform)
-    _deriv_char_limit = (_spec.char_limits or {}).get(derivative_type) or (_spec.char_limits or {}).get("default", 0)
+    _deriv_char_limit = (_spec.char_limits or {}).get(derivative_type) or (
+        _spec.char_limits or {}
+    ).get("default", 0)
     _char_limit_reminder = (
-        f"\nCHARACTER LIMIT FOR THIS POST: {platform} {derivative_type} = {_deriv_char_limit} chars max. "
-        f"If your caption exceeds {_deriv_char_limit} characters, REWORD it to fit — "
-        f"do NOT just cut off mid-sentence. The caption must be a complete thought.\n"
-    ) if _deriv_char_limit else ""
+        (
+            f"\nCHARACTER LIMIT FOR THIS POST: {platform} {derivative_type} = {_deriv_char_limit} chars max. "
+            f"If your caption exceeds {_deriv_char_limit} characters, REWORD it to fit — "
+            f"do NOT just cut off mid-sentence. The caption must be a complete thought.\n"
+        )
+        if _deriv_char_limit
+        else ""
+    )
 
     # Pillar-get helper: returns pillar-specific guidance or default
     def _pg(m: dict[str, str], d: str) -> str:
@@ -768,11 +782,14 @@ async def generate_post(
                     "real outcomes. Each slide advances the narrative. "
                     "Write in THEIR voice, not corporate voice.\n"
                 ),
-            }.get(_pillar, (
-                "  Slide 2: Context — WHY this matters to the reader.\n"
-                f"  Slides 3-{_spec.carousel_slide_count - 2}: Each slide starts with a SHORT HEADLINE "
-                "(≤50 chars, ≤8 words). One distinct point per slide with a concrete detail.\n"
-            ))
+            }.get(
+                _pillar,
+                (
+                    "  Slide 2: Context — WHY this matters to the reader.\n"
+                    f"  Slides 3-{_spec.carousel_slide_count - 2}: Each slide starts with a SHORT HEADLINE "
+                    "(≤50 chars, ≤8 words). One distinct point per slide with a concrete detail.\n"
+                ),
+            )
             + "  OPEN LOOPS: End each content slide with a teaser that makes the reader swipe. "
             "Use a DIFFERENT open loop on each slide — never repeat the same phrase. "
             "Match the brand's tone.\n"
@@ -935,10 +952,13 @@ async def generate_post(
                         "or focus on the product experience.\n"
                         "  SUBSTANCE means AUTHENTIC VOICE, not invented testimonials."
                     ),
-                }.get(_pillar, (
-                    "  Do NOT invent client stories, dollar amounts, or case studies.\n"
-                    "  SUBSTANCE means SPECIFICITY appropriate to the content type."
-                ))
+                }.get(
+                    _pillar,
+                    (
+                        "  Do NOT invent client stories, dollar amounts, or case studies.\n"
+                        "  SUBSTANCE means SPECIFICITY appropriate to the content type."
+                    ),
+                )
             ),
             "blog_snippet": (
                 "\nTHIN-PROFILE OVERRIDE (this brand has NO client data):\n"
@@ -993,8 +1013,6 @@ async def generate_post(
         _aspect = _DERIVATIVE_ASPECTS[derivative_type]
     else:
         _aspect = _STANDARD_POST_ASPECTS.get(platform, _spec.image_aspect)
-    aspect_hint = f"Generate a {_aspect} aspect ratio image." if _aspect != "1:1" else ""
-
     # Live platform trend intelligence (from strategy Phase 0)
     platform_trends = day_brief.get("platform_trends")
     trend_block = ""
@@ -1017,6 +1035,7 @@ async def generate_post(
     )
 
     # ── BYOP mode ─────────────────────────────────────────────────────────────
+    parsed_hashtags: list[str] | None = None
     if custom_photo_bytes:
         yield {"event": "status", "data": {"message": "Analyzing your photo..."}}
 
@@ -1049,18 +1068,26 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
             )
             text_part = types.Part(text=byop_prompt)
 
+            _byop_client = get_genai_client()
+            _byop_img, _byop_txt = image_part, text_part
+            _byop_contents: Any = [_byop_img, _byop_txt]
             response = await asyncio.to_thread(
-                get_genai_client().models.generate_content,
-                model=GEMINI_MODEL,
-                contents=[image_part, text_part],
-                config=types.GenerateContentConfig(
-                    response_modalities=["TEXT"],
-                    temperature=0.7,
-                ),
+                lambda: _byop_client.models.generate_content(
+                    model=GEMINI_MODEL,
+                    contents=_byop_contents,
+                    config=types.GenerateContentConfig(
+                        response_modalities=["TEXT"],
+                        temperature=0.7,
+                    ),
+                )
             )
 
+            _byop_cands = response.candidates
+            _byop_content = _byop_cands[0].content if _byop_cands else None
             full_text = "".join(
-                part.text for part in response.candidates[0].content.parts if part.text
+                part.text
+                for part in (_byop_content.parts if _byop_content and _byop_content.parts else [])
+                if part.text
             )
 
             if "HASHTAGS:" in full_text:
@@ -1085,7 +1112,11 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                 )
                 yield {
                     "event": "image",
-                    "data": {"url": image_url, "mime_type": custom_photo_mime, "gcs_uri": image_gcs_uri},
+                    "data": {
+                        "url": image_url,
+                        "mime_type": custom_photo_mime,
+                        "gcs_uri": image_gcs_uri,
+                    },
                 }
             except Exception as upload_err:
                 logger.error("BYOP photo upload failed: %s", upload_err)
@@ -1100,30 +1131,55 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                     },
                 }
 
-            final_caption = await _smart_condense(_strip_markdown(full_caption), platform, derivative_type)
+            final_caption = await _smart_condense(
+                _strip_markdown(full_caption), platform, derivative_type
+            )
             final_caption = await _quality_retry(final_caption, platform, derivative_type)
 
             # ── Review gate — hold caption until 7+ ──
             yield {"event": "status", "data": {"message": "Reviewing content..."}}
             final_caption, parsed_hashtags, _gate_review = await _review_gate(
-                final_caption, parsed_hashtags, platform, derivative_type, brand_profile, day_brief,
+                final_caption,
+                parsed_hashtags,
+                platform,
+                derivative_type,
+                brand_profile,
+                day_brief,
             )
             _gate_score = (_gate_review or {}).get("score", 0)
 
             # ── Attempt 3: full regeneration if review gate exhausted ──
             if _gate_score < 7:
-                logger.warning("Full regeneration triggered (gate score=%d) for BYOP %s/%s",
-                               _gate_score, platform, derivative_type)
+                logger.warning(
+                    "Full regeneration triggered (gate score=%d) for BYOP %s/%s",
+                    _gate_score,
+                    platform,
+                    derivative_type,
+                )
                 yield {"event": "status", "data": {"message": "Regenerating content..."}}
                 try:
+                    _byop_regen_client = get_genai_client()
+                    _byop_regen_img, _byop_regen_txt = image_part, text_part
+                    _byop_regen_contents: Any = [_byop_regen_img, _byop_regen_txt]
                     regen_response = await asyncio.to_thread(
-                        get_genai_client().models.generate_content,
-                        model=GEMINI_MODEL,
-                        contents=[image_part, text_part],
-                        config=types.GenerateContentConfig(temperature=0.8),
+                        lambda: _byop_regen_client.models.generate_content(
+                            model=GEMINI_MODEL,
+                            contents=_byop_regen_contents,
+                            config=types.GenerateContentConfig(temperature=0.8),
+                        )
+                    )
+                    _byop_regen_cands = regen_response.candidates
+                    _byop_regen_content = (
+                        _byop_regen_cands[0].content if _byop_regen_cands else None
                     )
                     regen_text = "".join(
-                        p.text for p in regen_response.candidates[0].content.parts if p.text
+                        p.text
+                        for p in (
+                            _byop_regen_content.parts
+                            if _byop_regen_content and _byop_regen_content.parts
+                            else []
+                        )
+                        if p.text
                     )
                     if "HASHTAGS:" in regen_text:
                         regen_cap, regen_ht = regen_text.split("HASHTAGS:", 1)
@@ -1139,27 +1195,45 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                     regen_caption = await _quality_retry(regen_caption, platform, derivative_type)
 
                     _story = brand_profile.get("storytelling_strategy", {})
-                    _proof_tier_r = _story.get("social_proof_tier") if isinstance(_story, dict) else None
+                    _proof_tier_r = (
+                        _story.get("social_proof_tier") if isinstance(_story, dict) else None
+                    )
                     _cta_type_r = day_brief.get("cta_type")
                     regen_review = await review_post(
-                        {"caption": regen_caption, "hashtags": regen_hashtags,
-                         "platform": platform, "derivative_type": derivative_type,
-                         "pillar": day_brief.get("pillar", "education"),
-                         "content_theme": day_brief.get("content_theme", "")},
+                        {
+                            "caption": regen_caption,
+                            "hashtags": regen_hashtags,
+                            "platform": platform,
+                            "derivative_type": derivative_type,
+                            "pillar": day_brief.get("pillar", "education"),
+                            "content_theme": day_brief.get("content_theme", ""),
+                        },
                         brand_profile,
-                        social_proof_tier=_proof_tier_r, cta_type=_cta_type_r,
+                        social_proof_tier=_proof_tier_r,
+                        cta_type=_cta_type_r,
                     )
                     regen_score = regen_review.get("score", 0)
-                    logger.info("BYOP full regeneration score: %d for %s/%s", regen_score, platform, derivative_type)
+                    logger.info(
+                        "BYOP full regeneration score: %d for %s/%s",
+                        regen_score,
+                        platform,
+                        derivative_type,
+                    )
                     if regen_score > _gate_score:
                         final_caption = regen_caption
                         parsed_hashtags = regen_hashtags
                         _gate_review = regen_review
-                        logger.info("BYOP full regeneration improved score: %d -> %d", _gate_score, regen_score)
+                        logger.info(
+                            "BYOP full regeneration improved score: %d -> %d",
+                            _gate_score,
+                            regen_score,
+                        )
                 except Exception as regen_err:
                     logger.warning("BYOP full regeneration failed (non-fatal): %s", regen_err)
 
-            final_caption = _enforce_char_limit(final_caption, platform, derivative_type)  # safety net
+            final_caption = _enforce_char_limit(
+                final_caption, platform, derivative_type
+            )  # safety net
             _validate_format(final_caption, derivative_type)
 
             # Yield reviewed caption so frontend displays it just before "complete"
@@ -1223,8 +1297,12 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                 ),
             )
 
+            _vid_cands = response.candidates
+            _vid_content = _vid_cands[0].content if _vid_cands else None
             full_text = "".join(
-                part.text for part in response.candidates[0].content.parts if part.text
+                part.text
+                for part in (_vid_content.parts if _vid_content and _vid_content.parts else [])
+                if part.text
             )
 
             if "HASHTAGS:" in full_text:
@@ -1239,20 +1317,31 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                 full_caption = full_text.strip()
                 parsed_hashtags = _sanitize_hashtags(hashtags_hint, platform)
 
-            final_caption = await _smart_condense(_strip_markdown(full_caption), platform, derivative_type)
+            final_caption = await _smart_condense(
+                _strip_markdown(full_caption), platform, derivative_type
+            )
             final_caption = await _quality_retry(final_caption, platform, derivative_type)
 
             # ── Review gate — hold caption until 7+ ──
             yield {"event": "status", "data": {"message": "Reviewing content..."}}
             final_caption, parsed_hashtags, _gate_review = await _review_gate(
-                final_caption, parsed_hashtags, platform, derivative_type, brand_profile, day_brief,
+                final_caption,
+                parsed_hashtags,
+                platform,
+                derivative_type,
+                brand_profile,
+                day_brief,
             )
             _gate_score = (_gate_review or {}).get("score", 0)
 
             # ── Attempt 3: full regeneration if review gate exhausted ──
             if _gate_score < 7:
-                logger.warning("Full regeneration triggered (gate score=%d) for video_first %s/%s",
-                               _gate_score, platform, derivative_type)
+                logger.warning(
+                    "Full regeneration triggered (gate score=%d) for video_first %s/%s",
+                    _gate_score,
+                    platform,
+                    derivative_type,
+                )
                 yield {"event": "status", "data": {"message": "Regenerating content..."}}
                 try:
                     regen_response = await asyncio.to_thread(
@@ -1261,8 +1350,16 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                         contents=video_prompt,
                         config=types.GenerateContentConfig(temperature=0.8),
                     )
+                    _vid_regen_cands = regen_response.candidates
+                    _vid_regen_content = _vid_regen_cands[0].content if _vid_regen_cands else None
                     regen_text = "".join(
-                        p.text for p in regen_response.candidates[0].content.parts if p.text
+                        p.text
+                        for p in (
+                            _vid_regen_content.parts
+                            if _vid_regen_content and _vid_regen_content.parts
+                            else []
+                        )
+                        if p.text
                     )
                     if "HASHTAGS:" in regen_text:
                         regen_cap, regen_ht = regen_text.split("HASHTAGS:", 1)
@@ -1278,27 +1375,47 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                     regen_caption = await _quality_retry(regen_caption, platform, derivative_type)
 
                     _story = brand_profile.get("storytelling_strategy", {})
-                    _proof_tier_r = _story.get("social_proof_tier") if isinstance(_story, dict) else None
+                    _proof_tier_r = (
+                        _story.get("social_proof_tier") if isinstance(_story, dict) else None
+                    )
                     _cta_type_r = day_brief.get("cta_type")
                     regen_review = await review_post(
-                        {"caption": regen_caption, "hashtags": regen_hashtags,
-                         "platform": platform, "derivative_type": derivative_type,
-                         "pillar": day_brief.get("pillar", "education"),
-                         "content_theme": day_brief.get("content_theme", "")},
+                        {
+                            "caption": regen_caption,
+                            "hashtags": regen_hashtags,
+                            "platform": platform,
+                            "derivative_type": derivative_type,
+                            "pillar": day_brief.get("pillar", "education"),
+                            "content_theme": day_brief.get("content_theme", ""),
+                        },
                         brand_profile,
-                        social_proof_tier=_proof_tier_r, cta_type=_cta_type_r,
+                        social_proof_tier=_proof_tier_r,
+                        cta_type=_cta_type_r,
                     )
                     regen_score = regen_review.get("score", 0)
-                    logger.info("Video-first full regeneration score: %d for %s/%s", regen_score, platform, derivative_type)
+                    logger.info(
+                        "Video-first full regeneration score: %d for %s/%s",
+                        regen_score,
+                        platform,
+                        derivative_type,
+                    )
                     if regen_score > _gate_score:
                         final_caption = regen_caption
                         parsed_hashtags = regen_hashtags
                         _gate_review = regen_review
-                        logger.info("Video-first full regeneration improved score: %d -> %d", _gate_score, regen_score)
+                        logger.info(
+                            "Video-first full regeneration improved score: %d -> %d",
+                            _gate_score,
+                            regen_score,
+                        )
                 except Exception as regen_err:
-                    logger.warning("Video-first full regeneration failed (non-fatal): %s", regen_err)
+                    logger.warning(
+                        "Video-first full regeneration failed (non-fatal): %s", regen_err
+                    )
 
-            final_caption = _enforce_char_limit(final_caption, platform, derivative_type)  # safety net
+            final_caption = _enforce_char_limit(
+                final_caption, platform, derivative_type
+            )  # safety net
             _validate_format(final_caption, derivative_type)
 
             yield {
@@ -1335,10 +1452,14 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
 
     color_hint = f"Brand colors: {', '.join(colors[:3])}." if colors else ""
     style_ref_block = (
-        "VISUAL CONSISTENCY: The provided reference image shows this brand's visual identity — "
-        "color palette, lighting style, and mood. Every image you generate must feel cohesive "
-        "with this reference. Match the warmth, saturation, and composition style exactly.\n"
-    ) if style_reference_gcs_uri else ""
+        (
+            "VISUAL CONSISTENCY: The provided reference image shows this brand's visual identity — "
+            "color palette, lighting style, and mood. Every image you generate must feel cohesive "
+            "with this reference. Match the warmth, saturation, and composition style exactly.\n"
+        )
+        if style_reference_gcs_uri
+        else ""
+    )
     _voice_directive = f"\n{platform.upper()} VOICE: {_spec.voice}\n" if _spec.voice else ""
     prompt = f"""You are a {platform} content specialist for {industry} brands. You write for {business_name}, targeting {target_audience}.
 {_voice_directive}
@@ -1398,7 +1519,9 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
             config=types.GenerateContentConfig(temperature=0.7),
         )
 
-        for part in response.candidates[0].content.parts:
+        _txt_cands = response.candidates
+        _txt_content = _txt_cands[0].content if _txt_cands else None
+        for part in _txt_content.parts if _txt_content and _txt_content.parts else []:
             if part.text:
                 text = part.text
                 if "HASHTAGS:" in text:
@@ -1415,11 +1538,21 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
         final_hashtags = parsed_hashtags if parsed_hashtags else hashtags_hint
         # Fix mojibake, strip markdown, smart condense if over limit
         final_caption = _fix_mojibake(full_caption.strip())
-        final_caption = await _smart_condense(_strip_markdown(final_caption), platform, derivative_type)
+        final_caption = await _smart_condense(
+            _strip_markdown(final_caption), platform, derivative_type
+        )
 
         # Format validation with 1 retry — caption only
-        if not _validate_format(final_caption, derivative_type) and derivative_type in ("carousel", "thread_hook", "pin"):
-            logger.info("Format validation failed for %s post %s — retrying caption only", derivative_type, post_id)
+        if not _validate_format(final_caption, derivative_type) and derivative_type in (
+            "carousel",
+            "thread_hook",
+            "pin",
+        ):
+            logger.info(
+                "Format validation failed for %s post %s — retrying caption only",
+                derivative_type,
+                post_id,
+            )
             yield {"event": "status", "data": {"message": f"Refining {derivative_type} format..."}}
             retry_prompt = (
                 f"This caption FAILED format validation for {derivative_type.upper()}.\n\n"
@@ -1428,7 +1561,9 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                 f"Rewrite following the format rules. Same message, tone, and hook — fix the STRUCTURE ONLY.\n"
             )
             if derivative_type == "carousel":
-                _slide_labels = ", ".join(f"'Slide {i+1}:'" for i in range(_spec.carousel_slide_count))
+                _slide_labels = ", ".join(
+                    f"'Slide {i + 1}:'" for i in range(_spec.carousel_slide_count)
+                )
                 retry_prompt += (
                     f"You MUST include {_slide_labels} labels. "
                     "Each slide MUST start on its own line with that exact label.\n"
@@ -1438,7 +1573,9 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                     "You MUST number each tweet as '1/', '2/', '3/' at the START of each segment. "
                     "Each numbered tweet MUST start on its own line.\n"
                 )
-            retry_prompt += "After the caption, add relevant hashtags on a new line starting with HASHTAGS:"
+            retry_prompt += (
+                "After the caption, add relevant hashtags on a new line starting with HASHTAGS:"
+            )
             try:
                 retry_response = await asyncio.to_thread(
                     get_genai_client().models.generate_content,
@@ -1447,13 +1584,19 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                     config=types.GenerateContentConfig(temperature=0.4),
                 )
                 retry_text = ""
-                for rpart in retry_response.candidates[0].content.parts:
+                _retry_cands = retry_response.candidates
+                _retry_content = _retry_cands[0].content if _retry_cands else None
+                for rpart in (
+                    _retry_content.parts if _retry_content and _retry_content.parts else []
+                ):
                     if rpart.text:
                         retry_text += rpart.text
                 if retry_text.strip():
                     if "HASHTAGS:" in retry_text:
                         cap_part, ht_part = retry_text.split("HASHTAGS:", 1)
-                        final_caption = _enforce_char_limit(_strip_markdown(cap_part.strip()), platform, derivative_type)
+                        final_caption = _enforce_char_limit(
+                            _strip_markdown(cap_part.strip()), platform, derivative_type
+                        )
                         retry_tags = _sanitize_hashtags(
                             [t.strip() for t in ht_part.strip().split() if t.strip()],
                             platform,
@@ -1461,10 +1604,16 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                         if retry_tags:
                             final_hashtags = retry_tags
                     else:
-                        final_caption = _enforce_char_limit(_strip_markdown(retry_text.strip()), platform, derivative_type)
+                        final_caption = _enforce_char_limit(
+                            _strip_markdown(retry_text.strip()), platform, derivative_type
+                        )
                     logger.info("Format retry produced new caption for post %s", post_id)
             except Exception as retry_err:
-                logger.warning("Format retry failed for post %s: %s — using original caption", post_id, retry_err)
+                logger.warning(
+                    "Format retry failed for post %s: %s — using original caption",
+                    post_id,
+                    retry_err,
+                )
 
         # Quality safety net — one targeted retry for literal violations
         final_caption = await _quality_retry(final_caption, platform, derivative_type)
@@ -1472,14 +1621,23 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
         # ── Step 2: Review gate — hold caption until 7+ ──
         yield {"event": "status", "data": {"message": "Reviewing content..."}}
         final_caption, final_hashtags, _gate_review = await _review_gate(
-            final_caption, final_hashtags, platform, derivative_type, brand_profile, day_brief,
+            final_caption,
+            final_hashtags,
+            platform,
+            derivative_type,
+            brand_profile,
+            day_brief,
         )
         _gate_score = (_gate_review or {}).get("score", 0)
 
         # ── Attempt 3: full regeneration if review gate exhausted ──
         if _gate_score < 7:
-            logger.warning("Full regeneration triggered (gate score=%d) for %s/%s",
-                           _gate_score, platform, derivative_type)
+            logger.warning(
+                "Full regeneration triggered (gate score=%d) for %s/%s",
+                _gate_score,
+                platform,
+                derivative_type,
+            )
             yield {"event": "status", "data": {"message": "Regenerating content..."}}
             try:
                 regen_response = await asyncio.to_thread(
@@ -1488,7 +1646,7 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                     contents=prompt,
                     config=types.GenerateContentConfig(temperature=0.8),
                 )
-                regen_text = regen_response.text.strip()
+                regen_text = (regen_response.text or "").strip()
                 if "HASHTAGS:" in regen_text:
                     regen_cap, regen_ht = regen_text.split("HASHTAGS:", 1)
                     regen_caption = _strip_markdown(_fix_mojibake(regen_cap.strip()))
@@ -1503,25 +1661,35 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                 regen_caption = await _quality_retry(regen_caption, platform, derivative_type)
 
                 _story = brand_profile.get("storytelling_strategy", {})
-                _proof_tier_r = _story.get("social_proof_tier") if isinstance(_story, dict) else None
+                _proof_tier_r = (
+                    _story.get("social_proof_tier") if isinstance(_story, dict) else None
+                )
                 _cta_type_r = day_brief.get("cta_type")
                 regen_for_review = {
-                    "caption": regen_caption, "hashtags": regen_hashtags,
-                    "platform": platform, "derivative_type": derivative_type,
+                    "caption": regen_caption,
+                    "hashtags": regen_hashtags,
+                    "platform": platform,
+                    "derivative_type": derivative_type,
                     "pillar": day_brief.get("pillar", "education"),
                 }
                 regen_review = await review_post(
-                    regen_for_review, brand_profile,
-                    social_proof_tier=_proof_tier_r, cta_type=_cta_type_r,
+                    regen_for_review,
+                    brand_profile,
+                    social_proof_tier=_proof_tier_r,
+                    cta_type=_cta_type_r,
                 )
                 regen_score = regen_review.get("score", 0)
-                logger.info("Full regeneration score: %d for %s/%s", regen_score, platform, derivative_type)
+                logger.info(
+                    "Full regeneration score: %d for %s/%s", regen_score, platform, derivative_type
+                )
 
                 if regen_score > _gate_score:
                     final_caption = regen_caption
                     final_hashtags = regen_hashtags
                     _gate_review = regen_review
-                    logger.info("Full regeneration improved score: %d -> %d", _gate_score, regen_score)
+                    logger.info(
+                        "Full regeneration improved score: %d -> %d", _gate_score, regen_score
+                    )
             except Exception as regen_err:
                 logger.warning("Full regeneration failed (non-fatal): %s", regen_err)
 
@@ -1534,6 +1702,8 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
         }
 
         # ── Step 3: Image generation (after review gate passes) ──
+        all_image_urls: list[str] = []
+        all_image_gcs_uris: list[str] = []
         if existing_images:
             # Reuse existing images instead of generating new ones
             image_url = existing_images.get("image_url")
@@ -1552,8 +1722,12 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                 brand_refs = await get_brand_reference_images(brand_profile, max_images=3)
                 if brand_refs:
                     for ref_bytes, ref_mime in brand_refs:
-                        img_contents.append(types.Part.from_bytes(data=ref_bytes, mime_type=ref_mime))
-                    logger.info("Passing %d brand reference images for image generation", len(brand_refs))
+                        img_contents.append(
+                            types.Part.from_bytes(data=ref_bytes, mime_type=ref_mime)
+                        )
+                    logger.info(
+                        "Passing %d brand reference images for image generation", len(brand_refs)
+                    )
             except Exception as e:
                 logger.warning("Failed to load brand reference images: %s", e)
 
@@ -1580,16 +1754,21 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                     # Post-processing: resize + platform-specific text overlay
                     try:
                         image_bytes = resize_to_aspect(image_bytes, _aspect)
-                        cover_raw_bytes = image_bytes  # preserve pre-overlay copy for slide style reference
+                        cover_raw_bytes = (
+                            image_bytes  # preserve pre-overlay copy for slide style reference
+                        )
                         if derivative_type == "carousel":
                             image_bytes = create_carousel_cover(
-                                image_bytes, content_theme or caption_hook, colors, _aspect)
+                                image_bytes, content_theme or caption_hook, colors, _aspect
+                            )
                         elif platform == "pinterest":
                             image_bytes = create_pinterest_pin(
-                                image_bytes, content_theme, key_message[:80], colors)
+                                image_bytes, content_theme, key_message[:80], colors
+                            )
                         elif platform in ("tiktok", "youtube_shorts"):
                             image_bytes = create_tiktok_cover(
-                                image_bytes, caption_hook or content_theme, colors)
+                                image_bytes, caption_hook or content_theme, colors
+                            )
                         # Standard posts (IG, LI, FB, X, Threads, Mastodon, Bluesky): no text overlay
                         image_mime = "image/png"
                     except Exception as pp_err:
@@ -1599,9 +1778,15 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                     alt_text = await _generate_alt_text(image_bytes, content_theme, platform)
 
                     try:
-                        image_url, image_gcs_uri = await upload_image_to_gcs(image_bytes, image_mime, post_id)
+                        image_url, image_gcs_uri = await upload_image_to_gcs(
+                            image_bytes, image_mime, post_id
+                        )
                         await bt.budget_tracker.record_image()
-                        _img_event_data = {"url": image_url, "mime_type": image_mime, "gcs_uri": image_gcs_uri}
+                        _img_event_data = {
+                            "url": image_url,
+                            "mime_type": image_mime,
+                            "gcs_uri": image_gcs_uri,
+                        }
                         if alt_text:
                             _img_event_data["alt_text"] = alt_text
                         yield {
@@ -1617,7 +1802,7 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                                 "url": f"data:{image_mime};base64,{b64}",
                                 "mime_type": image_mime,
                                 "fallback": True,
-                            }
+                            },
                         }
                 else:
                     logger.error("Image generation returned no image for post %s", post_id)
@@ -1625,8 +1810,8 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                 logger.error("Image generation failed for post %s: %s", post_id, img_err)
 
             # ── Init image URL lists (carousel slides appended below) ──
-            all_image_urls: list[str] = []
-            all_image_gcs_uris: list[str] = []
+            all_image_urls = []
+            all_image_gcs_uris = []
             if image_url:
                 all_image_urls.append(image_url)
             if image_gcs_uri:
@@ -1634,7 +1819,9 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
 
             # ── Carousel: generate additional slide images ──
             if derivative_type == "carousel" and final_caption:
-                slide_descriptions = _parse_slide_descriptions(final_caption, max_slides=_spec.carousel_slide_count)
+                slide_descriptions = _parse_slide_descriptions(
+                    final_caption, max_slides=_spec.carousel_slide_count
+                )
                 if len(slide_descriptions) > 1:
                     yield {"event": "status", "data": {"message": "Generating carousel slides..."}}
                     extra_slides = await _generate_carousel_images(
@@ -1653,23 +1840,36 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                         # Post-process each slide: resize + number badge + title
                         try:
                             slide_bytes = resize_to_aspect(slide_bytes, _aspect)
-                            _slide_title = _extract_slide_headline(slide_descriptions[slide_idx + 1]) if slide_idx + 1 < len(slide_descriptions) else ""
+                            _slide_title = (
+                                _extract_slide_headline(slide_descriptions[slide_idx + 1])
+                                if slide_idx + 1 < len(slide_descriptions)
+                                else ""
+                            )
                             # Final slide: if headline was truncated with ellipsis, use clean fallback
-                            if slide_idx + 2 == len(slide_descriptions) and _slide_title.endswith('…'):
+                            if slide_idx + 2 == len(slide_descriptions) and _slide_title.endswith(
+                                "…"
+                            ):
                                 _slide_title = "Your Next Step"
                             slide_bytes = create_carousel_slide(
-                                slide_bytes, _slide_title, colors, _aspect)
+                                slide_bytes, _slide_title, colors, _aspect
+                            )
                             slide_mime = "image/png"
                         except Exception as pp_err:
                             logger.warning("Carousel slide post-processing failed: %s", pp_err)
                         try:
-                            slide_url, slide_gcs = await upload_image_to_gcs(slide_bytes, slide_mime, post_id)
+                            slide_url, slide_gcs = await upload_image_to_gcs(
+                                slide_bytes, slide_mime, post_id
+                            )
                             await bt.budget_tracker.record_image()
                             all_image_urls.append(slide_url)
                             all_image_gcs_uris.append(slide_gcs)
                             yield {
                                 "event": "image",
-                                "data": {"url": slide_url, "mime_type": slide_mime, "gcs_uri": slide_gcs}
+                                "data": {
+                                    "url": slide_url,
+                                    "mime_type": slide_mime,
+                                    "gcs_uri": slide_gcs,
+                                },
                             }
                         except Exception as upload_err:
                             logger.error("Carousel slide upload failed: %s", upload_err)
@@ -1679,15 +1879,27 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                         try:
                             _cover_hook = _extract_slide_headline(slide_descriptions[0])
                             if _cover_hook and _cover_hook != (content_theme or caption_hook):
-                                _new_cover = create_carousel_cover(cover_raw_bytes, _cover_hook, colors, _aspect)
-                                _cover_url, _cover_gcs = await upload_image_to_gcs(_new_cover, "image/png", post_id)
+                                _new_cover = create_carousel_cover(
+                                    cover_raw_bytes, _cover_hook, colors, _aspect
+                                )
+                                _cover_url, _cover_gcs = await upload_image_to_gcs(
+                                    _new_cover, "image/png", post_id
+                                )
                                 if all_image_urls:
                                     all_image_urls[0] = _cover_url
                                 if all_image_gcs_uris:
                                     all_image_gcs_uris[0] = _cover_gcs
                                 image_url = _cover_url
                                 image_gcs_uri = _cover_gcs
-                                yield {"event": "image_update", "data": {"index": 0, "url": _cover_url, "mime_type": "image/png", "gcs_uri": _cover_gcs}}
+                                yield {
+                                    "event": "image_update",
+                                    "data": {
+                                        "index": 0,
+                                        "url": _cover_url,
+                                        "mime_type": "image/png",
+                                        "gcs_uri": _cover_gcs,
+                                    },
+                                }
                         except Exception as cover_err:
                             logger.warning("Cover re-render failed (non-fatal): %s", cover_err)
 
@@ -1702,7 +1914,7 @@ CRITICAL: Only output real hashtags. Never convert sentence fragments into hasht
                 "image_urls": all_image_urls,
                 "image_gcs_uris": all_image_gcs_uris,
                 **({"review": _gate_review} if _gate_review else {}),
-            }
+            },
         }
 
     except Exception as e:

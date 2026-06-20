@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-ChildItem -Path \"c:\\\\Users\\\\dimit\\\\Documents\\\\GitHub\\\\amplispark\\\\backend\" -Recurse -Directory | Select-Object Name, FullName | Where-Object { $_.Name -match \"\\(models|services|agents|routes|app\\)\" } | Sort-Object FullName | Select-Object -First 20)",
+      "Bash(mkdir -p \"c:\\\\Users\\\\dimit\\\\Documents\\\\GitHub\\\\amplispark\\\\.claude\\\\skills\")",
+      "Bash(backend/.venv/Scripts/python -m pytest backend/tests/ -v --tb=short --co -q)",
+      "Bash(backend/.venv/Scripts/python -m pytest backend/tests/ -v --tb=short --cov=backend --cov-report=term-missing)",
+      "Bash(backend/.venv/Scripts/pip show *)",
+      "Bash(git remote *)",
+      "Bash(sed -i 's/catch \\(err: any\\) {/catch \\(err: unknown\\) {/g' src/components/PostLibrary.tsx src/components/ReviewPanel.tsx src/components/SocialConnect.tsx src/components/VideoRepurpose.tsx)",
+      "Bash(sed -i 's/err\\\\.message || /\\\\\\(err as Error\\\\\\).message || /g' src/components/PostLibrary.tsx src/components/ReviewPanel.tsx src/components/SocialConnect.tsx src/components/VideoRepurpose.tsx)",
+      "PowerShell(cd \"C:\\\\Users\\\\dimit\\\\Documents\\\\GitHub\\\\amplispark\\\\frontend\"; npm run lint 2>&1; echo \"EXIT:$LASTEXITCODE\")",
+      "PowerShell(cd \"C:\\\\Users\\\\dimit\\\\Documents\\\\GitHub\\\\amplispark\\\\frontend\"; npm run build 2>&1; echo \"EXIT:$LASTEXITCODE\")",
+      "PowerShell(cd \"C:\\\\Users\\\\dimit\\\\Documents\\\\GitHub\\\\amplispark\\\\frontend\"; npm run lint 2>&1; echo \"---LINT EXIT:$LASTEXITCODE---\")",
+      "PowerShell(cd \"C:\\\\Users\\\\dimit\\\\Documents\\\\GitHub\\\\amplispark\\\\frontend\"; npm run typecheck 2>&1; echo \"---TYPECHECK EXIT:$LASTEXITCODE---\")",
+      "PowerShell(cd \"C:\\\\Users\\\\dimit\\\\Documents\\\\GitHub\\\\amplispark\\\\frontend\"; npm run test 2>&1; echo \"---TEST EXIT:$LASTEXITCODE---\")",
+      "Bash(ruff format *)",
+      "Bash(.\\\\backend\\\\.venv\\\\Scripts\\\\python -m mypy backend/ --ignore-missing-imports)",
+      "PowerShell(cd \"c:\\\\Users\\\\dimit\\\\Documents\\\\GitHub\\\\amplispark\"; \\(Get-Content backend\\\\agents\\\\strategy_agent.py -Raw\\) -replace 'response\\\\.text\\\\.strip\\\\\\(\\\\\\)', '\\(response.text or \"\"\\).strip\\(\\)' | Set-Content backend\\\\agents\\\\strategy_agent.py -Encoding utf8)",
+      "PowerShell(cd \"c:\\\\Users\\\\dimit\\\\Documents\\\\GitHub\\\\amplispark\"; \\(Get-Content backend\\\\services\\\\image_postprocess.py -Raw\\) -replace 'ImageFont\\\\.FreeTypeFont', 'ImageFont.ImageFont' | Set-Content backend\\\\services\\\\image_postprocess.py -Encoding utf8)",
+      "PowerShell(cd \"c:\\\\Users\\\\dimit\\\\Documents\\\\GitHub\\\\amplispark\"; \\(Get-Content backend\\\\services\\\\image_postprocess.py -Raw\\) -replace 'font: ImageFont\\\\.ImageFont', 'font: Any' | Set-Content backend\\\\services\\\\image_postprocess.py -Encoding utf8)",
+      "PowerShell(cd \"c:\\\\Users\\\\dimit\\\\Documents\\\\GitHub\\\\amplispark\"; $bytes = [System.IO.File]::ReadAllBytes\\(\"backend\\\\agents\\\\content_creator.py\"\\); Write-Host \"First 4 bytes:\" \\($bytes[0..3] | ForEach-Object { \"0x{0:X2}\" -f $_ }\\) -join \" \")",
+      "PowerShell(cd \"c:\\\\Users\\\\dimit\\\\Documents\\\\GitHub\\\\amplispark\"; $content = Get-Content \"backend\\\\agents\\\\content_creator.py\" -Raw; $idx = $content.IndexOf\\([char]0x201C\\); Write-Host \"Found at index: $idx\"; Write-Host \"Context: '$\\($content.Substring\\([Math]::Max\\(0, $idx-50\\), 100\\)\\)'\")",
+      "PowerShell(cd \"c:\\\\Users\\\\dimit\\\\Documents\\\\GitHub\\\\amplispark\"; $content = Get-Content \"backend\\\\agents\\\\content_creator.py\" -Raw; $idx = $content.IndexOf\\([char]0x201C\\); $idx2 = $content.IndexOf\\([char]0x201D\\); $idx3 = $content.IndexOf\\([char]0xE2\\); Write-Host \"U+201C: $idx, U+201D: $idx2, 0xE2: $idx3\")",
+      "PowerShell(cd \"c:\\\\Users\\\\dimit\\\\Documents\\\\GitHub\\\\amplispark\"; $bytes = [System.IO.File]::ReadAllBytes\\(\"backend\\\\agents\\\\content_creator.py\"\\); $lineNum = 0; $byteIdx = 0; for \\($i = 0; $i -lt $bytes.Length; $i++\\) { if \\($bytes[$i] -eq 0x0A\\) { $lineNum++; if \\($lineNum -eq 1682\\) { Write-Host \"Line 1683 starts at byte $i\"; $lineBytes = @\\(\\); for \\($j = $i+1; $j -lt [Math]::Min\\($i+200, $bytes.Length\\); $j++\\) { $lineBytes += $bytes[$j]; if \\($bytes[$j] -eq 0x0A\\) { break } }; Write-Host \"Bytes: \" \\($lineBytes | ForEach-Object { \"0x{0:X2}\" -f $_ }\\); break } } })",
+      "Bash(mypy backend/ --ignore-missing-imports)",
+      "Bash(./backend/.venv/Scripts/python -m pytest backend/tests/ -v --tb=short)",
+      "Bash(./backend/.venv/Scripts/python -m pytest backend/tests/ --tb=short -q)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\dimit\\Documents\\GitHub\\amplispark\\.claude"
+    ]
+  }
+}

@@ -99,8 +99,8 @@ export default function PostLibrary({ brandId, planId, defaultFilter = 'all', no
     setExportError(null)
     try {
       await api.exportPlan(planId, brandId)
-    } catch (err: any) {
-      setExportError(err.message || 'Export failed')
+    } catch (err: unknown) {
+      setExportError((err as Error).message || 'Export failed')
     } finally {
       setExporting(false)
     }
@@ -113,8 +113,8 @@ export default function PostLibrary({ brandId, planId, defaultFilter = 'all', no
     setExportError(null)
     try {
       await api.downloadCalendar(brandId, planId)
-    } catch (err: any) {
-      setExportError(err.message || 'Calendar download failed')
+    } catch (err: unknown) {
+      setExportError((err as Error).message || 'Calendar download failed')
     } finally {
       setCalDownloading(false)
     }
@@ -131,8 +131,8 @@ export default function PostLibrary({ brandId, planId, defaultFilter = 'all', no
       setShowEmailInput(false)
       if (emailSentTimerRef.current) clearTimeout(emailSentTimerRef.current)
       emailSentTimerRef.current = setTimeout(() => setEmailSent(''), 3000)
-    } catch (err: any) {
-      setExportError(err.message || 'Failed to send calendar email')
+    } catch (err: unknown) {
+      setExportError((err as Error).message || 'Failed to send calendar email')
     } finally {
       setEmailSending(false)
     }
@@ -150,8 +150,8 @@ export default function PostLibrary({ brandId, planId, defaultFilter = 'all', no
       setNotionResult(msg)
       if (notionTimerRef.current) clearTimeout(notionTimerRef.current)
       notionTimerRef.current = setTimeout(() => setNotionResult(null), 4000)
-    } catch (err: any) {
-      setExportError(err.message || 'Notion export failed')
+    } catch (err: unknown) {
+      setExportError((err as Error).message || 'Notion export failed')
     } finally {
       setNotionExporting(false)
     }

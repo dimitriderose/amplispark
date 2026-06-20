@@ -1,14 +1,14 @@
 import asyncio
 import logging
+from typing import cast
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from google.genai import types as _gtypes
 
+from backend.agents.voice_coach import build_coaching_prompt
 from backend.clients import get_genai_client
 from backend.middleware import verify_ws_brand_owner
 from backend.services import firestore_client
-from backend.agents.voice_coach import build_coaching_prompt
-
-from google.genai import types as _gtypes
 
 _LIVE_MODEL = "gemini-2.5-flash-native-audio-latest"
 
@@ -23,7 +23,7 @@ async def voice_coaching_ws(
     brand_id: str,
     context: str = "",
     plan_id: str = "",
-    brand: dict = Depends(verify_ws_brand_owner),
+    brand: dict = Depends(verify_ws_brand_owner),  # noqa: B008
 ):
     """Bidirectional voice coaching via Gemini Live API.
 
@@ -62,7 +62,8 @@ async def voice_coaching_ws(
             plan_data = plans_list[0] if plans_list else None
             if plan_data:
                 posts = await firestore_client.list_posts(
-                    brand_id, plan_id=plan_data.get("plan_id", ""),
+                    brand_id,
+                    plan_id=plan_data.get("plan_id", ""),
                 )
     except Exception as e:
         logger.warning("Voice coaching data load error for %s: %s", brand_id, e)
@@ -71,7 +72,7 @@ async def voice_coaching_ws(
     if len(context) > 4000:
         context = context[-4000:]
 
-    system_prompt = build_coaching_prompt(brand, plan=plan_data, posts=posts)
+    system_prompt = build_coaching_prompt(brand, plan=cast(dict | None, plan_data), posts=posts)
     if context:
         system_prompt += (
             "\n\nCONVERSATION CONTINUITY:\n"
@@ -83,9 +84,7 @@ async def voice_coaching_ws(
         )
     config = _gtypes.LiveConnectConfig(
         response_modalities=["AUDIO"],
-        system_instruction=_gtypes.Content(
-            parts=[_gtypes.Part(text=system_prompt)]
-        ),
+        system_instruction=_gtypes.Content(parts=[_gtypes.Part(text=system_prompt)]),
         speech_config=_gtypes.SpeechConfig(
             voice_config=_gtypes.VoiceConfig(
                 prebuilt_voice_config=_gtypes.PrebuiltVoiceConfig(voice_name="Aoede")
@@ -133,7 +132,9 @@ async def voice_coaching_ws(
                             try:
                                 await websocket.send_json({"type": "turn_complete"})
                             except Exception as e:
-                                logger.debug("WS send turn_complete failed for brand %s: %s", brand_id, e)
+                                logger.debug(
+                                    "WS send turn_complete failed for brand %s: %s", brand_id, e
+                                )
                                 return
 
                         model_turn = getattr(sc, "model_turn", None)
@@ -145,7 +146,9 @@ async def voice_coaching_ws(
                                 try:
                                     await websocket.send_bytes(inline.data)
                                 except Exception as e:
-                                    logger.debug("WS send audio failed for brand %s: %s", brand_id, e)
+                                    logger.debug(
+                                        "WS send audio failed for brand %s: %s", brand_id, e
+                                    )
                                     return
                             text = getattr(part, "text", None)
                             if text:
@@ -158,13 +161,17 @@ async def voice_coaching_ws(
                                         )
                                     if "[END_SESSION]" in text:
                                         logger.info("AI ended voice session for brand %s", brand_id)
-                                        await websocket.send_json({
-                                            "type": "session_complete",
-                                            "message": "Great chatting with you! Click Voice Coach anytime to pick up where we left off.",
-                                        })
+                                        await websocket.send_json(
+                                            {
+                                                "type": "session_complete",
+                                                "message": "Great chatting with you! Click Voice Coach anytime to pick up where we left off.",
+                                            }
+                                        )
                                         return  # exit recv_from_gemini -> triggers cleanup
                                 except Exception as e:
-                                    logger.debug("WS send transcript failed for brand %s: %s", brand_id, e)
+                                    logger.debug(
+                                        "WS send transcript failed for brand %s: %s", brand_id, e
+                                    )
                                     return
                 except asyncio.CancelledError:
                     raise  # let the task framework handle cancellation
@@ -175,7 +182,9 @@ async def voice_coaching_ws(
                             {"type": "error", "message": "Voice session interrupted"}
                         )
                     except Exception as e:
-                        logger.debug("WS send error notification failed for brand %s: %s", brand_id, e)
+                        logger.debug(
+                            "WS send error notification failed for brand %s: %s", brand_id, e
+                        )
 
             fe_task = asyncio.create_task(recv_from_frontend())
             gm_task = asyncio.create_task(recv_from_gemini())
@@ -188,10 +197,12 @@ async def voice_coaching_ws(
                 if gm_task in done and fe_task not in done:
                     logger.info("Gemini Live session ended for brand %s", brand_id)
                     try:
-                        await websocket.send_json({
-                            "type": "session_ended",
-                            "message": "Voice coaching session complete. Click Voice Coach to start a new session.",
-                        })
+                        await websocket.send_json(
+                            {
+                                "type": "session_ended",
+                                "message": "Voice coaching session complete. Click Voice Coach to start a new session.",
+                            }
+                        )
                     except Exception as e:
                         logger.debug("WS send session_ended failed for brand %s: %s", brand_id, e)
             finally:

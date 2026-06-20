@@ -1,14 +1,18 @@
 """Tests for brand-related logic and validation."""
 
-from backend.tests.conftest import TEST_UID, TEST_BRAND_ID
-
 
 class TestBrandAllowedKeys:
     """Test that brand analysis sanitizes LLM output to allowed keys."""
 
     ALLOWED_KEYS = {
-        "brand_voice", "target_audience", "key_messages", "colors",
-        "competitors", "content_pillars", "visual_style", "industry",
+        "brand_voice",
+        "target_audience",
+        "key_messages",
+        "colors",
+        "competitors",
+        "content_pillars",
+        "visual_style",
+        "industry",
     }
 
     def test_sanitize_filters_unknown_keys(self):

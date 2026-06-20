@@ -12,50 +12,147 @@ logger = logging.getLogger(__name__)
 
 _IMAGE_STYLE_MAP: dict[str, dict[str, str]] = {
     # ── Photography Styles ──
-    "photorealistic":   {"keyword": "professional photograph",     "directives": "Shot on 50mm f/1.8 lens, sharp focus, natural lighting at 5500K, realistic textures, authentic composition. Professional but not stock-photo sterile"},
-    "editorial":        {"keyword": "editorial photograph",         "directives": "Magazine-quality framing, soft diffused light, muted earthy tones, shallow DOF at f/2.8, aspirational but understated. Focus: fashion, beauty, lifestyle"},
-    "documentary":      {"keyword": "documentary photograph",      "directives": "35mm lens, available light only, candid moments, honest and raw, photojournalism feel, slight grain ISO 800+"},
-    "cinematic":        {"keyword": "cinematic still photograph",  "directives": "Dramatic chiaroscuro lighting, anamorphic lens feel (wide 2.39:1 crop energy), film grain, teal-orange color grading, deep shadows, narrative tension. Focus: storytelling, drama, atmosphere"},
-    "food-photo":       {"keyword": "food photograph",             "directives": "Shot at 45° or overhead, 85mm macro lens, natural window light at 4000K warm, styled props, appetizing colors, restaurant-quality plating, shallow DOF f/2.8"},
-    "product":          {"keyword": "product photograph",          "directives": "100mm macro lens, clean seamless background, 3-point studio lighting (key + fill + rim), sharp detail at f/8, hero-shot composition, material textures visible"},
-    "lifestyle":        {"keyword": "lifestyle photograph",        "directives": "35mm f/1.4 lens, people in natural settings, warm golden-hour light at 3200K, candid feel, authentic moments, bokeh background, relatable context"},
-    "lo-fi":            {"keyword": "lo-fi aesthetic photograph",   "directives": "Intentional grain, slightly desaturated, analog camera feel, imperfect framing, retro-tech warmth. Trending 2025-2026"},
-
+    "photorealistic": {
+        "keyword": "professional photograph",
+        "directives": "Shot on 50mm f/1.8 lens, sharp focus, natural lighting at 5500K, realistic textures, authentic composition. Professional but not stock-photo sterile",
+    },
+    "editorial": {
+        "keyword": "editorial photograph",
+        "directives": "Magazine-quality framing, soft diffused light, muted earthy tones, shallow DOF at f/2.8, aspirational but understated. Focus: fashion, beauty, lifestyle",
+    },
+    "documentary": {
+        "keyword": "documentary photograph",
+        "directives": "35mm lens, available light only, candid moments, honest and raw, photojournalism feel, slight grain ISO 800+",
+    },
+    "cinematic": {
+        "keyword": "cinematic still photograph",
+        "directives": "Dramatic chiaroscuro lighting, anamorphic lens feel (wide 2.39:1 crop energy), film grain, teal-orange color grading, deep shadows, narrative tension. Focus: storytelling, drama, atmosphere",
+    },
+    "food-photo": {
+        "keyword": "food photograph",
+        "directives": "Shot at 45° or overhead, 85mm macro lens, natural window light at 4000K warm, styled props, appetizing colors, restaurant-quality plating, shallow DOF f/2.8",
+    },
+    "product": {
+        "keyword": "product photograph",
+        "directives": "100mm macro lens, clean seamless background, 3-point studio lighting (key + fill + rim), sharp detail at f/8, hero-shot composition, material textures visible",
+    },
+    "lifestyle": {
+        "keyword": "lifestyle photograph",
+        "directives": "35mm f/1.4 lens, people in natural settings, warm golden-hour light at 3200K, candid feel, authentic moments, bokeh background, relatable context",
+    },
+    "lo-fi": {
+        "keyword": "lo-fi aesthetic photograph",
+        "directives": "Intentional grain, slightly desaturated, analog camera feel, imperfect framing, retro-tech warmth. Trending 2025-2026",
+    },
     # ── Illustration & Art Styles ──
-    "illustration":     {"keyword": "digital illustration",        "directives": "Clean vector-like art, bold colors, clear shapes, modern graphic feel"},
-    "hand-drawn":       {"keyword": "hand-drawn illustration",     "directives": "Visible brush/pen strokes, imperfect organic lines, warmth, personality, scrapbook-like accents. Anti-AI aesthetic trending 2026"},
-    "anime":            {"keyword": "anime-style illustration",    "directives": "Japanese animation aesthetic, vibrant colors, expressive characters, cel-shaded look, clean linework, dynamic poses"},
-    "cartoon":          {"keyword": "cartoon illustration",        "directives": "Exaggerated proportions, bold outlines, flat bright colors, playful expressions, comic-book energy, fun and accessible"},
-    "watercolor":       {"keyword": "watercolor painting",         "directives": "Soft color bleeds, organic edges, translucent layers, dreamy and artistic, gentle and warm palette"},
-    "pixel-art":        {"keyword": "pixel art",                   "directives": "Grid-based retro game aesthetic, limited color palette, nostalgic 8-bit/16-bit feel, clean pixel placement. Revival trend 2026"},
-    "risograph":        {"keyword": "risograph-style print",       "directives": "Limited vivid color palette (2-3 colors), halftone dots, charming imperfections, dust/grain, overprint color mixing. Trending 2026"},
-
+    "illustration": {
+        "keyword": "digital illustration",
+        "directives": "Clean vector-like art, bold colors, clear shapes, modern graphic feel",
+    },
+    "hand-drawn": {
+        "keyword": "hand-drawn illustration",
+        "directives": "Visible brush/pen strokes, imperfect organic lines, warmth, personality, scrapbook-like accents. Anti-AI aesthetic trending 2026",
+    },
+    "anime": {
+        "keyword": "anime-style illustration",
+        "directives": "Japanese animation aesthetic, vibrant colors, expressive characters, cel-shaded look, clean linework, dynamic poses",
+    },
+    "cartoon": {
+        "keyword": "cartoon illustration",
+        "directives": "Exaggerated proportions, bold outlines, flat bright colors, playful expressions, comic-book energy, fun and accessible",
+    },
+    "watercolor": {
+        "keyword": "watercolor painting",
+        "directives": "Soft color bleeds, organic edges, translucent layers, dreamy and artistic, gentle and warm palette",
+    },
+    "pixel-art": {
+        "keyword": "pixel art",
+        "directives": "Grid-based retro game aesthetic, limited color palette, nostalgic 8-bit/16-bit feel, clean pixel placement. Revival trend 2026",
+    },
+    "risograph": {
+        "keyword": "risograph-style print",
+        "directives": "Limited vivid color palette (2-3 colors), halftone dots, charming imperfections, dust/grain, overprint color mixing. Trending 2026",
+    },
     # ── 3D & Futuristic ──
-    "3d-render":        {"keyword": "3D render",                   "directives": "Clean geometry, soft global illumination, glass/metal materials, subtle reflections, modern product-visualization feel"},
-    "futuristic":       {"keyword": "sci-fi concept art",          "directives": "Neon accents, holographic elements, dark backgrounds with glowing highlights, cyberpunk/utopian atmosphere, sleek surfaces"},
-    "retro-futurism":   {"keyword": "retro-futuristic design",    "directives": "Chrome finishes, neon palette, 1980s sci-fi aesthetic, synthwave colors, speculative optimism. Trending 2026"},
-
+    "3d-render": {
+        "keyword": "3D render",
+        "directives": "Clean geometry, soft global illumination, glass/metal materials, subtle reflections, modern product-visualization feel",
+    },
+    "futuristic": {
+        "keyword": "sci-fi concept art",
+        "directives": "Neon accents, holographic elements, dark backgrounds with glowing highlights, cyberpunk/utopian atmosphere, sleek surfaces",
+    },
+    "retro-futurism": {
+        "keyword": "retro-futuristic design",
+        "directives": "Chrome finishes, neon palette, 1980s sci-fi aesthetic, synthwave colors, speculative optimism. Trending 2026",
+    },
     # ── Graphic Design Styles ──
-    "bold-minimal":     {"keyword": "bold minimalist graphic",     "directives": "Strong single focal point, oversized typography, confident color choice, maximum whitespace, high impact. Trending 2026"},
-    "maximalist":       {"keyword": "maximalist collage",          "directives": "Layered typography, bold colors, dense imagery, mixed textures, eclectic energy, visual abundance. Anti-minimalism trend 2026"},
-    "neo-brutalist":    {"keyword": "neo-brutalist graphic",       "directives": "Raw layout, oversized type, black borders, intentional roughness, high contrast, prioritize clarity over refinement. Trending 2026"},
-    "mixed-media":      {"keyword": "mixed-media collage",         "directives": "Layered photography + illustration + typography + texture, dimensional richness, handmade cutout feel. Top trend 2026"},
-    "flat-design":      {"keyword": "flat design graphic",          "directives": "Solid colors, no gradients or shadows, geometric shapes, clean sans-serif type, modern UI-inspired aesthetic, accessible and clean"},
-    "glitch":           {"keyword": "glitch art",                  "directives": "Controlled digital distortion, RGB shift, scan lines, data corruption aesthetic, cyberpunk energy"},
-
+    "bold-minimal": {
+        "keyword": "bold minimalist graphic",
+        "directives": "Strong single focal point, oversized typography, confident color choice, maximum whitespace, high impact. Trending 2026",
+    },
+    "maximalist": {
+        "keyword": "maximalist collage",
+        "directives": "Layered typography, bold colors, dense imagery, mixed textures, eclectic energy, visual abundance. Anti-minimalism trend 2026",
+    },
+    "neo-brutalist": {
+        "keyword": "neo-brutalist graphic",
+        "directives": "Raw layout, oversized type, black borders, intentional roughness, high contrast, prioritize clarity over refinement. Trending 2026",
+    },
+    "mixed-media": {
+        "keyword": "mixed-media collage",
+        "directives": "Layered photography + illustration + typography + texture, dimensional richness, handmade cutout feel. Top trend 2026",
+    },
+    "flat-design": {
+        "keyword": "flat design graphic",
+        "directives": "Solid colors, no gradients or shadows, geometric shapes, clean sans-serif type, modern UI-inspired aesthetic, accessible and clean",
+    },
+    "glitch": {
+        "keyword": "glitch art",
+        "directives": "Controlled digital distortion, RGB shift, scan lines, data corruption aesthetic, cyberpunk energy",
+    },
     # ── Mood/Aesthetic Styles ──
-    "cozy":             {"keyword": "cozy aesthetic photograph",   "directives": "Warm tones, soft textures (knit, wood, candles), comfort-focused, hygge mood, gentle natural light. Trending 2025-2026"},
-    "nature":           {"keyword": "nature-inspired photograph",  "directives": "Organic shapes, earth tones, botanical elements, natural textures, atmospheric outdoor lighting, eco-conscious feel"},
-    "luxury":           {"keyword": "luxury editorial",            "directives": "Empty premium spaces, premium materials close-up, minimal people, muted palette, aspirational restraint"},
-    "energetic":        {"keyword": "dynamic action photograph",   "directives": "Motion blur accents, vibrant saturated colors, high energy, human movement, sports/fitness feel"},
-    "nostalgic":        {"keyword": "vintage nostalgic photograph", "directives": "Retro color grading (70s/80s/90s), warm grain, analog textures, faded tones, throwback composition. Nostalgia remix trend"},
-    "dreamy":           {"keyword": "dreamy soft-focus image",     "directives": "Blur effects, atmospheric haze, soft pastel colors, ethereal mood, gentle light leaks, romantic feel"},
-
+    "cozy": {
+        "keyword": "cozy aesthetic photograph",
+        "directives": "Warm tones, soft textures (knit, wood, candles), comfort-focused, hygge mood, gentle natural light. Trending 2025-2026",
+    },
+    "nature": {
+        "keyword": "nature-inspired photograph",
+        "directives": "Organic shapes, earth tones, botanical elements, natural textures, atmospheric outdoor lighting, eco-conscious feel",
+    },
+    "luxury": {
+        "keyword": "luxury editorial",
+        "directives": "Empty premium spaces, premium materials close-up, minimal people, muted palette, aspirational restraint",
+    },
+    "energetic": {
+        "keyword": "dynamic action photograph",
+        "directives": "Motion blur accents, vibrant saturated colors, high energy, human movement, sports/fitness feel",
+    },
+    "nostalgic": {
+        "keyword": "vintage nostalgic photograph",
+        "directives": "Retro color grading (70s/80s/90s), warm grain, analog textures, faded tones, throwback composition. Nostalgia remix trend",
+    },
+    "dreamy": {
+        "keyword": "dreamy soft-focus image",
+        "directives": "Blur effects, atmospheric haze, soft pastel colors, ethereal mood, gentle light leaks, romantic feel",
+    },
     # ── Industry-Specific ──
-    "corporate":        {"keyword": "corporate professional photograph", "directives": "Even studio lighting, clean backgrounds, neutral tones, sharp focus, trustworthy and polished"},
-    "craftsmanship":    {"keyword": "detail close-up photograph",  "directives": "Hands at work, material textures in focus, warm side-lighting, shallow DOF, artisan pride"},
-    "data-viz":         {"keyword": "data visualization graphic",  "directives": "Clean chart/diagram layout, high contrast, sans-serif typography, infographic aesthetic, clear hierarchy"},
-    "ugc":              {"keyword": "authentic user-generated content style photograph", "directives": "Phone-camera feel, natural imperfections, real settings, no studio lighting, relatable and genuine. Micro-authenticity trend 2026"},
+    "corporate": {
+        "keyword": "corporate professional photograph",
+        "directives": "Even studio lighting, clean backgrounds, neutral tones, sharp focus, trustworthy and polished",
+    },
+    "craftsmanship": {
+        "keyword": "detail close-up photograph",
+        "directives": "Hands at work, material textures in focus, warm side-lighting, shallow DOF, artisan pride",
+    },
+    "data-viz": {
+        "keyword": "data visualization graphic",
+        "directives": "Clean chart/diagram layout, high contrast, sans-serif typography, infographic aesthetic, clear hierarchy",
+    },
+    "ugc": {
+        "keyword": "authentic user-generated content style photograph",
+        "directives": "Phone-camera feel, natural imperfections, real settings, no studio lighting, relatable and genuine. Micro-authenticity trend 2026",
+    },
 }
 
 
@@ -68,36 +165,100 @@ def _get_image_style(style_key: str | None) -> dict[str, str]:
 
 _MOOD_KEYWORDS: dict[str, list[str]] = {
     "positive and empowering — people should look engaged, confident, and motivated": [
-        "master", "success", "achieve", "grow", "win", "boost", "improve", "reclaim",
-        "transform", "unlock", "elevate", "thrive", "excel", "empower",
+        "master",
+        "success",
+        "achieve",
+        "grow",
+        "win",
+        "boost",
+        "improve",
+        "reclaim",
+        "transform",
+        "unlock",
+        "elevate",
+        "thrive",
+        "excel",
+        "empower",
     ],
     "urgent and cautionary — convey alertness and focus, not panic": [
-        "avoid", "stop", "don't", "mistake", "pitfall", "risk", "danger", "warning", "fail",
+        "avoid",
+        "stop",
+        "don't",
+        "mistake",
+        "pitfall",
+        "risk",
+        "danger",
+        "warning",
+        "fail",
     ],
     "curious and exploratory — convey wonder and openness": [
-        "discover", "explore", "learn", "research", "investigate", "wonder", "uncover", "reveal",
+        "discover",
+        "explore",
+        "learn",
+        "research",
+        "investigate",
+        "wonder",
+        "uncover",
+        "reveal",
     ],
     "action-oriented and determined — convey forward momentum": [
-        "start", "launch", "build", "create", "execute", "implement", "ship", "deploy",
+        "start",
+        "launch",
+        "build",
+        "create",
+        "execute",
+        "implement",
+        "ship",
+        "deploy",
     ],
     "warm and communal — convey togetherness and support": [
-        "community", "together", "support", "gratitude", "grateful", "team", "celebrate",
-        "share", "connect", "belong", "welcome", "help",
+        "community",
+        "together",
+        "support",
+        "gratitude",
+        "grateful",
+        "team",
+        "celebrate",
+        "share",
+        "connect",
+        "belong",
+        "welcome",
+        "help",
     ],
     "fun and energetic — convey excitement and spontaneity": [
-        "fun", "exciting", "amazing", "wow", "love", "hack", "trick", "trend",
-        "viral", "challenge", "try", "watch",
+        "fun",
+        "exciting",
+        "amazing",
+        "wow",
+        "love",
+        "hack",
+        "trick",
+        "trend",
+        "viral",
+        "challenge",
+        "try",
+        "watch",
     ],
     "authoritative and data-driven — convey expertise and strategic insight": [
-        "strategy", "roi", "metrics", "pipeline", "framework", "methodology",
-        "benchmark", "optimize", "scale", "revenue", "performance", "leverage",
+        "strategy",
+        "roi",
+        "metrics",
+        "pipeline",
+        "framework",
+        "methodology",
+        "benchmark",
+        "optimize",
+        "scale",
+        "revenue",
+        "performance",
+        "leverage",
     ],
 }
 
 
 def _infer_slide_mood(slide_text: str) -> str:
     """Infer mood from slide text using word-boundary keyword matching."""
-    words = set(re.findall(r'\b\w+\b', slide_text.lower()))
+    words = set(re.findall(r"\b\w+\b", slide_text.lower()))
     for mood, keywords in _MOOD_KEYWORDS.items():
         if words & set(keywords):
             return mood
@@ -233,7 +394,10 @@ def _build_carousel_slide_prompt(
         5: "COMPOSITION: Tight close-up on texture, material, or expression. Abstract or detail-oriented.\n",
         6: "COMPOSITION: Medium shot from a low or diagonal angle. Dynamic perspective with environmental context.\n",
     }
-    prompt += _SLIDE_COMPOSITIONS.get(slide_num, "COMPOSITION: Vary the angle and framing from previous slides. Avoid repeating the same shot.\n")
+    prompt += _SLIDE_COMPOSITIONS.get(
+        slide_num,
+        "COMPOSITION: Vary the angle and framing from previous slides. Avoid repeating the same shot.\n",
+    )
     prompt += (
         "ABSOLUTE PROHIBITIONS (text will be added in post-production — the image must be text-free):\n"
         "- No AI-generated text, letters, numbers, words, labels, or typography anywhere\n"

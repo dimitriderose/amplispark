@@ -1,13 +1,14 @@
 """Image editor agent — conversational image editing via Gemini Flash Image."""
+
 import asyncio
 import base64
 import io
 import logging
 import uuid
 
-from PIL import Image
-from google.cloud import storage
+import google.cloud.storage as storage
 from google.genai import types
+from PIL import Image
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +41,9 @@ async def edit_image(
     tone = brand_profile.get("tone", "professional")
     visual_style = brand_profile.get("visual_style", "")
 
-    aspect_hint = f"Generate a {aspect_ratio} aspect ratio image.\n" if aspect_ratio != "1:1" else ""
+    aspect_hint = (
+        f"Generate a {aspect_ratio} aspect ratio image.\n" if aspect_ratio != "1:1" else ""
+    )
     edit_instruction = (
         f"Edit this {platform}-optimized social media image.\n"
         f"{aspect_hint}"
@@ -71,8 +74,7 @@ async def edit_image(
     if not edited_bytes:
         text_parts = [p.text for p in response.parts if p.text]
         raise ValueError(
-            f"Gemini returned no image data. "
-            f"Response text: {' '.join(text_parts) or 'N/A'}"
+            f"Gemini returned no image data. Response text: {' '.join(text_parts) or 'N/A'}"
         )
 
     # Decode base64 if returned as string

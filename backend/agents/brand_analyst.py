@@ -1,14 +1,15 @@
 import asyncio
 import json
 import logging
+
 import httpx
-from google import genai
 from google.genai import types
-from backend.tools.web_scraper import fetch_website
-from backend.tools.brand_tools import analyze_brand_colors, extract_brand_voice
-from backend.config import GEMINI_MODEL, GOOGLE_API_KEY
+
 from backend.clients import get_genai_client
+from backend.config import GEMINI_MODEL
 from backend.services.storage_client import upload_brand_asset
+from backend.tools.brand_tools import analyze_brand_colors, extract_brand_voice
+from backend.tools.web_scraper import fetch_website
 
 logger = logging.getLogger(__name__)
 
@@ -47,13 +48,17 @@ async def _generate_style_reference(brand_id: str, profile: dict) -> str | None:
         )
         if not response.candidates:
             return None
-        for part in response.candidates[0].content.parts:
-            if part.inline_data:
+        content = response.candidates[0].content
+        if content is None or content.parts is None:
+            return None
+        for part in content.parts:
+            if part.inline_data and part.inline_data.data is not None:
                 mime = part.inline_data.mime_type or "image/png"
                 ext = mime.split("/")[-1] if "/" in mime else "png"
+                _data: bytes = part.inline_data.data
                 gcs_uri = await upload_brand_asset(
                     brand_id,
-                    part.inline_data.data,
+                    _data,
                     f"style_reference.{ext}",
                     mime,
                 )
@@ -101,13 +106,13 @@ async def run_brand_analysis(
     if website_data and not website_data.get("error"):
         website_context = f"""
 WEBSITE DATA:
-- Title: {website_data.get('title', 'N/A')}
-- Description: {website_data.get('description', 'N/A')}
-- Text content (first 3000 chars): {website_data.get('text_content', '')[:3000]}
-- Colors found on site: {', '.join(website_data.get('colors_found', [])[:10])}
-- Navigation items: {', '.join(website_data.get('nav_items', [])[:10])}
-- Pre-analyzed colors: Primary={color_analysis.get('primary', 'N/A')}, Secondary={color_analysis.get('secondary', 'N/A')}
-- Detected brand voice signals: {', '.join(voice_analysis.get('detected_tones', []))}
+- Title: {website_data.get("title", "N/A")}
+- Description: {website_data.get("description", "N/A")}
+- Text content (first 3000 chars): {website_data.get("text_content", "")[:3000]}
+- Colors found on site: {", ".join(website_data.get("colors_found", [])[:10])}
+- Navigation items: {", ".join(website_data.get("nav_items", [])[:10])}
+- Pre-analyzed colors: Primary={color_analysis.get("primary", "N/A")}, Secondary={color_analysis.get("secondary", "N/A")}
+- Detected brand voice signals: {", ".join(voice_analysis.get("detected_tones", []))}
 """
 
     # Inject existing social voice so re-analysis preserves the user's connected voice
@@ -119,9 +124,9 @@ WEBSITE DATA:
         if chars or phrases:
             social_voice_context = f"""
 EXISTING SOCIAL MEDIA VOICE (already analyzed from connected account):
-- Voice characteristics: {', '.join(chars)}
-- Common phrases: {', '.join(phrases)}
-- Successful patterns: {', '.join(patterns)}
+- Voice characteristics: {", ".join(chars)}
+- Common phrases: {", ".join(phrases)}
+- Successful patterns: {", ".join(patterns)}
 
 IMPORTANT: When setting TONE and CAPTION_STYLE_DIRECTIVE, ensure they are consistent with
 and build upon this existing voice, not replace it. The goal is refinement, not reinvention.
@@ -201,11 +206,13 @@ Return ONLY a valid JSON object with these exact keys:
             ),
         )
 
-        raw = response.text.strip()
+        raw = (response.text or "").strip()
         profile = json.loads(raw)
 
     except json.JSONDecodeError as jde:
-        logger.warning("Brand analyst: invalid JSON from LLM (first 200 chars): %s — %s", raw[:200], jde)
+        logger.warning(
+            "Brand analyst: invalid JSON from LLM (first 200 chars): %s — %s", raw[:200], jde
+        )
         profile = _fallback_profile(description, website_url)
     except Exception as e:
         logger.error(f"Brand analysis failed: {e}")
@@ -236,9 +243,9 @@ async def _download_website_logo(brand_id: str, logo_url: str) -> str | None:
     """Download a logo image from a URL and upload to GCS. Returns GCS URI or None."""
     try:
         async with httpx.AsyncClient(follow_redirects=True, timeout=10) as client:
-            resp = await client.get(logo_url, headers={
-                "User-Agent": "Mozilla/5.0 (compatible; AmplisparkBot/1.0)"
-            })
+            resp = await client.get(
+                logo_url, headers={"User-Agent": "Mozilla/5.0 (compatible; AmplisparkBot/1.0)"}
+            )
             resp.raise_for_status()
 
         content_type = resp.headers.get("content-type", "")
@@ -278,7 +285,13 @@ def _fallback_profile(description: str, website_url: str | None) -> dict:
         "colors": ["#5B5FF6", "#8B5CF6", "#FF6B6B"],
         "target_audience": "Adults 25-45 interested in this type of business",
         "visual_style": "clean, modern, professional aesthetic",
-        "content_themes": ["behind the scenes", "tips and advice", "product highlights", "customer stories", "team culture"],
+        "content_themes": [
+            "behind the scenes",
+            "tips and advice",
+            "product highlights",
+            "customer stories",
+            "team culture",
+        ],
         "competitors": [],
         "image_style_directive": "clean, modern aesthetic with consistent brand colors, professional lighting, crisp compositions with generous whitespace",
         "caption_style_directive": "Short punchy sentences under 15 words. Mix first-person and second-person perspective. Use em dashes for asides. Conversational register — write like a knowledgeable friend, not a brochure.",

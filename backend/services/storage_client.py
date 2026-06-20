@@ -1,11 +1,12 @@
+import asyncio
 import logging
 import re
 import uuid
-import asyncio
 from datetime import timedelta
-from typing import Optional
+
 from google.cloud import storage
-from backend.config import GCS_BUCKET_NAME, GCP_PROJECT_ID
+
+from backend.config import GCP_PROJECT_ID, GCS_BUCKET_NAME
 from backend.gcs_utils import parse_gcs_uri
 
 logger = logging.getLogger(__name__)
@@ -14,11 +15,14 @@ logger = logging.getLogger(__name__)
 def _safe_filename(filename: str, max_len: int = 80) -> str:
     """Strip path components and reduce to safe GCS-object-name characters."""
     import os
+
     base = os.path.basename(filename)
-    safe = re.sub(r'[^a-zA-Z0-9._-]', '_', base)
+    safe = re.sub(r"[^a-zA-Z0-9._-]", "_", base)
     return safe[:max_len] or "video"
 
-_storage_client: Optional[storage.Client] = None
+
+_storage_client: storage.Client | None = None
+
 
 def get_storage_client() -> storage.Client:
     global _storage_client
@@ -26,12 +30,14 @@ def get_storage_client() -> storage.Client:
         _storage_client = storage.Client(project=GCP_PROJECT_ID)
     return _storage_client
 
+
 def get_bucket() -> storage.Bucket:
     return get_storage_client().bucket(GCS_BUCKET_NAME)
 
 
-async def _get_serving_url(blob: storage.Blob, blob_path: str,
-                            expiration: timedelta = timedelta(days=7)) -> str:
+async def _get_serving_url(
+    blob: storage.Blob, blob_path: str, expiration: timedelta = timedelta(days=7)
+) -> str:
     """Try to generate a signed URL; fall back to a backend proxy URL.
 
     ADC credentials from ``gcloud auth application-default login`` lack a
@@ -50,8 +56,9 @@ async def _get_serving_url(blob: storage.Blob, blob_path: str,
         return f"/api/storage/serve/{blob_path}"
 
 
-async def upload_image_to_gcs(image_bytes: bytes, mime_type: str,
-                               post_id: Optional[str] = None) -> tuple[str, str]:
+async def upload_image_to_gcs(
+    image_bytes: bytes, mime_type: str, post_id: str | None = None
+) -> tuple[str, str]:
     """Upload generated image bytes to GCS.
 
     Returns:
@@ -67,16 +74,17 @@ async def upload_image_to_gcs(image_bytes: bytes, mime_type: str,
 
     loop = asyncio.get_running_loop()
     await loop.run_in_executor(
-        None,
-        lambda: blob.upload_from_string(image_bytes, content_type=mime_type)
+        None, lambda: blob.upload_from_string(image_bytes, content_type=mime_type)
     )
 
     gcs_uri = f"gs://{GCS_BUCKET_NAME}/{blob_path}"
     url = await _get_serving_url(blob, blob_path)
     return url, gcs_uri
 
-async def upload_brand_asset(brand_id: str, file_bytes: bytes,
-                              filename: str, mime_type: str) -> str:
+
+async def upload_brand_asset(
+    brand_id: str, file_bytes: bytes, filename: str, mime_type: str
+) -> str:
     """Upload user brand asset (logo, product photo, PDF). Returns GCS URI."""
     blob_path = f"brands/{brand_id}/{_safe_filename(filename)}"
     bucket = get_bucket()
@@ -84,10 +92,10 @@ async def upload_brand_asset(brand_id: str, file_bytes: bytes,
 
     loop = asyncio.get_running_loop()
     await loop.run_in_executor(
-        None,
-        lambda: blob.upload_from_string(file_bytes, content_type=mime_type)
+        None, lambda: blob.upload_from_string(file_bytes, content_type=mime_type)
     )
     return f"gs://{GCS_BUCKET_NAME}/{blob_path}"
+
 
 async def get_signed_url(gcs_uri: str) -> str:
     """Convert a gs:// URI to a serving URL (signed or backend-proxy)."""
@@ -95,6 +103,7 @@ async def get_signed_url(gcs_uri: str) -> str:
     bucket = get_bucket()
     blob = bucket.blob(blob_path)
     return await _get_serving_url(blob, blob_path, expiration=timedelta(hours=1))
+
 
 async def download_from_gcs(url: str) -> bytes:
     """Download bytes from a GCS signed URL or backend proxy URL.
@@ -105,7 +114,7 @@ async def download_from_gcs(url: str) -> bytes:
     """
     _PROXY_PREFIX = "/api/storage/serve/"
     if url.startswith(_PROXY_PREFIX):
-        blob_path = url[len(_PROXY_PREFIX):]
+        blob_path = url[len(_PROXY_PREFIX) :]
         if ".." in blob_path:
             raise ValueError(f"Invalid blob path (path traversal): {blob_path}")
         bucket = get_bucket()
@@ -114,12 +123,14 @@ async def download_from_gcs(url: str) -> bytes:
         return await loop.run_in_executor(None, blob.download_as_bytes)
 
     import httpx
+
     if not url.startswith("https://storage.googleapis.com/"):
         raise ValueError(f"Refusing to fetch non-GCS URL: {url!r}")
     async with httpx.AsyncClient() as client:
         response = await client.get(url, follow_redirects=False)
         response.raise_for_status()
         return response.content
+
 
 async def upload_byop_photo(
     brand_id: str,

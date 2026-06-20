@@ -14,8 +14,8 @@ class TestTokenEncryption:
         """Encryption must fail if TOKEN_ENCRYPT_KEY is not set."""
         with patch.dict(os.environ, {"TOKEN_ENCRYPT_KEY": ""}, clear=False):
             # Re-import to pick up empty key
-            import importlib
             import backend.routers.integrations as mod
+
             # If _fernet is None, _encrypt_token should raise
             if mod._fernet is None:
                 with pytest.raises(RuntimeError, match="TOKEN_ENCRYPT_KEY"):

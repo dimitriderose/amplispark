@@ -68,14 +68,14 @@ def _roundtrip_cp1252(buf: list[str]) -> str:
 
 def _strip_markdown(text: str) -> str:
     """Remove markdown formatting that social platforms can't render."""
-    text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
-    text = re.sub(r'\*(.+?)\*', r'\1', text)
-    text = re.sub(r'__(.+?)__', r'\1', text)
-    text = re.sub(r'_(.+?)_', r'\1', text)
-    text = re.sub(r'\[(.+?)\]\(.+?\)', r'\1', text)
-    text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
+    text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)
+    text = re.sub(r"\*(.+?)\*", r"\1", text)
+    text = re.sub(r"__(.+?)__", r"\1", text)
+    text = re.sub(r"_(.+?)_", r"\1", text)
+    text = re.sub(r"\[(.+?)\]\(.+?\)", r"\1", text)
+    text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
     # Strip markdown bullet lists: "* item" or "- item" at line start
-    text = re.sub(r'^\s*[\*\-]\s+', '', text, flags=re.MULTILINE)
+    text = re.sub(r"^\s*[\*\-]\s+", "", text, flags=re.MULTILINE)
     return text
 
 
@@ -121,7 +121,10 @@ async def _smart_condense(caption: str, platform: str, derivative_type: str) -> 
 
     logger.info(
         "Caption over limit (%d/%d) for %s/%s — smart condensing",
-        len(caption), limit, platform, derivative_type,
+        len(caption),
+        limit,
+        platform,
+        derivative_type,
     )
     condense_prompt = (
         f"Shorten this {platform} {derivative_type} caption to UNDER {limit} characters. "
@@ -143,7 +146,7 @@ async def _smart_condense(caption: str, platform: str, derivative_type: str) -> 
             contents=condense_prompt,
             config=types.GenerateContentConfig(temperature=0.3),
         )
-        condensed = _strip_markdown(resp.text.strip())
+        condensed = _strip_markdown((resp.text or "").strip())
         if len(condensed) <= limit and len(condensed) > limit // 3:
             # For carousels, verify slide count preserved
             if derivative_type == "carousel":
@@ -152,14 +155,16 @@ async def _smart_condense(caption: str, platform: str, derivative_type: str) -> 
                 if condensed_count < original_count:
                     logger.warning(
                         "Smart condense dropped slides (%d→%d) — rejecting",
-                        original_count, condensed_count,
+                        original_count,
+                        condensed_count,
                     )
                     return _enforce_char_limit(caption, platform, derivative_type)
             logger.info("Smart condense: %d → %d chars", len(caption), len(condensed))
             return condensed
         logger.warning(
             "Smart condense out of range (%d chars, limit %d) — hard truncating",
-            len(condensed), limit,
+            len(condensed),
+            limit,
         )
     except Exception as e:
         logger.warning("Smart condense failed: %s — hard truncating", e)

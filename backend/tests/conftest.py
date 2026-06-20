@@ -1,13 +1,10 @@
 """Shared test fixtures for Amplispark backend tests."""
 
-import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-import pytest_asyncio
 from fastapi.testclient import TestClient
-
 
 # ---------------------------------------------------------------------------
 # Mock Firebase Admin before any backend module imports it
@@ -26,7 +23,6 @@ patch_firebase_admin.start()
 
 # Now safe to import backend modules
 from backend.server import app  # noqa: E402
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -54,8 +50,8 @@ def sample_brand():
         "business_name": "Test Brand",
         "description": "A test brand",
         "analysis_status": "complete",
-        "created_at": datetime.now(timezone.utc),
-        "updated_at": datetime.now(timezone.utc),
+        "created_at": datetime.now(UTC),
+        "updated_at": datetime.now(UTC),
     }
 
 
@@ -70,7 +66,7 @@ def sample_post():
         "caption": "Test caption for this post",
         "hashtags": ["#test", "#amplispark"],
         "image_url": "https://example.com/image.png",
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
     }
 
 

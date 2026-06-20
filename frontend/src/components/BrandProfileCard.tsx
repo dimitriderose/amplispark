@@ -36,7 +36,7 @@ export default function BrandProfileCard({ brand, onUpdate }: Props) {
   useEffect(() => {
     setDraft(brand)
     setShowCompetitors(brand.ui_preferences?.show_competitors ?? true)
-  }, [brand.brand_id])
+  }, [brand])
 
   const handleToggleCompetitors = () => {
     const next = !showCompetitors
@@ -57,8 +57,8 @@ export default function BrandProfileCard({ brand, onUpdate }: Props) {
         caption_style_directive: draft.caption_style_directive,
       })
       setEditing(false)
-    } catch (err: any) {
-      setSaveError(err.message || 'Save failed')
+    } catch (err: unknown) {
+      setSaveError((err as Error).message || 'Save failed')
     } finally {
       setSaving(false)
     }

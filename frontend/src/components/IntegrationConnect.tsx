@@ -27,39 +27,6 @@ export default function IntegrationConnect({ brandId, notion, onUpdate }: Props)
   const [dbTimeout, setDbTimeout] = useState(false)
   const dbTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Auto-fetch databases when connected but no database selected
-  useEffect(() => {
-    if (isConnected && !hasDatabase && databases.length === 0) {
-      fetchDatabases()
-    }
-  }, [isConnected, hasDatabase])
-
-  const handleConnect = async () => {
-    setLoading(true)
-    setError('')
-    try {
-      const res = await api.getNotionAuthUrl(brandId)
-      window.location.href = res.auth_url
-    } catch (err: any) {
-      setError(err.message || 'Failed to get auth URL')
-      setLoading(false)
-    }
-  }
-
-  const handleDisconnect = async () => {
-    setLoading(true)
-    setError('')
-    try {
-      await api.disconnectNotion(brandId)
-      setDatabases([])
-      onUpdate()
-    } catch (err: any) {
-      setError(err.message || 'Disconnect failed')
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const fetchDatabases = async () => {
     setLoadingDbs(true)
     setError('')
@@ -74,9 +41,9 @@ export default function IntegrationConnect({ brandId, notion, onUpdate }: Props)
       if (dbTimeoutRef.current) clearTimeout(dbTimeoutRef.current)
       setDbTimeout(false)
       setDatabases(res.databases)
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (dbTimeoutRef.current) clearTimeout(dbTimeoutRef.current)
-      setError(err.message || 'Failed to load databases')
+      setError((err as Error).message || 'Failed to load databases')
     } finally {
       setLoadingDbs(false)
     }
@@ -86,14 +53,49 @@ export default function IntegrationConnect({ brandId, notion, onUpdate }: Props)
     return () => { if (dbTimeoutRef.current) clearTimeout(dbTimeoutRef.current) }
   }, [])
 
+  // Auto-fetch databases when connected but no database selected
+  useEffect(() => {
+    if (isConnected && !hasDatabase && databases.length === 0) {
+      fetchDatabases()
+    }
+  // fetchDatabases is stable (defined once per render cycle, not wrapped in useCallback)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConnected, hasDatabase, databases.length])
+
+  const handleConnect = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const res = await api.getNotionAuthUrl(brandId)
+      window.location.href = res.auth_url
+    } catch (err: unknown) {
+      setError((err as Error).message || 'Failed to get auth URL')
+      setLoading(false)
+    }
+  }
+
+  const handleDisconnect = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      await api.disconnectNotion(brandId)
+      setDatabases([])
+      onUpdate()
+    } catch (err: unknown) {
+      setError((err as Error).message || 'Disconnect failed')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleSelectDatabase = async (dbId: string, dbName: string) => {
     setLoading(true)
     setError('')
     try {
       await api.selectNotionDatabase(brandId, dbId, dbName)
       onUpdate()
-    } catch (err: any) {
-      setError(err.message || 'Failed to select database')
+    } catch (err: unknown) {
+      setError((err as Error).message || 'Failed to select database')
     } finally {
       setLoading(false)
     }

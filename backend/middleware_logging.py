@@ -22,12 +22,15 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         duration_ms = round((time.time() - start) * 1000)
         # Skip noisy health check logs
         if request.url.path != "/health":
-            logger.info("request_complete", extra={
-                "request_id": req_id,
-                "method": request.method,
-                "path": request.url.path,
-                "status": response.status_code,
-                "duration_ms": duration_ms,
-                "user_uid": user_uid_var.get(),
-            })
+            logger.info(
+                "request_complete",
+                extra={
+                    "request_id": req_id,
+                    "method": request.method,
+                    "path": request.url.path,
+                    "status": response.status_code,
+                    "duration_ms": duration_ms,
+                    "user_uid": user_uid_var.get(),
+                },
+            )
         return response

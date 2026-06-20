@@ -65,11 +65,23 @@ export default function PostHistory({ brandId }: { brandId: string }) {
     [posts]
   )
 
+  const uniquePlatforms = useMemo(() =>
+    Array.from(new Set(sorted.map(p => p.platform).filter(Boolean))) as string[],
+    [sorted]
+  )
+  const uniquePillars = useMemo(() =>
+    Array.from(new Set(sorted.map(p => p.pillar).filter(Boolean))) as string[],
+    [sorted]
+  )
+
+  const activePlatformFilter = uniquePlatforms.includes(platformFilter) ? platformFilter : 'all'
+  const activePillarFilter = uniquePillars.includes(pillarFilter) ? pillarFilter : 'all'
+
   const filtered = useMemo(() => {
     let result = sorted
     if (statusFilter !== 'all') result = result.filter(p => p.status === statusFilter)
-    if (platformFilter !== 'all') result = result.filter(p => p.platform === platformFilter)
-    if (pillarFilter !== 'all') result = result.filter(p => p.pillar === pillarFilter)
+    if (activePlatformFilter !== 'all') result = result.filter(p => p.platform === activePlatformFilter)
+    if (activePillarFilter !== 'all') result = result.filter(p => p.pillar === activePillarFilter)
     if (search.trim()) {
       const q = search.toLowerCase()
       result = result.filter(p => {
@@ -83,24 +95,11 @@ export default function PostHistory({ brandId }: { brandId: string }) {
       })
     }
     return result
-  }, [sorted, statusFilter, platformFilter, pillarFilter, search])
+  }, [sorted, statusFilter, activePlatformFilter, activePillarFilter, search])
 
-  const uniquePlatforms = useMemo(() =>
-    Array.from(new Set(sorted.map(p => p.platform).filter(Boolean))) as string[],
-    [sorted]
-  )
-  const uniquePillars = useMemo(() =>
-    Array.from(new Set(sorted.map(p => p.pillar).filter(Boolean))) as string[],
-    [sorted]
-  )
-
-  useEffect(() => {
-    if (platformFilter !== 'all' && !uniquePlatforms.includes(platformFilter)) setPlatformFilter('all')
-  }, [uniquePlatforms, platformFilter])
-  useEffect(() => {
-    if (pillarFilter !== 'all' && !uniquePillars.includes(pillarFilter)) setPillarFilter('all')
-  }, [uniquePillars, pillarFilter])
-  useEffect(() => { setVisibleCount(PAGE_SIZE) }, [statusFilter, platformFilter, pillarFilter, search])
+  // Reset pagination when filters change
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setVisibleCount(PAGE_SIZE) }, [statusFilter, activePlatformFilter, activePillarFilter, search])
 
   const paginated = filtered.slice(0, visibleCount)
 
@@ -152,18 +151,18 @@ export default function PostHistory({ brandId }: { brandId: string }) {
         {uniquePlatforms.length > 1 && (
           <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ fontSize: 11, color: A.textMuted }}>Platform:</span>
-            <Pill active={platformFilter === 'all'} onClick={() => setPlatformFilter('all')}>All</Pill>
+            <Pill active={activePlatformFilter === 'all'} onClick={() => setPlatformFilter('all')}>All</Pill>
             {uniquePlatforms.map(p => (
-              <Pill key={p} active={platformFilter === p} onClick={() => setPlatformFilter(p)}>{p}</Pill>
+              <Pill key={p} active={activePlatformFilter === p} onClick={() => setPlatformFilter(p)}>{p}</Pill>
             ))}
           </div>
         )}
         {uniquePillars.length > 1 && (
           <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ fontSize: 11, color: A.textMuted }}>Pillar:</span>
-            <Pill active={pillarFilter === 'all'} onClick={() => setPillarFilter('all')}>All</Pill>
+            <Pill active={activePillarFilter === 'all'} onClick={() => setPillarFilter('all')}>All</Pill>
             {uniquePillars.map(p => (
-              <Pill key={p} active={pillarFilter === p} onClick={() => setPillarFilter(p)}>
+              <Pill key={p} active={activePillarFilter === p} onClick={() => setPillarFilter(p)}>
                 {p.replace(/_/g, ' ')}
               </Pill>
             ))}

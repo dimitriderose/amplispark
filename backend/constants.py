@@ -106,16 +106,13 @@ PLATFORM_STRENGTHS = {
         "saves and DM shares are the algorithm signals."
     ),
     "linkedin": (
-        "LinkedIn: Video gets 5x engagement; never put external links "
-        "in posts (reach penalty)."
+        "LinkedIn: Video gets 5x engagement; never put external links in posts (reach penalty)."
     ),
     "x": (
-        "X: Video gets 10x engagement; threads for education; "
-        "tweets under 200 chars spark replies."
+        "X: Video gets 10x engagement; threads for education; tweets under 200 chars spark replies."
     ),
     "facebook": (
-        "Facebook: Shares worth 50x likes; best for community questions; "
-        "no external links."
+        "Facebook: Shares worth 50x likes; best for community questions; no external links."
     ),
     "tiktok": (
         "TikTok: Video first for most content; carousels for educational "
@@ -126,8 +123,7 @@ PLATFORM_STRENGTHS = {
         "promotional content; end with a question."
     ),
     "youtube_shorts": (
-        "YouTube Shorts: Always video; first 125 chars appear in search — "
-        "include primary keyword."
+        "YouTube Shorts: Always video; first 125 chars appear in search — include primary keyword."
     ),
     "pinterest": (
         "Pinterest: It's a search engine — keyword-rich titles and "

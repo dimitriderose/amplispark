@@ -201,8 +201,8 @@ export function useVoiceCoach(): UseVoiceCoachResult {
             setStatus('active')
             try {
               await startMicCapture(captureCtx, stream, ws, workletNodeRef, sourceNodeRef)
-            } catch (err: any) {
-              setError(`Microphone setup failed: ${err.message}`)
+            } catch (err: unknown) {
+              setError(`Microphone setup failed: ${(err as Error).message}`)
               setStatus('error')
               stopSession()
             }
@@ -241,9 +241,10 @@ export function useVoiceCoach(): UseVoiceCoachResult {
             setTimeout(() => {
               if (userStoppedRef.current || !streamRef.current) return
               const history = conversationHistoryRef.current.slice(-10).join('\n')
+              // eslint-disable-next-line react-hooks/immutability
               connectWebSocket(brandId, streamRef.current!, history, planIdRef.current)
                 .catch(err => {
-                  setError(`Reconnect failed: ${err?.message || 'Unknown error'}`)
+                  setError(`Reconnect failed: ${(err as Error)?.message || 'Unknown error'}`)
                   setStatus('error')
                 })
             }, 500)
@@ -290,10 +291,10 @@ export function useVoiceCoach(): UseVoiceCoachResult {
           autoGainControl: true,
         },
       })
-    } catch (err: any) {
-      const msg = err.name === 'NotAllowedError'
+    } catch (err: unknown) {
+      const msg = (err as Error).name === 'NotAllowedError'
         ? 'Microphone permission denied. Please allow microphone access and try again.'
-        : `Microphone error: ${err.message}`
+        : `Microphone error: ${(err as Error).message}`
       setError(msg)
       setStatus('error')
       isStartingRef.current = false

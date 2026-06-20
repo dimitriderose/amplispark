@@ -10,14 +10,15 @@ from starlette.responses import JSONResponse
 from backend.config import CORS_ORIGINS
 from backend.middleware import verify_brand_owner  # noqa: F401 — exported for route-level Depends()
 from backend.middleware_logging import RequestContextMiddleware
-
-from backend.routers import brands, plans, posts, generation, media, integrations, voice
+from backend.routers import brands, generation, integrations, media, plans, posts, voice
 
 _handler = logging.StreamHandler()
-_handler.setFormatter(JsonFormatter(
-    fmt="%(asctime)s %(levelname)s %(name)s %(message)s",
-    rename_fields={"asctime": "timestamp", "levelname": "severity"},
-))
+_handler.setFormatter(
+    JsonFormatter(
+        fmt="%(asctime)s %(levelname)s %(name)s %(message)s",
+        rename_fields={"asctime": "timestamp", "levelname": "severity"},
+    )
+)
 logging.root.handlers = [_handler]
 logging.root.setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
@@ -43,19 +44,25 @@ async def global_exception_handler(request, exc):
     # HTTPException is already handled by FastAPI's default handler, so skip it
     if isinstance(exc, HTTPException):
         raise exc
-    logger.error("unhandled_exception", extra={
-        "path": request.url.path,
-        "method": request.method,
-        "error": str(exc),
-        "type": type(exc).__name__,
-    })
+    logger.error(
+        "unhandled_exception",
+        extra={
+            "path": request.url.path,
+            "method": request.method,
+            "error": str(exc),
+            "type": type(exc).__name__,
+        },
+    )
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
+
 # ── Health ────────────────────────────────────────────────────
+
 
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "service": "amplifi-backend", "version": "1.0.0"}
+
 
 # ── Routers ──────────────────────────────────────────────────
 
@@ -73,12 +80,15 @@ app.include_router(voice.router, prefix="/api")
 frontend_dist = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
 if os.path.exists(frontend_dist):
     from pathlib import Path
+
     from starlette.responses import FileResponse as _FileResponse
 
     _index_html = os.path.join(frontend_dist, "index.html")
 
     # Static assets first (proper caching headers + content-type detection)
-    app.mount("/assets", StaticFiles(directory=os.path.join(frontend_dist, "assets")), name="assets")
+    app.mount(
+        "/assets", StaticFiles(directory=os.path.join(frontend_dist, "assets")), name="assets"
+    )
 
     # SPA catch-all: serve index.html for any non-API, non-file route
     @app.get("/{full_path:path}")

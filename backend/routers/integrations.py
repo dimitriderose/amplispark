@@ -1,10 +1,9 @@
 import hmac
 import logging
-import base64
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, HTTPException, Query, Body
+from fastapi import APIRouter, Body, HTTPException, Query
 from fastapi.responses import Response
 
 from backend.services import firestore_client
@@ -17,6 +16,7 @@ _TOKEN_KEY = os.environ.get("TOKEN_ENCRYPT_KEY", "")
 _fernet = None
 if _TOKEN_KEY:
     from cryptography.fernet import Fernet
+
     # Fernet requires a 32-byte URL-safe base64-encoded key
     # Generate one with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     try:
@@ -36,6 +36,7 @@ def _decrypt_token(stored: str) -> str:
     """Decrypt a Fernet-encrypted token. Handles legacy plaintext and XOR-obfuscated tokens."""
     if stored.startswith("enc:") and _fernet:
         from cryptography.fernet import InvalidToken
+
         try:
             return _fernet.decrypt(stored[4:].encode("ascii")).decode("utf-8")
         except InvalidToken:
@@ -47,10 +48,12 @@ def _decrypt_token(stored: str) -> str:
     logger.warning("Legacy plaintext token found — should be re-encrypted")
     return stored  # legacy plaintext
 
+
 router = APIRouter()
 
 
 # ── Social Voice Analysis ────────────────────────────────────
+
 
 @router.post("/brands/{brand_id}/connect-social")
 async def connect_social_account(
@@ -71,16 +74,18 @@ async def connect_social_account(
     try:
         voice_analysis = await connect_platform(platform, oauth_token)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.error(
             "Social voice analysis failed for brand %s platform %s: %s",
-            brand_id, platform, e,
+            brand_id,
+            platform,
+            e,
         )
         raise HTTPException(
             status_code=502,
             detail=f"Could not fetch posts from {platform}. Check your token and try again.",
-        )
+        ) from e
 
     # Merge into brand profile -- store per-platform dict + latest shortcut
     connected = list(brand.get("connected_platforms", []))
@@ -90,17 +95,21 @@ async def connect_social_account(
     existing_analyses = dict(brand.get("social_voice_analyses", {}))
     existing_analyses[platform] = voice_analysis
 
-    await firestore_client.update_brand(brand_id, {
-        "social_voice_analyses": existing_analyses,   # all platforms
-        "social_voice_analysis": voice_analysis,       # latest (used by content creator)
-        "social_voice_platform": platform,
-        "connected_platforms": connected,
-    })
+    await firestore_client.update_brand(
+        brand_id,
+        {
+            "social_voice_analyses": existing_analyses,  # all platforms
+            "social_voice_analysis": voice_analysis,  # latest (used by content creator)
+            "social_voice_platform": platform,
+            "connected_platforms": connected,
+        },
+    )
 
     return {"platform": platform, "voice_analysis": voice_analysis}
 
 
 # ── Notion Integration ───────────────────────────────────────
+
 
 @router.get("/brands/{brand_id}/integrations/notion/auth-url")
 async def notion_auth_url(brand_id: str):
@@ -158,7 +167,7 @@ async def notion_databases(brand_id: str):
         databases = await search_databases(_decrypt_token(notion["access_token"]))
     except Exception as e:
         logger.error("Failed to list Notion databases: %s", e)
-        raise HTTPException(status_code=502, detail=f"Could not fetch databases: {e}")
+        raise HTTPException(status_code=502, detail=f"Could not fetch databases: {e}") from e
 
     return {"databases": databases}
 
@@ -237,30 +246,39 @@ async def export_plan_to_notion(brand_id: str, plan_id: str):
             post_with_theme["content_type"] = day_brief.get("content_type", "photo")
 
         try:
-            page = await create_page(access_token, database_id, post_with_theme, day_index, platform)
+            page = await create_page(
+                access_token, database_id, post_with_theme, day_index, platform
+            )
             notion_page_id = page.get("id", "")
-            results.append({"post_id": post_id, "status": "exported", "notion_page_id": notion_page_id})
+            results.append(
+                {"post_id": post_id, "status": "exported", "notion_page_id": notion_page_id}
+            )
 
             # Update post's publish_status
             publish_status = post.get("publish_status", {}) or {}
             publish_status["notion"] = {
                 "status": "exported",
                 "notion_page_id": notion_page_id,
-                "published_at": datetime.now(timezone.utc).isoformat(),
+                "published_at": datetime.now(UTC).isoformat(),
             }
-            await firestore_client.update_post(brand_id, post_id, {"publish_status": publish_status})
+            await firestore_client.update_post(
+                brand_id, post_id, {"publish_status": publish_status}
+            )
 
         except Exception as e:
             logger.error("Failed to export post %s to Notion: %s", post_id, e)
             results.append({"post_id": post_id, "status": "failed", "error": str(e)})
 
     exported = sum(1 for r in results if r["status"] == "exported")
-    logger.info("metric", extra={
-        "metric_name": "notion_export",
-        "brand_id": brand_id,
-        "posts_exported": exported,
-        "total_posts": len(posts),
-    })
+    logger.info(
+        "metric",
+        extra={
+            "metric_name": "notion_export",
+            "brand_id": brand_id,
+            "posts_exported": exported,
+            "total_posts": len(posts),
+        },
+    )
     return {
         "exported": exported,
         "total": len(posts),
@@ -269,6 +287,7 @@ async def export_plan_to_notion(brand_id: str, plan_id: str):
 
 
 # ── Notion OAuth callback (non-prefixed, under /api/integrations/) ───
+
 
 @router.get("/integrations/notion/callback")
 async def notion_callback(code: str = Query(...), state: str = Query(...)):
@@ -293,10 +312,12 @@ async def notion_callback(code: str = Query(...), state: str = Query(...)):
         raise HTTPException(status_code=404, detail="Brand not found")
 
     try:
-        token_data = await exchange_code(code, NOTION_CLIENT_ID, NOTION_CLIENT_SECRET, NOTION_REDIRECT_URI)
+        token_data = await exchange_code(
+            code, NOTION_CLIENT_ID, NOTION_CLIENT_SECRET, NOTION_REDIRECT_URI
+        )
     except Exception as e:
         logger.error("Notion OAuth token exchange failed: %s", e)
-        raise HTTPException(status_code=400, detail=f"Notion authorization failed: {e}")
+        raise HTTPException(status_code=400, detail=f"Notion authorization failed: {e}") from e
 
     # Store integration data on brand (token is obfuscated before persistence)
     raw_token = token_data.get("access_token", "")
@@ -306,7 +327,7 @@ async def notion_callback(code: str = Query(...), state: str = Query(...)):
         "bot_id": token_data.get("bot_id"),
         "workspace_id": token_data.get("workspace_id"),
         "workspace_name": token_data.get("workspace_name", ""),
-        "connected_at": datetime.now(timezone.utc).isoformat(),
+        "connected_at": datetime.now(UTC).isoformat(),
     }
     await firestore_client.update_brand(brand_id, {"integrations": integrations})
 

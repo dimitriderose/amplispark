@@ -1,10 +1,13 @@
+from typing import Any
+
 from pydantic import BaseModel
-from typing import Optional, Any
+
 
 class APIResponse(BaseModel):
     success: bool = True
-    data: Optional[Any] = None
-    error: Optional[str] = None
+    data: Any | None = None
+    error: str | None = None
+
 
 class HealthResponse(BaseModel):
     status: str = "ok"

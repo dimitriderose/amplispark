@@ -61,8 +61,8 @@ export default function PostCard({ post, brandId, onApproved, onDismiss, onView 
     setExportError(null)
     try {
       await api.exportPost(post.post_id, brandId)
-    } catch (err: any) {
-      setExportError(err.message || 'Export failed')
+    } catch (err: unknown) {
+      setExportError((err as Error).message || 'Export failed')
     }
   }
 
@@ -71,9 +71,8 @@ export default function PostCard({ post, brandId, onApproved, onDismiss, onView 
     try {
       await api.approvePost(brandId, post.post_id)
       onApproved?.()
-    } catch (err: any) {
-      // L-5: Inline error instead of alert()
-      setApproveError(err.message || 'Approval failed')
+    } catch (err: unknown) {
+      setApproveError((err as Error).message || 'Approval failed')
     }
   }
 

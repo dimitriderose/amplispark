@@ -8,31 +8,28 @@ export default function OnboardPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { uid, loading: authLoading } = useAuth()
-  const [checking, setChecking] = useState(true)
+  const [apiDone, setApiDone] = useState(false)
 
   const isNewBrand = searchParams.get('new') === 'true'
 
+  const needsApiCheck = !authLoading && !isNewBrand && !!uid
+  const checking = authLoading || (needsApiCheck && !apiDone)
+
   useEffect(() => {
-    if (authLoading) return
-    if (isNewBrand || !uid) {
-      setChecking(false)
-      return
-    }
-    api.listBrands(uid)
+    if (!needsApiCheck) return
+    api.listBrands(uid!)
       .then((res) => {
         const brands = (res as unknown as { brands: unknown[] }).brands || []
         if (brands.length > 0) {
           navigate('/brands', { replace: true })
         } else {
-          setChecking(false)
+          setApiDone(true)
         }
       })
-      .catch(() => {
-        setChecking(false)
-      })
-  }, [authLoading, uid, isNewBrand, navigate])
+      .catch(() => setApiDone(true))
+  }, [needsApiCheck, uid, navigate])
 
-  if (authLoading || checking) {
+  if (checking) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
         <p style={{ color: '#888', fontSize: 14 }}>Loading...</p>
