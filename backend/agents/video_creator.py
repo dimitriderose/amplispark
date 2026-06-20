@@ -267,10 +267,10 @@ async def generate_video_clip(
                 f"Veo video generation timed out after {_VEO_POLL_TIMEOUT_S}s for post {post_id}"
             )
         await asyncio.sleep(10)
-        _current_op = operation
+        import functools
+
         operation = await loop.run_in_executor(
-            None,
-            lambda: client.operations.get(_current_op),
+            None, functools.partial(client.operations.get, operation)
         )
         logger.info("Veo operation status: done=%s", operation.done)
 
