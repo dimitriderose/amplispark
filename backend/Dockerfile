@@ -37,12 +37,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-# Pin pip to <26 to avoid ResolutionTooDeep with pip 26.x's stricter resolver
-RUN pip install --upgrade "pip<26" --quiet
+# Install uv for fast, reliable dependency resolution
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 # Install Python deps before copying source for better layer caching
 COPY backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN uv pip install --system --no-cache -r requirements.txt
 
 # Copy backend source
 COPY backend/ ./backend/
