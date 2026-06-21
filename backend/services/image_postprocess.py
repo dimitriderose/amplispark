@@ -1,15 +1,14 @@
 """Image post-processing: resize, text overlay, platform-specific treatments.
 
-Uses Pillow for all pixel-level operations. No AI calls â€” pure transforms.
+Uses Pillow for all pixel-level operations. No AI calls — pure transforms.
 """
 
 import io
 from pathlib import Path
-from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
-# â”€â”€ Pixel dimensions for each aspect ratio â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Pixel dimensions for each aspect ratio ────────────────────────────────────
 
 ASPECT_TO_PIXELS: dict[str, tuple[int, int]] = {
     "1:1": (1080, 1080),
@@ -20,14 +19,18 @@ ASPECT_TO_PIXELS: dict[str, tuple[int, int]] = {
     "2:3": (1000, 1500),
 }
 
-# â”€â”€ Font loading â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Font loading ──────────────────────────────────────────────────────────────
 
 _FONT_DIR = Path(__file__).parent.parent / "assets" / "fonts"
-_FONT_CACHE: dict[tuple[str, int], Any] = {}
+_FONT_CACHE: dict[tuple[str, int], ImageFont.FreeTypeFont | ImageFont.ImageFont] = {}
 
 
-def _get_font(bold: bool = False, size: int = 72) -> Any:
-    """Load Inter font, cached. Falls back to default if file missing."""
+def _get_font(bold: bool = False, size: int = 72) -> ImageFont.FreeTypeFont:
+    """Load Inter font, cached. Falls back to default if file missing.
+
+    truetype() always returns FreeTypeFont. load_default(size=) also returns
+    FreeTypeFont in Pillow 10+; the stubs mis-type it as ImageFont so we cast.
+    """
     key = ("bold" if bold else "regular", size)
     if key not in _FONT_CACHE:
         fname = "Inter-Bold.ttf" if bold else "Inter-Regular.ttf"
@@ -35,8 +38,10 @@ def _get_font(bold: bool = False, size: int = 72) -> Any:
         try:
             _FONT_CACHE[key] = ImageFont.truetype(str(font_path), size)
         except OSError:
-            _FONT_CACHE[key] = ImageFont.load_default()
-    return _FONT_CACHE[key]
+            _FONT_CACHE[key] = ImageFont.load_default(size=size)
+    font = _FONT_CACHE[key]
+    assert isinstance(font, ImageFont.FreeTypeFont)
+    return font
 
 
 def _scale_font_size(base_size: int, canvas_width: int) -> int:
@@ -44,7 +49,7 @@ def _scale_font_size(base_size: int, canvas_width: int) -> int:
     return max(16, int(base_size * canvas_width / 1080))
 
 
-# â”€â”€ Color utilities â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Color utilities ───────────────────────────────────────────────────────────
 
 
 def _hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
@@ -94,7 +99,7 @@ def _gradient_color(brand_colors: list[str]) -> tuple[int, int, int]:
     return (20, 20, 20)
 
 
-# â”€â”€ Core functions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Core functions ────────────────────────────────────────────────────────────
 
 
 def resize_to_aspect(image_bytes: bytes, aspect_ratio: str) -> bytes:
@@ -106,8 +111,8 @@ def resize_to_aspect(image_bytes: bytes, aspect_ratio: str) -> bytes:
     if not dims:
         return image_bytes
 
-    img = Image.open(io.BytesIO(image_bytes))
-    img = ImageOps.fit(img, dims, method=Image.LANCZOS)
+    img: Image.Image = Image.open(io.BytesIO(image_bytes))
+    img = ImageOps.fit(img, dims, method=Image.Resampling.LANCZOS)
     buf = io.BytesIO()
     img.save(buf, format="PNG", optimize=True)
     return buf.getvalue()
@@ -117,13 +122,13 @@ def _draw_text_with_shadow(
     draw: ImageDraw.ImageDraw,
     position: tuple[int, int],
     text: str,
-    font: Any,
+    font: ImageFont.FreeTypeFont,
     fill: tuple[int, int, int],
     shadow_offset: int = 2,
 ) -> None:
     """Draw text with a drop shadow for readability."""
     x, y = position
-    # Shadow renders as solid black on RGB canvas (alpha ignored) â€” standard text shadow
+    # Shadow renders as solid black on RGB canvas (alpha ignored) — standard text shadow
     draw.text((x + shadow_offset, y + shadow_offset), text, font=font, fill=(0, 0, 0))
     draw.text((x, y), text, font=font, fill=fill)
 
@@ -165,7 +170,7 @@ def _add_gradient_overlay(
     return img.convert("RGB")
 
 
-def _wrap_text(text: str, font: Any, max_width: int) -> list[str]:
+def _wrap_text(text: str, font: ImageFont.FreeTypeFont, max_width: int) -> list[str]:
     """Word-wrap text to fit within max_width pixels."""
     words = text.split()
     lines: list[str] = []
@@ -173,7 +178,7 @@ def _wrap_text(text: str, font: Any, max_width: int) -> list[str]:
 
     for word in words:
         test_line = f"{current_line} {word}".strip()
-        bbox = font.getbbox(test_line)
+        bbox = font.getbbox(test_line)  # type: ignore[misc]
         if bbox[2] - bbox[0] <= max_width:
             current_line = test_line
         else:
@@ -186,7 +191,7 @@ def _wrap_text(text: str, font: Any, max_width: int) -> list[str]:
     return lines or [text]
 
 
-# â”€â”€ Platform-specific overlay functions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Platform-specific overlay functions ───────────────────────────────────────
 
 
 def create_carousel_cover(
@@ -196,7 +201,7 @@ def create_carousel_cover(
     aspect_ratio: str = "4:5",
 ) -> bytes:
     """Add title overlay to carousel cover image."""
-    img = Image.open(io.BytesIO(image_bytes))
+    img: Image.Image = Image.open(io.BytesIO(image_bytes))
     w, h = img.size
     grad_color = _gradient_color(brand_colors)
     img = _add_gradient_overlay(img, grad_color, opacity=180, region="bottom")
@@ -214,7 +219,7 @@ def create_carousel_cover(
     start_y = int(h * 0.65) + (int(h * 0.3) - total_text_h) // 2
 
     for i, line in enumerate(lines):
-        bbox = font.getbbox(line)
+        bbox = font.getbbox(line)  # type: ignore[misc]
         text_w = bbox[2] - bbox[0]
         x = (w - text_w) // 2
         y = start_y + i * line_height
@@ -231,8 +236,8 @@ def create_carousel_slide(
     brand_colors: list[str],
     aspect_ratio: str = "4:5",
 ) -> bytes:
-    """Add title overlay to carousel slide (no badge â€” Instagram shows native counter)."""
-    img = Image.open(io.BytesIO(image_bytes))
+    """Add title overlay to carousel slide (no badge — Instagram shows native counter)."""
+    img: Image.Image = Image.open(io.BytesIO(image_bytes))
     w, h = img.size
     grad_color = _gradient_color(brand_colors)
     img = _add_gradient_overlay(img, grad_color, opacity=160, region="bottom")
@@ -240,7 +245,7 @@ def create_carousel_slide(
     draw = ImageDraw.Draw(img)
     text_fill = _text_color_for_bg(brand_colors)
 
-    # Title at bottom â€” max 2 lines to keep overlay clean
+    # Title at bottom — max 2 lines to keep overlay clean
     font_size = _scale_font_size(48, w)
     font = _get_font(bold=True, size=font_size)
     max_text_w = int(w * 0.85)
@@ -250,14 +255,14 @@ def create_carousel_slide(
         shorter = title[:50]
         last_space = shorter.rfind(" ")
         if last_space > 0:
-            shorter = shorter[:last_space] + "â€¦"
+            shorter = shorter[:last_space] + "…"
         lines = _wrap_text(shorter, font, max_text_w)[:2]
     line_height = int(font_size * 1.3)  # 130% leading for readability
     total_h = len(lines) * line_height
     start_y = h - int(h * 0.18) - total_h
 
     for i, line in enumerate(lines):
-        bbox = font.getbbox(line)
+        bbox = font.getbbox(line)  # type: ignore[misc]
         text_w = bbox[2] - bbox[0]
         x = (w - text_w) // 2
         y = start_y + i * line_height
@@ -275,7 +280,7 @@ def create_pinterest_pin(
     brand_colors: list[str],
 ) -> bytes:
     """Pinterest-specific: full-image gradient + large centered title + subtitle."""
-    img = Image.open(io.BytesIO(image_bytes))
+    img: Image.Image = Image.open(io.BytesIO(image_bytes))
     w, h = img.size
     grad_color = _gradient_color(brand_colors)
     # Full-image overlay for Pinterest (not just bottom)
@@ -285,7 +290,7 @@ def create_pinterest_pin(
     text_fill = _text_color_for_bg(brand_colors)
     max_text_w = int(w * 0.85)
 
-    # Large title â€” centered vertically in bottom 50%
+    # Large title — centered vertically in bottom 50%
     title_size = _scale_font_size(72, w)
     title_font = _get_font(bold=True, size=title_size)
     title_lines = _wrap_text(title[:100], title_font, max_text_w)
@@ -301,7 +306,7 @@ def create_pinterest_pin(
     start_y = int(h * 0.5) + (int(h * 0.4) - total_h) // 2
 
     for i, line in enumerate(title_lines):
-        bbox = title_font.getbbox(line)
+        bbox = title_font.getbbox(line)  # type: ignore[misc]
         text_w = bbox[2] - bbox[0]
         x = (w - text_w) // 2
         y = start_y + i * title_line_h
@@ -309,7 +314,7 @@ def create_pinterest_pin(
 
     sub_start_y = start_y + len(title_lines) * title_line_h + 20
     for i, line in enumerate(sub_lines):
-        bbox = sub_font.getbbox(line)
+        bbox = sub_font.getbbox(line)  # type: ignore[misc]
         text_w = bbox[2] - bbox[0]
         x = (w - text_w) // 2
         y = sub_start_y + i * sub_line_h
@@ -326,7 +331,7 @@ def create_tiktok_cover(
     brand_colors: list[str],
 ) -> bytes:
     """TikTok/YouTube Shorts: bold hook text in center safe zone (avoid top/bottom 20%)."""
-    img = Image.open(io.BytesIO(image_bytes))
+    img: Image.Image = Image.open(io.BytesIO(image_bytes))
     w, h = img.size
     grad_color = _gradient_color(brand_colors)
     img = _add_gradient_overlay(img, grad_color, opacity=140, region="center")
@@ -348,7 +353,7 @@ def create_tiktok_cover(
     start_y = safe_center - total_h // 2
 
     for i, line in enumerate(lines):
-        bbox = font.getbbox(line)
+        bbox = font.getbbox(line)  # type: ignore[misc]
         text_w = bbox[2] - bbox[0]
         x = (w - text_w) // 2
         y = start_y + i * line_height
