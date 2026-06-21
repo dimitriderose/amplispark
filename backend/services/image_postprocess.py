@@ -120,7 +120,7 @@ def resize_to_aspect(image_bytes: bytes, aspect_ratio: str) -> bytes:
 
 def _draw_text_with_shadow(
     draw: ImageDraw.ImageDraw,
-    position: tuple[int, int],
+    position: tuple[int | float, int | float],
     text: str,
     font: ImageFont.FreeTypeFont,
     fill: tuple[int, int, int],
