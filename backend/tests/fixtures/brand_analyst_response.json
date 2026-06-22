@@ -1,0 +1,15 @@
+{
+  "business_name": "Test Brand",
+  "business_type": "service",
+  "industry": "technology",
+  "tone": "professional, confident, approachable",
+  "colors": ["#2563EB", "#1E40AF", "#DBEAFE"],
+  "target_audience": "developers and tech-savvy professionals aged 25-45",
+  "visual_style": "modern-tech",
+  "content_themes": ["tutorials", "product updates", "industry news", "best practices", "case studies"],
+  "competitors": ["Competitor A", "Competitor B"],
+  "image_style_directive": "clean, minimal, modern tech aesthetic with blue accents, sharp focus, professional studio lighting",
+  "caption_style_directive": "Short punchy sentences under 15 words. First-person perspective. Em dashes for asides. Conversational register.",
+  "image_generation_risk": "low",
+  "byop_recommendation": "AI-generated images work great for this business type. For best results, upload your own photos when you have them."
+}
