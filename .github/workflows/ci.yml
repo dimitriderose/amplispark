@@ -36,7 +36,7 @@ jobs:
           GCS_BUCKET_NAME: dummy
 
       - name: Tests + coverage
-        run: python -m pytest backend/tests/ -v --tb=short --cov=backend --cov-report=term-missing --cov-report=xml --cov-fail-under=0
+        run: python -m pytest backend/tests/ -v --tb=short --cov=backend --cov-report=term-missing --cov-report=xml --cov-fail-under=90
         env:
           GOOGLE_API_KEY: dummy
           FIREBASE_PROJECT_ID: dummy
@@ -86,3 +86,61 @@ jobs:
           VITE_FIREBASE_STORAGE_BUCKET: dummy
           VITE_FIREBASE_MESSAGING_SENDER_ID: dummy
           VITE_FIREBASE_APP_ID: dummy
+
+  frontend-coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: Coverage (≥90% threshold enforced)
+        run: npm run test:coverage
+        working-directory: frontend
+        env:
+          VITE_FIREBASE_API_KEY: dummy
+          VITE_FIREBASE_AUTH_DOMAIN: dummy
+          VITE_FIREBASE_PROJECT_ID: dummy
+          VITE_FIREBASE_STORAGE_BUCKET: dummy
+          VITE_FIREBASE_MESSAGING_SENDER_ID: dummy
+          VITE_FIREBASE_APP_ID: dummy
+
+      - name: Upload frontend coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: frontend/coverage/
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: Install e2e dependencies
+        run: npm ci
+        working-directory: e2e
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+        working-directory: e2e
+
+      - name: List Playwright tests (smoke check)
+        run: npx playwright test --list
+        working-directory: e2e

@@ -1,0 +1,32 @@
+[
+  {
+    "day_index": 0,
+    "platform": "instagram",
+    "pillar": "education",
+    "pillar_id": "series_0",
+    "content_theme": "3 ways to boost developer productivity",
+    "caption_hook": "Most developers waste 2 hours a day on this one thing.",
+    "key_message": "Small workflow changes compound into massive time savings.",
+    "image_prompt": "Overhead shot of a clean minimal developer desk with a laptop showing code, warm side lighting, brand blue accents in a coffee mug and notebook",
+    "hashtags": ["devproductivity", "coding", "softwaredev"],
+    "derivative_type": "carousel",
+    "event_anchor": null,
+    "cta_type": "engagement",
+    "suggested_time": "6:00 PM"
+  },
+  {
+    "day_index": 1,
+    "platform": "linkedin",
+    "pillar": "promotion",
+    "pillar_id": "series_1",
+    "content_theme": "How Test Brand accelerates development cycles",
+    "caption_hook": "Ship features 40% faster — here is exactly how.",
+    "key_message": "Test Brand's automation tools eliminate the repetitive tasks slowing your team down.",
+    "image_prompt": "Clean product dashboard screenshot mockup on a dark background, blue gradient accents, modern UI feel, professional studio lighting",
+    "hashtags": ["saas", "devtools", "productivity"],
+    "derivative_type": "original",
+    "event_anchor": null,
+    "cta_type": "conversion",
+    "suggested_time": "9:00 AM"
+  }
+]
