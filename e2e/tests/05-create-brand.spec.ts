@@ -67,20 +67,14 @@ test.describe('Create brand / onboard wizard', () => {
     })
 
     // Trigger the POST manually to verify mock works
-    await page.evaluate(async () => {
+    const result = await page.evaluate(async () => {
       const res = await fetch('/api/brands', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ business_name: 'Test', description: 'A test brand for e2e' }),
       })
-      const data = await res.json()
-      ;(window as unknown as Record<string, unknown>).__post_result__ = data
-    })
-
-    await page.waitForFunction(() => (window as unknown as Record<string, unknown>).__post_result__ !== undefined, { timeout: 5000 })
-    const result = await page.evaluate(
-      () => (window as unknown as Record<string, unknown>).__post_result__ as { brand_id: string },
-    )
+      return res.json() as Promise<{ brand_id: string }>
+    }) as { brand_id: string }
     expect(result.brand_id).toBe('mock-brand-xyz')
     expect(captured).not.toBeNull()
   })
@@ -88,9 +82,9 @@ test.describe('Create brand / onboard wizard', () => {
   test('wizard step indicator: landing page shows numbered steps', async ({ page }) => {
     await page.goto('/')
     // The landing page has a "How it works" section with steps 01, 02, 03
-    await expect(page.getByText('01')).toBeVisible()
-    await expect(page.getByText('02')).toBeVisible()
-    await expect(page.getByText('03')).toBeVisible()
+    await expect(page.locator('div').filter({ hasText: /^01$/ }).first()).toBeVisible()
+    await expect(page.locator('div').filter({ hasText: /^02$/ }).first()).toBeVisible()
+    await expect(page.locator('div').filter({ hasText: /^03$/ }).first()).toBeVisible()
   })
 
   test('landing page has a "Describe your brand" step', async ({ page }) => {

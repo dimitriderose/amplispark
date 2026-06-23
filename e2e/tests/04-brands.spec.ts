@@ -79,8 +79,8 @@ test.describe('Brands page', () => {
 
   test('landing page shows platform names', async ({ page }) => {
     await page.goto('/')
-    await expect(page.getByText('Instagram')).toBeVisible()
-    await expect(page.getByText('LinkedIn')).toBeVisible()
+    await expect(page.getByText('Instagram').first()).toBeVisible()
+    await expect(page.getByText('LinkedIn').first()).toBeVisible()
   })
 
   test('brands API returns brands with expected shape', async ({ page }) => {
@@ -100,17 +100,12 @@ test.describe('Brands page', () => {
     })
 
     await page.goto('/')
-    // Trigger the API by navigating to /brands (may redirect without real auth)
-    await page.evaluate(() => {
-      fetch('/api/brands?owner_uid=test').then(r => r.json()).then(d => {
-        ;(window as unknown as Record<string, unknown>).__api_result__ = d
-      })
-    })
-    await page.waitForFunction(() => (window as unknown as Record<string, unknown>).__api_result__ !== undefined, { timeout: 5000 })
+    // Trigger the API to verify our mock intercept works
+    const result = await page.evaluate(async () => {
+      const res = await fetch('/api/brands?owner_uid=test')
+      return await res.json()
+    }) as { brands: { brand_id: string }[] }
     expect(intercepted).toBe(true)
-    const result = await page.evaluate(
-      () => (window as unknown as Record<string, unknown>).__api_result__ as { brands: { brand_id: string }[] },
-    )
     expect(result.brands).toHaveLength(1)
     expect(result.brands[0].brand_id).toBe('b1')
   })
