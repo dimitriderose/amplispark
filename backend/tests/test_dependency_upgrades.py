@@ -10,13 +10,19 @@ Covers:
 - verify_ws_brand_owner: missing brand_id, brand not found, wrong owner, owner match
 """
 
+import importlib
 import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import status
-from fastapi.websockets import WebSocketDisconnect
+from fastapi import HTTPException, WebSocketException, status
 
+from backend.middleware import (
+    get_authenticated_uid,
+    get_ws_authenticated_uid,
+    verify_brand_owner,
+    verify_ws_brand_owner,
+)
 from backend.tests.conftest import TEST_BRAND_ID, TEST_UID
 
 UNCLAIMED_BRAND = {"brand_id": "unclaimed", "owner_uid": None}
@@ -34,8 +40,8 @@ class TestFirebaseAdminInitGuard:
         mock_firebase.get_app.side_effect = ValueError("no app")
 
         with patch.dict("sys.modules", {"firebase_admin": mock_firebase}):
-            import importlib
             import backend.middleware as mw
+
             importlib.reload(mw)
 
         mock_firebase.initialize_app.assert_called_once()
@@ -45,8 +51,8 @@ class TestFirebaseAdminInitGuard:
         mock_firebase.get_app.return_value = MagicMock()
 
         with patch.dict("sys.modules", {"firebase_admin": mock_firebase}):
-            import importlib
             import backend.middleware as mw
+
             importlib.reload(mw)
 
         mock_firebase.initialize_app.assert_not_called()
@@ -59,8 +65,6 @@ class TestFirebaseAdminInitGuard:
 
 class TestGetAuthenticatedUidExtended:
     async def test_verify_id_token_called_via_run_in_executor(self, mock_verify_token):
-        from backend.middleware import get_authenticated_uid
-
         request = MagicMock()
         request.headers = {"Authorization": "Bearer valid-token"}
         request.url.path = "/api/brands"
@@ -78,12 +82,7 @@ class TestGetAuthenticatedUidExtended:
         assert args[0] is None  # executor=None means default thread pool
 
     async def test_empty_bearer_token_raises_401(self, mock_verify_token):
-        from backend.middleware import get_authenticated_uid
-        from fastapi import HTTPException
-
-        mock_verify_token.verify_id_token.side_effect = (
-            mock_verify_token.InvalidIdTokenError()
-        )
+        mock_verify_token.verify_id_token.side_effect = mock_verify_token.InvalidIdTokenError()
 
         request = MagicMock()
         request.headers = {"Authorization": "Bearer "}
@@ -93,22 +92,16 @@ class TestGetAuthenticatedUidExtended:
             await get_authenticated_uid(request)
         assert exc_info.value.status_code == 401
 
-    async def test_generic_exception_does_not_leak_token_in_log(
-        self, mock_verify_token, caplog
-    ):
-        from backend.middleware import get_authenticated_uid
-
+    async def test_generic_exception_does_not_leak_token_in_log(self, mock_verify_token, caplog):
         secret_token = "supersecret.jwt.payload"
-        mock_verify_token.verify_id_token.side_effect = RuntimeError(
-            f"token={secret_token}"
-        )
+        mock_verify_token.verify_id_token.side_effect = RuntimeError(f"token={secret_token}")
 
         request = MagicMock()
         request.headers = {"Authorization": f"Bearer {secret_token}"}
         request.url.path = "/api/brands"
 
         with caplog.at_level(logging.WARNING, logger="backend.middleware"):
-            with pytest.raises(Exception):
+            with pytest.raises(HTTPException):
                 await get_authenticated_uid(request)
 
         for record in caplog.records:
@@ -124,9 +117,6 @@ class TestGetAuthenticatedUidExtended:
 class TestVerifyBrandOwnerWriteGuard:
     @pytest.mark.parametrize("method", ["PUT", "DELETE", "PATCH", "POST"])
     async def test_unclaimed_brand_blocks_unauthenticated_write_methods(self, method):
-        from backend.middleware import verify_brand_owner
-        from fastapi import HTTPException
-
         request = MagicMock()
         request.path_params = {"brand_id": "unclaimed"}
         request.method = method
@@ -139,8 +129,6 @@ class TestVerifyBrandOwnerWriteGuard:
 
     @pytest.mark.parametrize("method", ["GET", "HEAD", "OPTIONS"])
     async def test_unclaimed_brand_allows_unauthenticated_safe_methods(self, method):
-        from backend.middleware import verify_brand_owner
-
         request = MagicMock()
         request.path_params = {"brand_id": "unclaimed"}
         request.method = method
@@ -151,8 +139,6 @@ class TestVerifyBrandOwnerWriteGuard:
         assert result is None
 
     async def test_unclaimed_brand_allows_authenticated_write(self):
-        from backend.middleware import verify_brand_owner
-
         request = MagicMock()
         request.path_params = {"brand_id": "unclaimed"}
         request.method = "POST"
@@ -176,90 +162,52 @@ class TestGetWsAuthenticatedUid:
         return ws
 
     async def test_valid_auth_subprotocol_returns_uid(self, mock_verify_token):
-        from backend.middleware import get_ws_authenticated_uid
-
-        ws = self._make_websocket(f"auth.valid-token")
-
+        ws = self._make_websocket("auth.valid-token")
         uid = await get_ws_authenticated_uid(ws)
         assert uid == TEST_UID
 
     async def test_token_extracted_from_multiple_subprotocols(self, mock_verify_token):
-        from backend.middleware import get_ws_authenticated_uid
-
         ws = self._make_websocket("v1.protocol, auth.valid-token, other")
-
         uid = await get_ws_authenticated_uid(ws)
         assert uid == TEST_UID
 
     async def test_missing_auth_subprotocol_raises_1008(self, mock_verify_token):
-        from backend.middleware import get_ws_authenticated_uid
-        from fastapi.websockets import WebSocketDisconnect
-        from fastapi import WebSocketException
-
         ws = self._make_websocket("v1.protocol")
-
         with pytest.raises(WebSocketException) as exc_info:
             await get_ws_authenticated_uid(ws)
         assert exc_info.value.code == status.WS_1008_POLICY_VIOLATION
 
     async def test_empty_protocol_header_raises_1008(self, mock_verify_token):
-        from backend.middleware import get_ws_authenticated_uid
-        from fastapi import WebSocketException
-
         ws = self._make_websocket("")
-
         with pytest.raises(WebSocketException) as exc_info:
             await get_ws_authenticated_uid(ws)
         assert exc_info.value.code == status.WS_1008_POLICY_VIOLATION
 
     async def test_expired_token_raises_1008(self, mock_verify_token):
-        from backend.middleware import get_ws_authenticated_uid
-        from fastapi import WebSocketException
-
-        mock_verify_token.verify_id_token.side_effect = (
-            mock_verify_token.ExpiredIdTokenError()
-        )
+        mock_verify_token.verify_id_token.side_effect = mock_verify_token.ExpiredIdTokenError()
         ws = self._make_websocket("auth.expired-token")
-
         with pytest.raises(WebSocketException) as exc_info:
             await get_ws_authenticated_uid(ws)
         assert exc_info.value.code == status.WS_1008_POLICY_VIOLATION
         assert "expired" in exc_info.value.reason.lower()
 
     async def test_invalid_token_raises_1008(self, mock_verify_token):
-        from backend.middleware import get_ws_authenticated_uid
-        from fastapi import WebSocketException
-
-        mock_verify_token.verify_id_token.side_effect = (
-            mock_verify_token.InvalidIdTokenError()
-        )
+        mock_verify_token.verify_id_token.side_effect = mock_verify_token.InvalidIdTokenError()
         ws = self._make_websocket("auth.bad-token")
-
         with pytest.raises(WebSocketException) as exc_info:
             await get_ws_authenticated_uid(ws)
         assert exc_info.value.code == status.WS_1008_POLICY_VIOLATION
 
     async def test_generic_exception_raises_1008(self, mock_verify_token):
-        from backend.middleware import get_ws_authenticated_uid
-        from fastapi import WebSocketException
-
         mock_verify_token.verify_id_token.side_effect = RuntimeError("network error")
         ws = self._make_websocket("auth.some-token")
-
         with pytest.raises(WebSocketException) as exc_info:
             await get_ws_authenticated_uid(ws)
         assert exc_info.value.code == status.WS_1008_POLICY_VIOLATION
 
-    async def test_generic_exception_does_not_leak_token_in_log(
-        self, mock_verify_token, caplog
-    ):
-        from backend.middleware import get_ws_authenticated_uid
-        from fastapi import WebSocketException
-
+    async def test_generic_exception_does_not_leak_token_in_log(self, mock_verify_token, caplog):
         secret_token = "supersecret.ws.jwt"
-        mock_verify_token.verify_id_token.side_effect = RuntimeError(
-            f"token={secret_token}"
-        )
+        mock_verify_token.verify_id_token.side_effect = RuntimeError(f"token={secret_token}")
         ws = self._make_websocket(f"auth.{secret_token}")
 
         with caplog.at_level(logging.WARNING, logger="backend.middleware"):
@@ -284,23 +232,15 @@ class TestVerifyWsBrandOwner:
         return ws
 
     async def test_owner_match_returns_brand_with_uid(self):
-        from backend.middleware import verify_ws_brand_owner
-
         ws = self._make_websocket(TEST_BRAND_ID)
-
         with patch("backend.middleware.firestore_client") as mock_fc:
             mock_fc.get_brand = AsyncMock(return_value=dict(CLAIMED_BRAND))
             result = await verify_ws_brand_owner(ws, user_uid=TEST_UID)
-
         assert result["_authenticated_uid"] == TEST_UID
         assert result["brand_id"] == TEST_BRAND_ID
 
     async def test_wrong_owner_raises_1008(self):
-        from backend.middleware import verify_ws_brand_owner
-        from fastapi import WebSocketException
-
         ws = self._make_websocket(TEST_BRAND_ID)
-
         with patch("backend.middleware.firestore_client") as mock_fc:
             mock_fc.get_brand = AsyncMock(return_value=dict(CLAIMED_BRAND))
             with pytest.raises(WebSocketException) as exc_info:
@@ -308,11 +248,7 @@ class TestVerifyWsBrandOwner:
         assert exc_info.value.code == status.WS_1008_POLICY_VIOLATION
 
     async def test_brand_not_found_raises_1008(self):
-        from backend.middleware import verify_ws_brand_owner
-        from fastapi import WebSocketException
-
         ws = self._make_websocket("nonexistent")
-
         with patch("backend.middleware.firestore_client") as mock_fc:
             mock_fc.get_brand = AsyncMock(return_value=None)
             with pytest.raises(WebSocketException) as exc_info:
@@ -320,22 +256,14 @@ class TestVerifyWsBrandOwner:
         assert exc_info.value.code == status.WS_1008_POLICY_VIOLATION
 
     async def test_missing_brand_id_raises_1008(self):
-        from backend.middleware import verify_ws_brand_owner
-        from fastapi import WebSocketException
-
         ws = self._make_websocket(None)
-
         with pytest.raises(WebSocketException) as exc_info:
             await verify_ws_brand_owner(ws, user_uid=TEST_UID)
         assert exc_info.value.code == status.WS_1008_POLICY_VIOLATION
 
     async def test_unclaimed_brand_allows_access_and_attaches_uid(self):
-        from backend.middleware import verify_ws_brand_owner
-
         ws = self._make_websocket("unclaimed")
-
         with patch("backend.middleware.firestore_client") as mock_fc:
             mock_fc.get_brand = AsyncMock(return_value=dict(UNCLAIMED_BRAND))
             result = await verify_ws_brand_owner(ws, user_uid=TEST_UID)
-
         assert result["_authenticated_uid"] == TEST_UID
