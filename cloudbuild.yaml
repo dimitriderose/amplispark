@@ -78,7 +78,20 @@ steps:
       - 'push'
       - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/amplifi/amplifi:latest'
 
-  # Step 5: Deploy to Cloud Run
+  # Step 5a: Remove legacy plaintext secret env vars so --set-secrets can take over.
+  # Cloud Run rejects changing a var from plain env to secret-mounted in one step.
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'services'
+      - 'update'
+      - 'amplifi'
+      - '--region=${_REGION}'
+      - '--platform=managed'
+      - '--remove-env-vars=GOOGLE_API_KEY,RESEND_API_KEY,NOTION_CLIENT_SECRET,TOKEN_ENCRYPT_KEY'
+
+  # Step 5b: Deploy to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'gcloud'
     args:
