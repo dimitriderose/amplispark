@@ -9,7 +9,7 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: 'pip install -r ../backend/requirements.txt && uvicorn backend.server:app --host 0.0.0.0 --port 8080',
+      command: 'uvicorn backend.server:app --host 0.0.0.0 --port 8080',
       cwd: '..',
       port: 8080,
       timeout: 60_000,
