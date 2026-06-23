@@ -45,47 +45,10 @@ test.describe('Post actions', () => {
     await page.route('**firestore**', route => route.abort())
     await page.route('**googleapis.com**', route => route.abort())
 
-    // Mock posts endpoint
-    await page.route('**/api/posts**', route => {
-      route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ posts: MOCK_POSTS }),
-      })
-    })
-
-    // Mock individual post endpoints (approve, review)
-    await page.route('**/api/brands/*/posts/*/approve', route => {
-      route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ post_id: 'post-1', status: 'approved' }),
-      })
-    })
-
-    await page.route('**/api/brands/*/posts/*/review', route => {
-      route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ post_id: 'post-1', score: 92, feedback: 'Great post!' }),
-      })
-    })
-
-    // Mock plans endpoint
-    await page.route('**/api/brands/*/plans/**', route => {
-      const url = route.request().url()
-      if (url.match(/\/plans\/[^/]+$/)) {
-        route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify(MOCK_PLAN),
-        })
-      } else if (url.match(/\/plans$/)) {
-        route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({ plans: [MOCK_PLAN] }),
-        })
+    // Catch-all for remaining API calls — registered FIRST so specific routes (registered after) take priority (Playwright LIFO matching)
+    await page.route('**/api/**', route => {
+      if (!route.request().isNavigationRequest()) {
+        route.fulfill({ status: 200, contentType: 'application/json', body: '{}' })
       } else {
         route.continue()
       }
@@ -112,29 +75,60 @@ test.describe('Post actions', () => {
       }
     })
 
-    // Catch-all for remaining API calls
-    await page.route('**/api/**', route => {
-      if (!route.request().isNavigationRequest()) {
-        route.fulfill({ status: 200, contentType: 'application/json', body: '{}' })
+    // Mock plans endpoint
+    await page.route('**/api/brands/*/plans/**', route => {
+      const url = route.request().url()
+      if (url.match(/\/plans\/[^/]+$/)) {
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(MOCK_PLAN),
+        })
+      } else if (url.match(/\/plans$/)) {
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ plans: [MOCK_PLAN] }),
+        })
       } else {
         route.continue()
       }
+    })
+
+    // Mock individual post endpoints (approve, review)
+    await page.route('**/api/brands/*/posts/*/approve', route => {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ post_id: 'post-1', status: 'approved' }),
+      })
+    })
+
+    await page.route('**/api/brands/*/posts/*/review', route => {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ post_id: 'post-1', score: 92, feedback: 'Great post!' }),
+      })
+    })
+
+    // Mock posts endpoint
+    await page.route('**/api/posts**', route => {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ posts: MOCK_POSTS }),
+      })
     })
   })
 
   test('posts API mock returns post list with expected shape', async ({ page }) => {
     await page.goto('/')
 
-    await page.evaluate(async () => {
+    const result = await page.evaluate(async () => {
       const res = await fetch('/api/posts?brand_id=brand-abc')
-      const data = await res.json()
-      ;(window as unknown as Record<string, unknown>).__posts_result__ = data
+      return res.json()
     })
-
-    await page.waitForFunction(() => (window as unknown as Record<string, unknown>).__posts_result__ !== undefined, { timeout: 5000 })
-    const result = await page.evaluate(
-      () => (window as unknown as Record<string, unknown>).__posts_result__ as { posts: typeof MOCK_POSTS },
-    )
     expect(result.posts).toHaveLength(2)
     expect(result.posts[0].post_id).toBe('post-1')
     expect(result.posts[0].platform).toBe('Instagram')
@@ -144,16 +138,10 @@ test.describe('Post actions', () => {
   test('posts API mock: post has caption and platform fields', async ({ page }) => {
     await page.goto('/')
 
-    await page.evaluate(async () => {
+    const result = await page.evaluate(async () => {
       const res = await fetch('/api/posts?brand_id=brand-abc&plan_id=plan-xyz')
-      const data = await res.json()
-      ;(window as unknown as Record<string, unknown>).__posts_fields__ = data
+      return res.json()
     })
-
-    await page.waitForFunction(() => (window as unknown as Record<string, unknown>).__posts_fields__ !== undefined, { timeout: 5000 })
-    const result = await page.evaluate(
-      () => (window as unknown as Record<string, unknown>).__posts_fields__ as { posts: typeof MOCK_POSTS },
-    )
     const post = result.posts[0]
     expect(post).toHaveProperty('caption')
     expect(post).toHaveProperty('platform')
@@ -163,32 +151,20 @@ test.describe('Post actions', () => {
   test('approve endpoint mock returns approved status', async ({ page }) => {
     await page.goto('/')
 
-    await page.evaluate(async () => {
+    const result = await page.evaluate(async () => {
       const res = await fetch('/api/brands/brand-abc/posts/post-1/approve', { method: 'POST' })
-      const data = await res.json()
-      ;(window as unknown as Record<string, unknown>).__approve_result__ = data
+      return res.json()
     })
-
-    await page.waitForFunction(() => (window as unknown as Record<string, unknown>).__approve_result__ !== undefined, { timeout: 5000 })
-    const result = await page.evaluate(
-      () => (window as unknown as Record<string, unknown>).__approve_result__ as { status: string },
-    )
     expect(result.status).toBe('approved')
   })
 
   test('review endpoint mock returns score', async ({ page }) => {
     await page.goto('/')
 
-    await page.evaluate(async () => {
+    const result = await page.evaluate(async () => {
       const res = await fetch('/api/brands/brand-abc/posts/post-1/review', { method: 'POST' })
-      const data = await res.json()
-      ;(window as unknown as Record<string, unknown>).__review_result__ = data
+      return res.json()
     })
-
-    await page.waitForFunction(() => (window as unknown as Record<string, unknown>).__review_result__ !== undefined, { timeout: 5000 })
-    const result = await page.evaluate(
-      () => (window as unknown as Record<string, unknown>).__review_result__ as { score: number; feedback: string },
-    )
     expect(result.score).toBe(92)
     expect(result.feedback).toBe('Great post!')
   })

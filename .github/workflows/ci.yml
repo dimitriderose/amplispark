@@ -133,17 +133,13 @@ jobs:
           cache: npm
           cache-dependency-path: e2e/package-lock.json
 
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend
+
       - name: Install e2e dependencies
         run: npm ci
         working-directory: e2e
-
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install backend dependencies
-        run: pip install -r backend/requirements.txt
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
@@ -153,9 +149,6 @@ jobs:
         run: npx playwright test
         working-directory: e2e
         env:
-          GOOGLE_API_KEY: dummy
-          FIREBASE_PROJECT_ID: dummy
-          GCS_BUCKET_NAME: dummy
           VITE_FIREBASE_API_KEY: dummy
           VITE_FIREBASE_AUTH_DOMAIN: dummy
           VITE_FIREBASE_PROJECT_ID: dummy
