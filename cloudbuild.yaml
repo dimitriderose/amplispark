@@ -10,8 +10,8 @@
 #     --substitutions=_VITE_FIREBASE_API_KEY=...,_VITE_FIREBASE_AUTH_DOMAIN=...
 #
 # Sensitive keys (GOOGLE_API_KEY, RESEND_API_KEY, NOTION_CLIENT_SECRET,
-# TOKEN_ENCRYPT_KEY) are passed via Cloud Build substitutions sourced from
-# GitHub Secrets → .env → scripts/deploy.sh.
+# TOKEN_ENCRYPT_KEY) are injected by Cloud Run from GCP Secret Manager via
+# --set-secrets. They are NOT passed as substitutions or env vars.
 # ──────────────────────────────────────────────────────────────────────────────
 
 steps:
@@ -89,7 +89,8 @@ steps:
       - '--region=${_REGION}'
       - '--platform=managed'
       - '--allow-unauthenticated'
-      - '--update-env-vars=GCP_PROJECT_ID=${PROJECT_ID},GCS_BUCKET_NAME=${PROJECT_ID}-amplifi-assets,CORS_ORIGINS=${_CORS_ORIGINS},NOTION_CLIENT_ID=${_NOTION_CLIENT_ID},NOTION_REDIRECT_URI=${_NOTION_REDIRECT_URI},GEMINI_MODEL=gemini-3.5-flash,GOOGLE_API_KEY=${_GOOGLE_API_KEY},RESEND_API_KEY=${_RESEND_API_KEY},NOTION_CLIENT_SECRET=${_NOTION_CLIENT_SECRET},TOKEN_ENCRYPT_KEY=${_TOKEN_ENCRYPT_KEY}'
+      - '--update-env-vars=GCP_PROJECT_ID=${PROJECT_ID},GCS_BUCKET_NAME=${PROJECT_ID}-amplifi-assets,CORS_ORIGINS=${_CORS_ORIGINS},NOTION_CLIENT_ID=${_NOTION_CLIENT_ID},NOTION_REDIRECT_URI=${_NOTION_REDIRECT_URI},GEMINI_MODEL=gemini-3.5-flash'
+      - '--set-secrets=GOOGLE_API_KEY=GOOGLE_API_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,NOTION_CLIENT_SECRET=NOTION_CLIENT_SECRET:latest,TOKEN_ENCRYPT_KEY=TOKEN_ENCRYPT_KEY:latest'
       - '--memory=2Gi'
       - '--cpu=2'
       - '--timeout=300'
@@ -111,10 +112,6 @@ substitutions:
   _CORS_ORIGINS: ''
   _NOTION_CLIENT_ID: ''
   _NOTION_REDIRECT_URI: ''
-  _GOOGLE_API_KEY: ''
-  _RESEND_API_KEY: ''
-  _NOTION_CLIENT_SECRET: ''
-  _TOKEN_ENCRYPT_KEY: ''
 
 options:
   logging: CLOUD_LOGGING_ONLY

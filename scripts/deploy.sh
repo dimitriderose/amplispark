@@ -3,8 +3,10 @@
 # Amplispark — One-command deploy to Cloud Run
 #
 # Reads config from .env (gitignored), submits a Cloud Build job that builds
-# the Docker image, pushes to Artifact Registry, and deploys to Cloud Run
-# with all required environment variables.
+# the Docker image, pushes to Artifact Registry, and deploys to Cloud Run.
+# Runtime secrets (GOOGLE_API_KEY, RESEND_API_KEY, NOTION_CLIENT_SECRET,
+# TOKEN_ENCRYPT_KEY) are injected by Cloud Run from GCP Secret Manager —
+# they do not need to be present in .env for deployment.
 #
 # Prerequisites:
 #   1. gcloud CLI installed and authenticated
@@ -42,10 +44,6 @@ REQUIRED_VARS=(
   VITE_FIREBASE_MESSAGING_SENDER_ID
   VITE_FIREBASE_APP_ID
   GCP_PROJECT_ID
-  GOOGLE_API_KEY
-  RESEND_API_KEY
-  NOTION_CLIENT_SECRET
-  TOKEN_ENCRYPT_KEY
 )
 
 for var in "${REQUIRED_VARS[@]}"; do
@@ -77,10 +75,6 @@ _VITE_FIREBASE_APP_ID=$VITE_FIREBASE_APP_ID,\
 _CORS_ORIGINS=${CORS_ORIGINS:-},\
 _NOTION_CLIENT_ID=${NOTION_CLIENT_ID:-},\
 _NOTION_REDIRECT_URI=${NOTION_REDIRECT_URI:-},\
-_GOOGLE_API_KEY=$GOOGLE_API_KEY,\
-_RESEND_API_KEY=$RESEND_API_KEY,\
-_NOTION_CLIENT_SECRET=$NOTION_CLIENT_SECRET,\
-_TOKEN_ENCRYPT_KEY=$TOKEN_ENCRYPT_KEY,\
 _REGION=$REGION"
 
 # Get the live URL from the deployed service
