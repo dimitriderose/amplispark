@@ -117,10 +117,6 @@ jobs:
           CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}
           NOTION_CLIENT_ID=${{ secrets.NOTION_CLIENT_ID }}
           NOTION_REDIRECT_URI=${{ secrets.NOTION_REDIRECT_URI }}
-          GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}
-          RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}
-          NOTION_CLIENT_SECRET=${{ secrets.NOTION_CLIENT_SECRET }}
-          TOKEN_ENCRYPT_KEY=${{ secrets.TOKEN_ENCRYPT_KEY }}
           ENVEOF
 
       - name: Deploy via Cloud Build
