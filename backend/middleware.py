@@ -41,7 +41,8 @@ async def get_authenticated_uid(request: Request) -> str | None:
 
     token = auth_header[len("Bearer ") :]
     try:
-        decoded = firebase_auth.verify_id_token(token)
+        loop = asyncio.get_running_loop()
+        decoded = await loop.run_in_executor(None, firebase_auth.verify_id_token, token)
         uid = decoded["uid"]
         user_uid_var.set(uid)
         return uid
@@ -66,7 +67,8 @@ async def get_authenticated_uid(request: Request) -> str | None:
         )
         raise HTTPException(status_code=401, detail="Invalid authentication token") from err
     except Exception as e:
-        logger.warning("Firebase token verification failed: %s", e)
+        # Log only the exception type — never the message, which can contain token fragments
+        logger.warning("Firebase token verification failed: %s", type(e).__name__)
         logger.info(
             "metric",
             extra={
@@ -102,7 +104,12 @@ async def verify_brand_owner(
 
     owner = brand.get("owner_uid")
     if not owner:
-        # Brand is unclaimed — allow access
+        # Brand is unclaimed — still require authentication for write safety
+        if not user_uid and request.method not in ("GET", "HEAD", "OPTIONS"):
+            raise HTTPException(
+                status_code=401,
+                detail="Authentication required",
+            )
         return user_uid
 
     if not user_uid:
@@ -186,7 +193,8 @@ async def get_ws_authenticated_uid(websocket: WebSocket) -> str:
             code=status.WS_1008_POLICY_VIOLATION, reason="Invalid token"
         ) from err
     except Exception as e:
-        logger.warning("WebSocket Firebase token verification failed: %s", e)
+        # Log only the exception type — never the message, which can contain token fragments
+        logger.warning("WebSocket Firebase token verification failed: %s", type(e).__name__)
         logger.info(
             "metric",
             extra={
@@ -218,6 +226,8 @@ async def verify_ws_brand_owner(
     owner = brand.get("owner_uid")
     if owner and user_uid != owner:
         raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason="Access denied")
+    # owner_uid is not set — brand unclaimed; user_uid is always set here because
+    # get_ws_authenticated_uid raises before we reach this point if auth fails
 
     # Attach UID to brand dict so handler has both
     brand["_authenticated_uid"] = user_uid
