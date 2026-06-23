@@ -23,7 +23,9 @@ from backend.services import firestore_client
 logger = logging.getLogger(__name__)
 
 # Initialize Firebase Admin SDK (uses ADC or GOOGLE_APPLICATION_CREDENTIALS)
-if not firebase_admin._apps:
+try:
+    firebase_admin.get_app()
+except ValueError:
     firebase_admin.initialize_app()
 
 

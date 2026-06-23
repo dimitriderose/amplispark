@@ -16,7 +16,10 @@ _mock_firebase_app = MagicMock()
 patch_firebase_admin = patch.dict(
     "sys.modules",
     {
-        "firebase_admin": MagicMock(_apps={"[DEFAULT]": _mock_firebase_app}),
+        "firebase_admin": MagicMock(
+            get_app=MagicMock(return_value=_mock_firebase_app),
+            _apps={"[DEFAULT]": _mock_firebase_app},
+        ),
         "firebase_admin.auth": MagicMock(),
     },
 )
