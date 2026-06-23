@@ -23,7 +23,9 @@ from backend.services import firestore_client
 logger = logging.getLogger(__name__)
 
 # Initialize Firebase Admin SDK (uses ADC or GOOGLE_APPLICATION_CREDENTIALS)
-if not firebase_admin._apps:
+try:
+    firebase_admin.get_app()
+except ValueError:
     firebase_admin.initialize_app()
 
 
@@ -39,7 +41,8 @@ async def get_authenticated_uid(request: Request) -> str | None:
 
     token = auth_header[len("Bearer ") :]
     try:
-        decoded = firebase_auth.verify_id_token(token)
+        loop = asyncio.get_running_loop()
+        decoded = await loop.run_in_executor(None, firebase_auth.verify_id_token, token)
         uid = decoded["uid"]
         user_uid_var.set(uid)
         return uid
@@ -64,7 +67,7 @@ async def get_authenticated_uid(request: Request) -> str | None:
         )
         raise HTTPException(status_code=401, detail="Invalid authentication token") from err
     except Exception as e:
-        logger.warning("Firebase token verification failed: %s", e)
+        logger.warning("Firebase token verification failed: %s", type(e).__name__)
         logger.info(
             "metric",
             extra={
@@ -100,7 +103,11 @@ async def verify_brand_owner(
 
     owner = brand.get("owner_uid")
     if not owner:
-        # Brand is unclaimed — allow access
+        if not user_uid and request.method not in ("GET", "HEAD", "OPTIONS"):
+            raise HTTPException(
+                status_code=401,
+                detail="Authentication required",
+            )
         return user_uid
 
     if not user_uid:
@@ -184,7 +191,7 @@ async def get_ws_authenticated_uid(websocket: WebSocket) -> str:
             code=status.WS_1008_POLICY_VIOLATION, reason="Invalid token"
         ) from err
     except Exception as e:
-        logger.warning("WebSocket Firebase token verification failed: %s", e)
+        logger.warning("WebSocket Firebase token verification failed: %s", type(e).__name__)
         logger.info(
             "metric",
             extra={

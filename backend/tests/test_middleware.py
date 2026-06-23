@@ -162,11 +162,26 @@ class TestVerifyBrandOwner:
 
         request = MagicMock()
         request.path_params = {"brand_id": "unclaimed"}
+        request.method = "GET"  # Safe method — unclaimed brands allow unauthenticated reads
 
         with patch("backend.middleware.firestore_client") as mock_fc:
             mock_fc.get_brand = AsyncMock(return_value={"brand_id": "unclaimed", "owner_uid": None})
             result = await verify_brand_owner(request, user_uid=None)
         assert result is None
+
+    @pytest.mark.asyncio
+    async def test_unclaimed_brand_blocks_unauthenticated_writes(self):
+        from backend.middleware import verify_brand_owner
+
+        request = MagicMock()
+        request.path_params = {"brand_id": "unclaimed"}
+        request.method = "POST"  # Mutating method — must require auth even on unclaimed brand
+
+        with patch("backend.middleware.firestore_client") as mock_fc:
+            mock_fc.get_brand = AsyncMock(return_value={"brand_id": "unclaimed", "owner_uid": None})
+            with pytest.raises(HTTPException) as exc_info:
+                await verify_brand_owner(request, user_uid=None)
+        assert exc_info.value.status_code == 401
 
     @pytest.mark.asyncio
     async def test_no_brand_id_in_path_skips_check(self):
