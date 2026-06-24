@@ -19,6 +19,8 @@ export default function BrandsPage() {
   const navigate = useNavigate()
   const { uid, isSignedIn, loading } = useAuth()
   const [brands, setBrands] = useState<BrandSummary[]>([])
+  const [brandsLoading, setBrandsLoading] = useState(!!uid)
+  const [brandsError, setBrandsError] = useState<string | null>(null)
   const [page, setPage] = useState(0)
 
   useEffect(() => {
@@ -29,9 +31,22 @@ export default function BrandsPage() {
 
   useEffect(() => {
     if (!uid) return
+    let cancelled = false
     api.listBrands(uid)
-      .then((res) => setBrands((res as unknown as { brands: BrandSummary[] }).brands || []))
-      .catch((e) => { console.error('Failed to load brands:', e) })
+      .then((res) => {
+        if (cancelled) return
+        const data = res as { brands?: BrandSummary[] }
+        setBrands(data.brands || [])
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return
+        console.error('Failed to load brands:', e)
+        setBrandsError('Could not load your brands. Please try again.')
+      })
+      .finally(() => {
+        if (!cancelled) setBrandsLoading(false)
+      })
+    return () => { cancelled = true }
   }, [uid])
 
   if (loading) return null
@@ -85,7 +100,42 @@ export default function BrandsPage() {
             Your Brands
           </h3>
 
-          {brands.length === 0 ? (
+          {brandsLoading ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {[0, 1, 2].map((i) => (
+                <div
+                  key={i}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: '14px 16px',
+                    borderRadius: 12,
+                    border: `1px solid ${A.border}`,
+                    background: A.surface,
+                  }}
+                >
+                  <div style={{ width: 40, height: 40, borderRadius: 10, background: A.border, flexShrink: 0 }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ height: 14, borderRadius: 6, background: A.border, width: `${55 + i * 12}%`, marginBottom: 6 }} />
+                    <div style={{ height: 11, borderRadius: 6, background: A.border, width: `${30 + i * 8}%` }} />
+                  </div>
+                  <div style={{ height: 20, width: 52, borderRadius: 10, background: A.border }} />
+                </div>
+              ))}
+            </div>
+          ) : brandsError ? (
+            <div style={{
+              padding: 48,
+              borderRadius: 14,
+              border: `1px dashed ${A.border}`,
+              textAlign: 'center',
+            }}>
+              <p style={{ fontSize: 15, color: A.amber, marginBottom: 8 }}>
+                {brandsError}
+              </p>
+            </div>
+          ) : brands.length === 0 ? (
             <div style={{
               padding: 48,
               borderRadius: 14,

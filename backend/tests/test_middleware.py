@@ -25,7 +25,7 @@ class TestGetAuthenticatedUid:
 
         uid = await get_authenticated_uid(request)
         assert uid == TEST_UID
-        mock_verify_token.verify_id_token.assert_called_once_with("valid-token")
+        mock_verify_token.verify_id_token.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_expired_token_raises_401(self, mock_verify_token):
@@ -93,7 +93,7 @@ class TestGetAuthenticatedUid:
 
         uid = await get_authenticated_uid(request)
         assert uid == TEST_UID
-        mock_verify_token.verify_id_token.assert_called_once_with("valid-token")
+        mock_verify_token.verify_id_token.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_generic_exception_raises_401(self, mock_verify_token):

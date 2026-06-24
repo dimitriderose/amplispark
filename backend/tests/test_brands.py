@@ -72,6 +72,50 @@ class TestListBrandsEndpoint:
         response = client.get("/api/brands", headers=auth_headers)
         assert response.status_code == 422
 
+    def test_list_brands_returns_500_when_firestore_raises(self, mock_verify_token, auth_headers):
+        from fastapi.testclient import TestClient
+
+        from backend.server import app
+
+        with patch(_BRANDS_FC) as fc:
+            fc.list_brands_by_owner = AsyncMock(side_effect=Exception("Firestore down"))
+            response = TestClient(app, raise_server_exceptions=False).get(
+                "/api/brands", params={"owner_uid": TEST_UID}, headers=auth_headers
+            )
+        assert response.status_code == 500
+
+    def test_list_brands_returns_401_on_expired_token(self, mock_verify_token, mock_firestore):
+        from fastapi.testclient import TestClient
+
+        from backend.server import app
+
+        mock_verify_token.verify_id_token.side_effect = mock_verify_token.ExpiredIdTokenError(
+            "expired"
+        )
+        response = TestClient(app).get(
+            "/api/brands",
+            params={"owner_uid": TEST_UID},
+            headers={"Authorization": "Bearer expired-token"},
+        )
+        assert response.status_code == 401
+
+    def test_list_brands_pagination_offset(self, client, auth_headers, sample_brand):
+        brands = [
+            {**sample_brand, "brand_id": f"brand-{i}", "business_name": f"Brand {i}"}
+            for i in range(11)
+        ]
+        with patch(_BRANDS_FC) as fc:
+            fc.list_brands_by_owner = AsyncMock(return_value=brands)
+            response = client.get(
+                "/api/brands",
+                params={"owner_uid": TEST_UID, "limit": 5, "offset": 5},
+                headers=auth_headers,
+            )
+        assert response.status_code == 200
+        result = response.json()["brands"]
+        assert len(result) == 5
+        assert result[0]["brand_id"] == "brand-5"
+
 
 class TestCreateBrandEndpoint:
     """HTTP tests for POST /api/brands."""

@@ -50,12 +50,10 @@ class TestClaimBrand:
         doc_ref.update = MagicMock()
         mock_db.collection.return_value.document.return_value = doc_ref
 
-        # Mock transaction
         mock_txn = MagicMock()
         mock_txn.update = MagicMock()
         mock_db.transaction.return_value = mock_txn
 
-        # Mock async_transactional decorator to call inner function directly
         async def fake_transactional(fn):
             return await fn(mock_txn, doc_ref)
 
@@ -131,7 +129,7 @@ class TestBrandOperations:
         doc1 = _make_doc({"brand_id": "b1", "created_at": datetime(2024, 1, 2, tzinfo=UTC)})
         doc2 = _make_doc({"brand_id": "b2", "created_at": datetime(2024, 1, 1, tzinfo=UTC)})
         mock_db = _make_db()
-        mock_db.collection.return_value.where.return_value.get = AsyncMock(
+        mock_db.collection.return_value.where.return_value.order_by.return_value.get = AsyncMock(
             return_value=[doc1, doc2]
         )
         with patch("backend.services.firestore_client.get_client", return_value=mock_db):
@@ -139,16 +137,115 @@ class TestBrandOperations:
         assert len(brands) == 2
         assert brands[0]["brand_id"] == "b1"  # newest first
 
-    async def test_list_brands_by_owner_swallows_exception_and_returns_empty(self):
+    async def test_list_brands_by_owner_raises_on_unexpected_exception(self):
+        """Non-index errors must propagate so the router returns 500, not an empty list."""
         from backend.services import firestore_client
 
         mock_db = _make_db()
-        mock_db.collection.return_value.where.return_value.get = AsyncMock(
+        mock_db.collection.return_value.where.return_value.order_by.return_value.get = AsyncMock(
             side_effect=Exception("Firestore down")
         )
         with patch("backend.services.firestore_client.get_client", return_value=mock_db):
-            brands = await firestore_client.list_brands_by_owner("uid-1")
+            with pytest.raises(Exception, match="Firestore down"):
+                await firestore_client.list_brands_by_owner("uid-1")
+
+    async def test_list_brands_by_owner_returns_empty_on_missing_index(self):
+        """FailedPrecondition (missing composite index) degrades gracefully to []."""
+        from backend.services import firestore_client
+
+        class FailedPrecondition(Exception):
+            pass
+
+        mock_db = _make_db()
+        mock_db.collection.return_value.where.return_value.order_by.return_value.get = AsyncMock(
+            side_effect=FailedPrecondition("index not ready")
+        )
+        with patch("backend.services.firestore_client.get_client", return_value=mock_db):
+            brands = await firestore_client.list_brands_by_owner("uid-missing-index")
         assert brands == []
+
+    async def test_list_brands_by_owner_missing_index_logs_warning(self, caplog):
+        import logging
+
+        from backend.services import firestore_client
+
+        class FailedPrecondition(Exception):
+            pass
+
+        mock_db = _make_db()
+        mock_db.collection.return_value.where.return_value.order_by.return_value.get = AsyncMock(
+            side_effect=FailedPrecondition("index not ready")
+        )
+        with patch("backend.services.firestore_client.get_client", return_value=mock_db):
+            with caplog.at_level(logging.WARNING, logger="backend.services.firestore_client"):
+                await firestore_client.list_brands_by_owner("uid-warn")
+        assert any("composite index missing" in r.message for r in caplog.records)
+
+    async def test_list_brands_by_owner_safety_sort_none_created_at_sorts_last(self):
+        from backend.services import firestore_client
+
+        ts = datetime(2024, 6, 1, tzinfo=UTC)
+        doc_with_ts = _make_doc({"brand_id": "b-ts", "created_at": ts})
+        doc_none_ts = _make_doc({"brand_id": "b-none", "created_at": None})
+        mock_db = _make_db()
+        mock_db.collection.return_value.where.return_value.order_by.return_value.get = AsyncMock(
+            return_value=[doc_none_ts, doc_with_ts]
+        )
+        with patch("backend.services.firestore_client.get_client", return_value=mock_db):
+            brands = await firestore_client.list_brands_by_owner("uid-1")
+        assert len(brands) == 2
+        assert brands[0]["brand_id"] == "b-ts"
+        assert brands[1]["brand_id"] == "b-none"
+
+    async def test_list_brands_by_owner_all_none_created_at_returns_all(self):
+        from backend.services import firestore_client
+
+        docs = [_make_doc({"brand_id": f"b{i}", "created_at": None}) for i in range(3)]
+        mock_db = _make_db()
+        mock_db.collection.return_value.where.return_value.order_by.return_value.get = AsyncMock(
+            return_value=docs
+        )
+        with patch("backend.services.firestore_client.get_client", return_value=mock_db):
+            brands = await firestore_client.list_brands_by_owner("uid-1")
+        assert len(brands) == 3
+
+    async def test_list_brands_by_owner_single_result(self):
+        from backend.services import firestore_client
+
+        doc = _make_doc({"brand_id": "b1", "created_at": datetime(2024, 1, 1, tzinfo=UTC)})
+        mock_db = _make_db()
+        mock_db.collection.return_value.where.return_value.order_by.return_value.get = AsyncMock(
+            return_value=[doc]
+        )
+        with patch("backend.services.firestore_client.get_client", return_value=mock_db):
+            brands = await firestore_client.list_brands_by_owner("uid-1")
+        assert len(brands) == 1
+        assert brands[0]["brand_id"] == "b1"
+
+    async def test_list_brands_by_owner_empty_result(self):
+        from backend.services import firestore_client
+
+        mock_db = _make_db()
+        mock_db.collection.return_value.where.return_value.order_by.return_value.get = AsyncMock(
+            return_value=[]
+        )
+        with patch("backend.services.firestore_client.get_client", return_value=mock_db):
+            brands = await firestore_client.list_brands_by_owner("uid-no-brands")
+        assert brands == []
+
+    async def test_list_brands_by_owner_filters_out_none_dicts(self):
+        from backend.services import firestore_client
+
+        valid_doc = _make_doc({"brand_id": "b1", "created_at": datetime(2024, 1, 1, tzinfo=UTC)})
+        null_doc = _make_doc(data=None, exists=True)
+        mock_db = _make_db()
+        mock_db.collection.return_value.where.return_value.order_by.return_value.get = AsyncMock(
+            return_value=[valid_doc, null_doc]
+        )
+        with patch("backend.services.firestore_client.get_client", return_value=mock_db):
+            brands = await firestore_client.list_brands_by_owner("uid-1")
+        assert len(brands) == 1
+        assert brands[0]["brand_id"] == "b1"
 
     async def test_update_brand_writes_updated_at(self):
         from backend.services import firestore_client

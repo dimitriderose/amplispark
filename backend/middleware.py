@@ -22,11 +22,13 @@ from backend.services import firestore_client
 
 logger = logging.getLogger(__name__)
 
-# Initialize Firebase Admin SDK (uses ADC or GOOGLE_APPLICATION_CREDENTIALS)
 try:
     firebase_admin.get_app()
 except ValueError:
-    firebase_admin.initialize_app()
+    import os as _os
+
+    _project = _os.environ.get("GOOGLE_CLOUD_PROJECT") or _os.environ.get("GCLOUD_PROJECT")
+    firebase_admin.initialize_app(options={"projectId": _project} if _project else None)
 
 
 async def get_authenticated_uid(request: Request) -> str | None:
@@ -42,7 +44,9 @@ async def get_authenticated_uid(request: Request) -> str | None:
     token = auth_header[len("Bearer ") :]
     try:
         loop = asyncio.get_running_loop()
-        decoded = await loop.run_in_executor(None, firebase_auth.verify_id_token, token)
+        decoded = await loop.run_in_executor(
+            None, lambda t: firebase_auth.verify_id_token(t, clock_skew_seconds=60), token
+        )
         uid = decoded["uid"]
         user_uid_var.set(uid)
         return uid
@@ -160,7 +164,9 @@ async def get_ws_authenticated_uid(websocket: WebSocket) -> str:
 
     try:
         loop = asyncio.get_running_loop()
-        decoded = await loop.run_in_executor(None, firebase_auth.verify_id_token, token)
+        decoded = await loop.run_in_executor(
+            None, lambda t: firebase_auth.verify_id_token(t, clock_skew_seconds=60), token
+        )
         uid = decoded["uid"]
         user_uid_var.set(uid)
         return uid

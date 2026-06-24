@@ -213,11 +213,10 @@ describe('BrandsPage', () => {
 
     renderPage()
 
-    // Should still render the page with empty brands (no crash)
     await waitFor(() => {
       expect(screen.getByText('Create Your Brand')).toBeInTheDocument()
     })
-    expect(screen.getByText('No brands yet')).toBeInTheDocument()
+    expect(screen.getByText('Could not load your brands. Please try again.')).toBeInTheDocument()
   })
 
   it('brand card hover events do not throw', async () => {

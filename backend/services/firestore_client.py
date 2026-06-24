@@ -45,18 +45,42 @@ async def get_brand(brand_id: str) -> dict | None:
 
 
 async def list_brands_by_owner(owner_uid: str) -> list:
-    """Return all brands owned by a given anonymous UID, newest first."""
+    """Return all brands owned by a given UID, newest first."""
+    logger.info("list_brands_by_owner: fetching brands for owner_uid=%s", owner_uid)
     db = get_client()
     try:
         docs = await (
-            db.collection("brands").where(filter=FieldFilter("owner_uid", "==", owner_uid)).get()
+            db.collection("brands")
+            .where(filter=FieldFilter("owner_uid", "==", owner_uid))
+            .order_by("created_at", direction="DESCENDING")
+            .get()
         )
         brands = [d for d in (doc.to_dict() for doc in docs) if d is not None]
-        brands.sort(key=lambda b: b.get("created_at", ""), reverse=True)
+        brands.sort(
+            key=lambda b: b.get("created_at") or datetime.min.replace(tzinfo=UTC),
+            reverse=True,
+        )
         return brands
-    except Exception as e:
-        logger.error("list_brands_by_owner failed: %s", e)
-        return []
+    except Exception as exc:
+        exc_type = type(exc).__name__
+        is_missing_index = (
+            "FailedPrecondition" in exc_type or "failed precondition" in str(exc).lower()
+        )
+        if is_missing_index:
+            logger.warning(
+                "list_brands_by_owner: composite index missing for owner_uid=%s — "
+                "returning []. Create index: owner_uid ASC, created_at DESC. (%s)",
+                owner_uid,
+                exc,
+            )
+            return []
+        logger.error(
+            "list_brands_by_owner: unexpected error for owner_uid=%s (%s: %s)",
+            owner_uid,
+            exc_type,
+            exc,
+        )
+        raise
 
 
 async def claim_brand(brand_id: str, owner_uid: str) -> bool:
@@ -150,10 +174,10 @@ async def list_plans(brand_id: str) -> list:
         db.collection("brands")
         .document(brand_id)
         .collection("content_plans")
-        .order_by("created_at", direction="DESCENDING")
+        .order_by("created_at", direction=firestore.Query.DESCENDING)
         .get()
     )
-    return [d.to_dict() for d in docs]
+    return [d for d in (doc.to_dict() for doc in docs) if d is not None]
 
 
 async def get_plan(plan_id: str, brand_id: str) -> dict | None:
