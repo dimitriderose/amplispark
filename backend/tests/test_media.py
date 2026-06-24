@@ -686,6 +686,436 @@ class TestResetPostMedia:
         assert response.status_code == 422
 
 
+class TestEditPostMediaThumbnailAndSlide:
+    """Tests for thumbnail editing, slide editing, and video post editing paths in edit-media."""
+
+    TEST_POST_ID = "test-post-id-789"
+
+    def test_edit_thumbnail_returns_new_signed_url(self, client, auth_headers, sample_brand):
+        post = {
+            "post_id": self.TEST_POST_ID,
+            "brand_id": TEST_BRAND_ID,
+            "platform": "instagram",
+            "status": "complete",
+            "caption": "Caption",
+            "thumbnail_gcs_uri": "gs://bucket/brands/test/thumb.png",
+            "edit_count": 0,
+        }
+        with (
+            patch(_MEDIA_FC) as fc,
+            patch(_MIDDLEWARE_FC) as mw_fc,
+            patch(
+                "backend.agents.image_editor.edit_image",
+                new=AsyncMock(return_value="gs://bucket/brands/test/thumb_edited.png"),
+            ),
+            patch(
+                "backend.routers.media.get_signed_url",
+                new=AsyncMock(return_value="https://signed.example.com/thumb_edited.png"),
+            ),
+            patch("backend.routers.media.get_genai_client", return_value=MagicMock()),
+            patch("backend.platforms.get", return_value=MagicMock(image_aspect="1:1")),
+        ):
+            fc.get_brand = AsyncMock(return_value=sample_brand)
+            fc.get_post = AsyncMock(return_value=post)
+            fc.update_post = AsyncMock()
+            mw_fc.get_brand = AsyncMock(return_value=sample_brand)
+            response = client.post(
+                f"/api/brands/{TEST_BRAND_ID}/posts/{self.TEST_POST_ID}/edit-media",
+                json={"edit_prompt": "Make it darker", "target": "thumbnail"},
+                headers=auth_headers,
+            )
+        assert response.status_code == 200
+        assert response.json()["image_url"] == "https://signed.example.com/thumb_edited.png"
+        update_args = fc.update_post.call_args_list
+        written = update_args[-1][0][2]
+        assert "thumbnail_gcs_uri" in written
+
+    def test_edit_thumbnail_returns_422_when_no_thumbnail_gcs_uri(
+        self, client, auth_headers, sample_brand
+    ):
+        post = {
+            "post_id": self.TEST_POST_ID,
+            "brand_id": TEST_BRAND_ID,
+            "platform": "instagram",
+            "status": "complete",
+            "caption": "Caption",
+            "image_gcs_uri": "gs://bucket/brands/test/img.png",
+            "edit_count": 0,
+        }
+        with (
+            patch(_MEDIA_FC) as fc,
+            patch(_MIDDLEWARE_FC) as mw_fc,
+        ):
+            fc.get_brand = AsyncMock(return_value=sample_brand)
+            fc.get_post = AsyncMock(return_value=post)
+            mw_fc.get_brand = AsyncMock(return_value=sample_brand)
+            response = client.post(
+                f"/api/brands/{TEST_BRAND_ID}/posts/{self.TEST_POST_ID}/edit-media",
+                json={"edit_prompt": "Crop it", "target": "thumbnail"},
+                headers=auth_headers,
+            )
+        assert response.status_code == 422
+        assert "thumbnail" in response.json()["detail"].lower()
+
+    def test_edit_carousel_slide_by_index(self, client, auth_headers, sample_brand):
+        post = {
+            "post_id": self.TEST_POST_ID,
+            "brand_id": TEST_BRAND_ID,
+            "platform": "instagram",
+            "status": "complete",
+            "caption": "Carousel",
+            "image_gcs_uris": ["gs://bucket/s0.png", "gs://bucket/s1.png"],
+            "edit_count": 0,
+        }
+        with (
+            patch(_MEDIA_FC) as fc,
+            patch(_MIDDLEWARE_FC) as mw_fc,
+            patch(
+                "backend.agents.image_editor.edit_image",
+                new=AsyncMock(return_value="gs://bucket/s1_edited.png"),
+            ),
+            patch(
+                "backend.routers.media.get_signed_url",
+                new=AsyncMock(return_value="https://signed.example.com/s1_edited.png"),
+            ),
+            patch("backend.routers.media.get_genai_client", return_value=MagicMock()),
+            patch("backend.platforms.get", return_value=MagicMock(image_aspect="1:1")),
+        ):
+            fc.get_brand = AsyncMock(return_value=sample_brand)
+            fc.get_post = AsyncMock(return_value=post)
+            fc.update_post = AsyncMock()
+            mw_fc.get_brand = AsyncMock(return_value=sample_brand)
+            response = client.post(
+                f"/api/brands/{TEST_BRAND_ID}/posts/{self.TEST_POST_ID}/edit-media",
+                json={"edit_prompt": "Brighten slide 1", "slide_index": 1},
+                headers=auth_headers,
+            )
+        assert response.status_code == 200
+        update_args = fc.update_post.call_args_list[-1][0][2]
+        assert "image_gcs_uris" in update_args
+        assert update_args["image_gcs_uris"][1] == "gs://bucket/s1_edited.png"
+
+    def test_edit_video_post_regenerates_via_veo(self, client, auth_headers, sample_brand):
+        post = {
+            "post_id": self.TEST_POST_ID,
+            "brand_id": TEST_BRAND_ID,
+            "platform": "instagram",
+            "status": "complete",
+            "caption": "Video caption",
+            "image_gcs_uri": None,
+            "video": {
+                "url": "https://example.com/video.mp4",
+                "video_gcs_uri": "gs://bucket/video.mp4",
+                "tier": "fast",
+            },
+            "edit_count": 0,
+        }
+        with (
+            patch(_MEDIA_FC) as fc,
+            patch(_MIDDLEWARE_FC) as mw_fc,
+            patch(
+                "backend.routers.media.generate_video_clip",
+                new=AsyncMock(
+                    return_value={
+                        "video_url": "https://example.com/video_edited.mp4",
+                        "video_gcs_uri": "gs://bucket/video_edited.mp4",
+                        "model": "veo-3.1",
+                    }
+                ),
+            ),
+        ):
+            fc.get_brand = AsyncMock(return_value=sample_brand)
+            fc.get_post = AsyncMock(return_value=post)
+            fc.update_post = AsyncMock()
+            mw_fc.get_brand = AsyncMock(return_value=sample_brand)
+            response = client.post(
+                f"/api/brands/{TEST_BRAND_ID}/posts/{self.TEST_POST_ID}/edit-media",
+                json={"edit_prompt": "Make it more dramatic"},
+                headers=auth_headers,
+            )
+        assert response.status_code == 200
+        assert "video_edited" in response.json()["image_url"]
+
+    def test_edit_video_post_raises_500_when_veo_fails(self, client, auth_headers, sample_brand):
+        post = {
+            "post_id": self.TEST_POST_ID,
+            "brand_id": TEST_BRAND_ID,
+            "platform": "instagram",
+            "status": "complete",
+            "caption": "Video caption",
+            "image_gcs_uri": None,
+            "video": {
+                "url": "https://example.com/video.mp4",
+                "video_gcs_uri": "gs://bucket/video.mp4",
+                "tier": "fast",
+            },
+            "edit_count": 0,
+        }
+        with (
+            patch(_MEDIA_FC) as fc,
+            patch(_MIDDLEWARE_FC) as mw_fc,
+            patch(
+                "backend.routers.media.generate_video_clip",
+                new=AsyncMock(side_effect=RuntimeError("Veo exploded")),
+            ),
+        ):
+            fc.get_brand = AsyncMock(return_value=sample_brand)
+            fc.get_post = AsyncMock(return_value=post)
+            fc.update_post = AsyncMock()
+            mw_fc.get_brand = AsyncMock(return_value=sample_brand)
+            response = client.post(
+                f"/api/brands/{TEST_BRAND_ID}/posts/{self.TEST_POST_ID}/edit-media",
+                json={"edit_prompt": "Make it dramatic"},
+                headers=auth_headers,
+            )
+        assert response.status_code == 500
+
+    def test_edit_image_raises_500_when_agent_fails(self, client, auth_headers, sample_brand):
+        post = {
+            "post_id": self.TEST_POST_ID,
+            "brand_id": TEST_BRAND_ID,
+            "platform": "instagram",
+            "status": "complete",
+            "caption": "Caption",
+            "image_gcs_uri": "gs://bucket/img.png",
+            "edit_count": 0,
+        }
+        with (
+            patch(_MEDIA_FC) as fc,
+            patch(_MIDDLEWARE_FC) as mw_fc,
+            patch(
+                "backend.agents.image_editor.edit_image",
+                new=AsyncMock(side_effect=RuntimeError("Gemini failed")),
+            ),
+            patch("backend.routers.media.get_genai_client", return_value=MagicMock()),
+            patch("backend.platforms.get", return_value=MagicMock(image_aspect="1:1")),
+        ):
+            fc.get_brand = AsyncMock(return_value=sample_brand)
+            fc.get_post = AsyncMock(return_value=post)
+            fc.update_post = AsyncMock()
+            mw_fc.get_brand = AsyncMock(return_value=sample_brand)
+            response = client.post(
+                f"/api/brands/{TEST_BRAND_ID}/posts/{self.TEST_POST_ID}/edit-media",
+                json={"edit_prompt": "Make it brighter"},
+                headers=auth_headers,
+            )
+        assert response.status_code == 500
+
+
+class TestStartVideoGenerationWithHeroImage:
+    """Tests for start_video_generation with existing image_gcs_uri."""
+
+    def test_returns_500_when_hero_image_download_fails(
+        self, client, auth_headers, sample_post, sample_brand
+    ):
+        sample_post["image_gcs_uri"] = "gs://bucket/hero.png"
+
+        with (
+            patch(_MEDIA_FC) as fc,
+            patch(_MIDDLEWARE_FC) as mw_fc,
+            patch(
+                "backend.routers.media.bt.budget_tracker.can_generate_video",
+                new=AsyncMock(return_value=True),
+            ),
+            patch(
+                "backend.routers.media.download_gcs_uri",
+                new=AsyncMock(side_effect=RuntimeError("GCS error")),
+            ),
+        ):
+            fc.get_post = AsyncMock(return_value=sample_post)
+            fc.get_brand = AsyncMock(return_value=sample_brand)
+            mw_fc.get_brand = AsyncMock(return_value=sample_brand)
+
+            response = client.post(
+                f"/api/posts/{sample_post['post_id']}/generate-video",
+                params={"brand_id": TEST_BRAND_ID, "tier": "fast"},
+                headers=auth_headers,
+            )
+
+        assert response.status_code == 500
+
+    def test_downloads_hero_image_and_queues_job(
+        self, client, auth_headers, sample_post, sample_brand
+    ):
+        sample_post["image_gcs_uri"] = "gs://bucket/hero.png"
+        mock_task = MagicMock()
+        mock_task.add_done_callback = MagicMock()
+
+        with (
+            patch(_MEDIA_FC) as fc,
+            patch(_MIDDLEWARE_FC) as mw_fc,
+            patch(
+                "backend.routers.media.bt.budget_tracker.can_generate_video",
+                new=AsyncMock(return_value=True),
+            ),
+            patch(
+                "backend.routers.media.download_gcs_uri",
+                new=AsyncMock(return_value=b"\xff\xd8\xff" + b"\x00" * 50),
+            ),
+            patch("backend.routers.media.asyncio.create_task", return_value=mock_task),
+        ):
+            fc.get_post = AsyncMock(return_value=sample_post)
+            fc.get_brand = AsyncMock(return_value=sample_brand)
+            fc.create_video_job = AsyncMock(return_value="job-id-hero")
+            mw_fc.get_brand = AsyncMock(return_value=sample_brand)
+
+            response = client.post(
+                f"/api/posts/{sample_post['post_id']}/generate-video",
+                params={"brand_id": TEST_BRAND_ID, "tier": "fast"},
+                headers=auth_headers,
+            )
+
+        assert response.status_code == 200
+        assert response.json()["job_id"] == "job-id-hero"
+
+
+class TestRunVideoGenerationBackgroundTask:
+    """Unit tests for _run_video_generation background task."""
+
+    async def test_successful_generation_updates_firestore(self, sample_post, sample_brand):
+        import backend.routers.media as media_module
+        from backend.routers.media import _run_video_generation
+        from backend.tests.conftest import TEST_BRAND_ID
+
+        video_result = {
+            "video_url": "https://example.com/video.mp4",
+            "video_gcs_uri": "gs://bucket/video.mp4",
+            "model": "veo-3.1",
+        }
+
+        mock_fc = MagicMock()
+        mock_fc.update_video_job = AsyncMock()
+        mock_fc.update_post = AsyncMock()
+
+        with (
+            patch.object(media_module, "firestore_client", mock_fc),
+            patch.object(media_module, "generate_video_clip", AsyncMock(return_value=video_result)),
+            patch("backend.routers.media.bt.budget_tracker.record_video", new=AsyncMock()),
+        ):
+            await _run_video_generation(
+                "job-id-1", sample_post["post_id"], TEST_BRAND_ID, None, sample_post, sample_brand, "fast"
+            )
+
+        mock_fc.update_video_job.assert_called()
+        mock_fc.update_post.assert_called()
+
+    async def test_failed_generation_marks_job_failed(self, sample_post, sample_brand):
+        import backend.routers.media as media_module
+        from backend.routers.media import _run_video_generation
+        from backend.tests.conftest import TEST_BRAND_ID
+
+        mock_fc = MagicMock()
+        mock_fc.update_video_job = AsyncMock()
+        mock_fc.update_post = AsyncMock()
+
+        with (
+            patch.object(media_module, "firestore_client", mock_fc),
+            patch.object(media_module, "generate_video_clip", AsyncMock(side_effect=RuntimeError("Veo error"))),
+        ):
+            await _run_video_generation(
+                "job-id-1", sample_post["post_id"], TEST_BRAND_ID, None, sample_post, sample_brand, "fast"
+            )
+
+        calls = [str(c) for c in mock_fc.update_video_job.call_args_list]
+        assert any("failed" in c for c in calls)
+
+
+class TestRunVideoRepurposingBackgroundTask:
+    """Unit tests for _run_video_repurposing background task."""
+
+    async def test_successful_repurposing_uploads_clips_and_completes(self, sample_brand):
+        import backend.routers.media as media_module
+        from backend.routers.media import _run_video_repurposing
+        from backend.tests.conftest import TEST_BRAND_ID
+
+        clip_result = [
+            {
+                "platform": "instagram",
+                "duration_seconds": 30,
+                "start_time": 0,
+                "end_time": 30,
+                "hook": "Great hook",
+                "suggested_caption": "Caption",
+                "reason": "Good clip",
+                "content_theme": "education",
+                "clip_bytes": b"\x00" * 100,
+                "filename": "clip_01.mp4",
+            }
+        ]
+
+        mock_fc = MagicMock()
+        mock_fc.update_repurpose_job = AsyncMock()
+
+        with (
+            patch.object(media_module, "firestore_client", mock_fc),
+            patch(
+                "backend.agents.video_repurpose_agent.analyze_and_repurpose",
+                new=AsyncMock(return_value=clip_result),
+            ),
+            patch(
+                "backend.services.storage_client.download_gcs_uri",
+                new=AsyncMock(return_value=b"\x00" * 1000),
+            ),
+            patch.object(media_module, "upload_repurposed_clip", AsyncMock(return_value="gs://bucket/clip_01.mp4")),
+        ):
+            await _run_video_repurposing(
+                "job-repurpose-1", TEST_BRAND_ID, "gs://bucket/source.mp4", sample_brand
+            )
+
+        calls = [str(c) for c in mock_fc.update_repurpose_job.call_args_list]
+        assert any("complete" in c for c in calls)
+
+    async def test_repurposing_failure_marks_job_failed(self, sample_brand):
+        import backend.routers.media as media_module
+        from backend.routers.media import _run_video_repurposing
+        from backend.tests.conftest import TEST_BRAND_ID
+
+        mock_fc = MagicMock()
+        mock_fc.update_repurpose_job = AsyncMock()
+
+        with (
+            patch.object(media_module, "firestore_client", mock_fc),
+            patch(
+                "backend.services.storage_client.download_gcs_uri",
+                new=AsyncMock(side_effect=RuntimeError("Download failed")),
+            ),
+        ):
+            await _run_video_repurposing(
+                "job-repurpose-1", TEST_BRAND_ID, "gs://bucket/source.mp4", sample_brand
+            )
+
+        calls = [str(c) for c in mock_fc.update_repurpose_job.call_args_list]
+        assert any("failed" in c for c in calls)
+
+    def test_upload_video_accepts_mov_extension(self, client, auth_headers, sample_brand):
+        mp4_bytes = _make_mp4_header()
+        mock_task = MagicMock()
+        mock_task.add_done_callback = MagicMock()
+
+        with (
+            patch(_MEDIA_FC) as fc,
+            patch(_MIDDLEWARE_FC) as mw_fc,
+            patch(
+                "backend.routers.media.upload_raw_video_source",
+                new=AsyncMock(return_value="gs://bucket/raw/job/video.mov"),
+            ),
+            patch("backend.routers.media.asyncio.create_task", return_value=mock_task),
+        ):
+            fc.get_brand = AsyncMock(return_value=sample_brand)
+            fc.create_repurpose_job = AsyncMock(return_value="repurpose-job-id")
+            mw_fc.get_brand = AsyncMock(return_value=sample_brand)
+
+            response = client.post(
+                f"/api/brands/{TEST_BRAND_ID}/video-repurpose",
+                headers=auth_headers,
+                files={"file": ("test.mov", io.BytesIO(mp4_bytes), "video/quicktime")},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "job_id" in data
+
+
 class TestIsValidVideoHeader:
     """Unit tests for _is_valid_video_header helper."""
 
