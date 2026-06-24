@@ -147,14 +147,15 @@ test.describe('Integrations', () => {
   })
 
   test('dashboard connections tab renders (protected, redirects to / without auth)', async ({ page }) => {
-    await page.goto('/dashboard/brand-int?tab=connections', { waitUntil: 'networkidle' })
-    await expect(page.locator('body')).toBeVisible()
+    await page.goto('/dashboard/brand-int?tab=connections')
+    await page.waitForSelector('h1, h2', { timeout: 15000 })
     const heading = page.locator('h1, h2').first()
     await expect(heading).toBeVisible()
   })
 
   test('notion callback page redirects gracefully', async ({ page }) => {
-    await page.goto('/auth/notion/callback?code=mock-code&state=mock-state', { waitUntil: 'networkidle' })
+    await page.goto('/auth/notion/callback?code=mock-code&state=mock-state')
+    await page.waitForSelector('h1, nav', { timeout: 15000 })
     await expect(page.locator('body')).toBeVisible()
   })
 })

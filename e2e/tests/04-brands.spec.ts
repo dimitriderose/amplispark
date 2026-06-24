@@ -63,19 +63,20 @@ test.describe('Brands page', () => {
   })
 
   test('brands page renders the Create Your Brand section', async ({ page }) => {
-    await page.goto('/brands', { waitUntil: 'networkidle' })
-    await expect(page.locator('body')).toBeVisible()
-    const heading = page.locator('h1, h2').first()
-    await expect(heading).toBeVisible()
+    await page.goto('/brands')
+    await page.waitForSelector('h1, h2', { timeout: 15000 })
+    await expect(page.locator('h1, h2').first()).toBeVisible()
   })
 
   test('landing page has Get Started button', async ({ page }) => {
-    await page.goto('/', { waitUntil: 'networkidle' })
+    await page.goto('/')
+    await page.waitForSelector('h1', { timeout: 15000 })
     await expect(page.getByRole('button', { name: /Get Started/i }).first()).toBeVisible()
   })
 
   test('landing page shows platform names', async ({ page }) => {
-    await page.goto('/', { waitUntil: 'networkidle' })
+    await page.goto('/')
+    await page.waitForSelector('h1', { timeout: 15000 })
     await expect(page.getByText('Instagram').first()).toBeVisible()
     await expect(page.getByText('LinkedIn').first()).toBeVisible()
   })

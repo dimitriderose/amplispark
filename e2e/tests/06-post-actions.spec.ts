@@ -170,14 +170,15 @@ test.describe('Post actions', () => {
   })
 
   test('export page renders without crashing (protected, redirects to /)', async ({ page }) => {
-    await page.goto('/export/brand-abc?plan_id=plan-xyz', { waitUntil: 'networkidle' })
-    await expect(page.locator('body')).toBeVisible()
+    await page.goto('/export/brand-abc?plan_id=plan-xyz')
+    await page.waitForSelector('h1, h2', { timeout: 15000 })
     const heading = page.locator('h1, h2').first()
     await expect(heading).toBeVisible()
   })
 
   test('landing page hero heading is present', async ({ page }) => {
-    await page.goto('/', { waitUntil: 'networkidle' })
+    await page.goto('/')
+    await page.waitForSelector('h1', { timeout: 15000 })
     await expect(page.locator('h1')).toBeVisible()
   })
 })
