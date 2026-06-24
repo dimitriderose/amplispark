@@ -993,7 +993,13 @@ class TestRunVideoGenerationBackgroundTask:
             patch("backend.routers.media.bt.budget_tracker.record_video", new=AsyncMock()),
         ):
             await _run_video_generation(
-                "job-id-1", sample_post["post_id"], TEST_BRAND_ID, None, sample_post, sample_brand, "fast"
+                "job-id-1",
+                sample_post["post_id"],
+                TEST_BRAND_ID,
+                None,
+                sample_post,
+                sample_brand,
+                "fast",
             )
 
         mock_fc.update_video_job.assert_called()
@@ -1010,10 +1016,20 @@ class TestRunVideoGenerationBackgroundTask:
 
         with (
             patch.object(media_module, "firestore_client", mock_fc),
-            patch.object(media_module, "generate_video_clip", AsyncMock(side_effect=RuntimeError("Veo error"))),
+            patch.object(
+                media_module,
+                "generate_video_clip",
+                AsyncMock(side_effect=RuntimeError("Veo error")),
+            ),
         ):
             await _run_video_generation(
-                "job-id-1", sample_post["post_id"], TEST_BRAND_ID, None, sample_post, sample_brand, "fast"
+                "job-id-1",
+                sample_post["post_id"],
+                TEST_BRAND_ID,
+                None,
+                sample_post,
+                sample_brand,
+                "fast",
             )
 
         calls = [str(c) for c in mock_fc.update_video_job.call_args_list]
@@ -1056,7 +1072,11 @@ class TestRunVideoRepurposingBackgroundTask:
                 "backend.services.storage_client.download_gcs_uri",
                 new=AsyncMock(return_value=b"\x00" * 1000),
             ),
-            patch.object(media_module, "upload_repurposed_clip", AsyncMock(return_value="gs://bucket/clip_01.mp4")),
+            patch.object(
+                media_module,
+                "upload_repurposed_clip",
+                AsyncMock(return_value="gs://bucket/clip_01.mp4"),
+            ),
         ):
             await _run_video_repurposing(
                 "job-repurpose-1", TEST_BRAND_ID, "gs://bucket/source.mp4", sample_brand
