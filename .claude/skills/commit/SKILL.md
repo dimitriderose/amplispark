@@ -21,17 +21,17 @@ Run all CI checks locally and commit only if everything passes.
    mypy backend/ --ignore-missing-imports
    ```
    Then run tests:
-   ```powershell
-   .\backend\.venv\Scripts\python -m pytest backend/tests/ -v --tb=short
+   ```bash
+   backend/.venv/Scripts/python -m pytest backend/tests/ -v --tb=short
    ```
    If any check fails: STOP. Show the failure. Do not commit. Fix it first.
 
 4. Run frontend CI checks (fail-fast order):
-   ```powershell
-   cd frontend; npm run typecheck
-   cd frontend; npm run lint
-   cd frontend; npm run test
-   cd frontend; npm run build
+   ```bash
+   cd frontend && npm run typecheck
+   cd frontend && npm run lint
+   cd frontend && npm run test -- --coverage
+   cd frontend && npm run build
    ```
    If any check fails: STOP. Show the error. Do not commit.
 
