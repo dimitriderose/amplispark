@@ -41,6 +41,7 @@ from backend.services.image_postprocess import (
     create_tiktok_cover,
     resize_to_aspect,
 )
+from backend.services.rate_limiter import gemini_image_limit
 from backend.services.storage_client import upload_image_to_gcs
 
 # Interleaved text+image generation requires an image-capable model
@@ -138,11 +139,8 @@ async def _generate_carousel_images(
 
     style = image_style or _get_image_style(None)
 
-    # Limit concurrent image API calls to avoid rate limiting
-    _sem = asyncio.Semaphore(7)
-
     async def _gen_one(slide_text: str, slide_num: int) -> tuple[bytes, str] | None:
-        async with _sem:
+        async with gemini_image_limit:
             prompt = _build_carousel_slide_prompt(
                 platform=platform,
                 style=style,
@@ -152,7 +150,6 @@ async def _generate_carousel_images(
                 style_ref_block=style_ref_block,
                 slide_text=slide_text,
             )
-            # Pass cover image as visual reference for style consistency
             contents: list = [prompt]
             if cover_image_bytes:
                 contents.append(
@@ -194,25 +191,29 @@ async def _generate_image_with_retry(
     """Generate image with retry on failure. Returns (image_bytes, mime_type)."""
     for attempt in range(max_retries + 1):
         try:
-            resp = await asyncio.to_thread(
-                get_genai_client().models.generate_content,
-                model=GEMINI_IMAGE_MODEL,
-                contents=img_contents,
-                config=types.GenerateContentConfig(
-                    response_modalities=["IMAGE"],
-                    temperature=0.7,
-                ),
-            )
-            _rc0 = resp.candidates[0].content if resp.candidates else None
-            for part in _rc0.parts if _rc0 and _rc0.parts else []:
-                if part.inline_data and part.inline_data.data is not None:
-                    data: bytes = part.inline_data.data
-                    mime = part.inline_data.mime_type or "image/png"
-                    if len(data) > 5000:  # Minimum viable image (~5KB)
-                        return data, mime
-                    logger.warning(
-                        "Image too small (%dB), retry %d/%d", len(data), attempt + 1, max_retries
-                    )
+            async with gemini_image_limit:
+                resp = await asyncio.to_thread(
+                    get_genai_client().models.generate_content,
+                    model=GEMINI_IMAGE_MODEL,
+                    contents=img_contents,
+                    config=types.GenerateContentConfig(
+                        response_modalities=["IMAGE"],
+                        temperature=0.7,
+                    ),
+                )
+                _rc0 = resp.candidates[0].content if resp.candidates else None
+                for part in _rc0.parts if _rc0 and _rc0.parts else []:
+                    if part.inline_data and part.inline_data.data is not None:
+                        data: bytes = part.inline_data.data
+                        mime = part.inline_data.mime_type or "image/png"
+                        if len(data) > 5000:  # Minimum viable image (~5KB)
+                            return data, mime
+                        logger.warning(
+                            "Image too small (%dB), retry %d/%d",
+                            len(data),
+                            attempt + 1,
+                            max_retries,
+                        )
         except Exception as e:
             logger.warning(
                 "Image generation failed (attempt %d/%d): %s", attempt + 1, max_retries, e

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from fastapi import APIRouter, Body, File, HTTPException, UploadFile
@@ -5,11 +6,33 @@ from pydantic import BaseModel as _PydanticBaseModel
 
 from backend.agents.strategy_agent import refresh_research, run_strategy
 from backend.services import firestore_client
-from backend.services.storage_client import upload_byop_photo
+from backend.services.storage_client import get_signed_url, upload_byop_photo
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+async def _refresh_plan_photo_urls(plan: dict) -> dict:
+    """Re-sign BYOP photo URLs on every read so they never expire.
+
+    All days with a custom_photo_gcs_uri are re-signed concurrently via
+    asyncio.gather to avoid N×sequential GCS calls.
+    """
+    days = plan.get("days")
+    if not isinstance(days, list):
+        return plan
+
+    async def _resign_day(day: dict) -> None:
+        gcs_uri = day.get("custom_photo_gcs_uri")
+        if gcs_uri:
+            try:
+                day["custom_photo_url"] = await get_signed_url(gcs_uri)
+            except Exception as e:
+                logger.warning("Failed to re-sign BYOP URL for day %s: %s", day.get("day_index"), e)
+
+    await asyncio.gather(*(_resign_day(day) for day in days))
+    return plan
 
 
 class CreatePlanBody(_PydanticBaseModel):
@@ -22,6 +45,7 @@ class CreatePlanBody(_PydanticBaseModel):
 async def list_plans(brand_id: str):
     """List all content plans for a brand, newest first."""
     plans = await firestore_client.list_plans(brand_id)
+    await asyncio.gather(*(_refresh_plan_photo_urls(plan) for plan in plans))
     return {"plans": plans}
 
 
@@ -74,6 +98,7 @@ async def get_plan(brand_id: str, plan_id: str):
     plan = await firestore_client.get_plan(plan_id, brand_id)
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")
+    await _refresh_plan_photo_urls(plan)
     return {"plan_profile": plan}
 
 
@@ -108,7 +133,6 @@ class UpdatePlanDayBody(_PydanticBaseModel):
     cta_type: str | None = None
     posting_time: str | None = None
     derivative_type: str | None = None
-    custom_photo_url: str | None = None
     custom_photo_gcs_uri: str | None = None
     custom_photo_mime: str | None = None
     briefs: list[dict] | None = None
@@ -133,11 +157,9 @@ async def update_plan_day(
             detail=f"day_index {day_index} out of range (plan has {len(days)} days)",
         )
 
-    # Remove protected fields from user-supplied data
+    _BLOCKED_FIELDS = {"day_index", "brand_id", "plan_id", "custom_photo_url"}
     safe_data = {
-        k: v
-        for k, v in data.model_dump(exclude_none=True).items()
-        if k not in ("day_index", "brand_id", "plan_id")
+        k: v for k, v in data.model_dump(exclude_none=True).items() if k not in _BLOCKED_FIELDS
     }
 
     try:
@@ -213,7 +235,6 @@ async def upload_day_photo(
         plan_id,
         day_index,
         {
-            "custom_photo_url": signed_url,
             "custom_photo_gcs_uri": gcs_uri,
             "custom_photo_mime": mime,
         },
