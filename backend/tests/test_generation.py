@@ -822,7 +822,7 @@ class TestStreamGenerateVideoFirst:
             patch(_MIDDLEWARE_FC) as mw_fc,
             patch("backend.routers.generation.generate_post", side_effect=_fake_generate_post),
             patch(
-                "backend.agents.video_creator.generate_video_clip",
+                "backend.routers.generation.generate_video_clip",
                 new=AsyncMock(return_value=video_result),
             ),
         ):
@@ -864,7 +864,7 @@ class TestStreamGenerateVideoFirst:
             patch(_MIDDLEWARE_FC) as mw_fc,
             patch("backend.routers.generation.generate_post", side_effect=_fake_generate_post),
             patch(
-                "backend.agents.video_creator.generate_video_clip",
+                "backend.routers.generation.generate_video_clip",
                 new=AsyncMock(side_effect=RuntimeError("Veo unavailable")),
             ),
         ):

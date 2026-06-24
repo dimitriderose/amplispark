@@ -156,7 +156,11 @@ async def upload_byop_photo(
     )
 
     gcs_uri = f"gs://{GCS_BUCKET_NAME}/{blob_path}"
-    url = await _get_serving_url(blob, blob_path)
+    # Use the same 1hr TTL as get_signed_url / refresh-on-read so the URL
+    # returned to the client is consistent with what they'll receive on
+    # subsequent reads.  7-day URLs here would be misleading: the Firestore
+    # document only stores the GCS URI and re-signs on every read at 1hr.
+    url = await _get_serving_url(blob, blob_path, expiration=timedelta(hours=1))
     return url, gcs_uri
 
 

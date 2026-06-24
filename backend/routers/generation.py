@@ -7,7 +7,9 @@ from fastapi import APIRouter, HTTPException, Query
 from sse_starlette.sse import EventSourceResponse
 
 from backend.agents.content_creator import generate_post
+from backend.agents.video_creator import generate_video_clip
 from backend.services import firestore_client
+from backend.services.rate_limiter import veo_limit
 from backend.services.storage_client import download_gcs_uri
 
 logger = logging.getLogger(__name__)
@@ -281,19 +283,17 @@ async def stream_generate(
 
                     heartbeat_task = asyncio.create_task(_heartbeat())
                     try:
-                        from backend.agents.video_creator import generate_video_clip
-
-                        video_result = await generate_video_clip(
-                            hero_image_bytes=None,  # text-to-video
-                            caption=final_caption,
-                            brand_profile=brand,
-                            platform=day_brief.get("platform", "instagram"),
-                            post_id=post_id,
-                            tier="fast",
-                            content_theme=day_brief.get("content_theme", ""),
-                            pillar=day_brief.get("pillar", ""),
-                        )
-                        # Update Firestore with video metadata
+                        async with veo_limit:
+                            video_result = await generate_video_clip(
+                                hero_image_bytes=None,  # text-to-video
+                                caption=final_caption,
+                                brand_profile=brand,
+                                platform=day_brief.get("platform", "instagram"),
+                                post_id=post_id,
+                                tier="fast",
+                                content_theme=day_brief.get("content_theme", ""),
+                                pillar=day_brief.get("pillar", ""),
+                            )
                         await firestore_client.update_post(
                             brand_id,
                             post_id,
