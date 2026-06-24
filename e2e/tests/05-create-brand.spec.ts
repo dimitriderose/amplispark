@@ -32,20 +32,18 @@ test.describe('Create brand / onboard wizard', () => {
   })
 
   test('landing page loads without crashing', async ({ page }) => {
-    await page.goto('/')
+    await page.goto('/', { waitUntil: 'networkidle' })
     await expect(page.locator('h1')).toBeVisible()
     await expect(page.locator('body')).not.toBeEmpty()
   })
 
   test('onboard page loads (redirects to / or shows wizard)', async ({ page }) => {
-    await page.goto('/onboard?new=true')
-    // With no real auth, ProtectedRoute redirects to /.
-    // Either outcome is valid — just confirm no crash and a heading exists.
+    await page.goto('/onboard?new=true', { waitUntil: 'networkidle' })
     await expect(page.locator('h1, h2').first()).toBeVisible()
   })
 
   test('landing page Next button (See how it works) is visible', async ({ page }) => {
-    await page.goto('/')
+    await page.goto('/', { waitUntil: 'networkidle' })
     await expect(page.getByRole('button', { name: /See how it works/i })).toBeVisible()
   })
 
@@ -80,15 +78,14 @@ test.describe('Create brand / onboard wizard', () => {
   })
 
   test('wizard step indicator: landing page shows numbered steps', async ({ page }) => {
-    await page.goto('/')
-    // The landing page has a "How it works" section with steps 01, 02, 03
+    await page.goto('/', { waitUntil: 'networkidle' })
     await expect(page.locator('div').filter({ hasText: /^01$/ }).first()).toBeVisible()
     await expect(page.locator('div').filter({ hasText: /^02$/ }).first()).toBeVisible()
     await expect(page.locator('div').filter({ hasText: /^03$/ }).first()).toBeVisible()
   })
 
   test('landing page has a "Describe your brand" step', async ({ page }) => {
-    await page.goto('/')
+    await page.goto('/', { waitUntil: 'networkidle' })
     await expect(page.getByText(/Describe your brand/i)).toBeVisible()
   })
 })

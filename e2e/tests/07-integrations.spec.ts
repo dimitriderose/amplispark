@@ -147,16 +147,14 @@ test.describe('Integrations', () => {
   })
 
   test('dashboard connections tab renders (protected, redirects to / without auth)', async ({ page }) => {
-    await page.goto('/dashboard/brand-int?tab=connections')
-    // Without real auth, ProtectedRoute redirects to /
+    await page.goto('/dashboard/brand-int?tab=connections', { waitUntil: 'networkidle' })
     await expect(page.locator('body')).toBeVisible()
     const heading = page.locator('h1, h2').first()
     await expect(heading).toBeVisible()
   })
 
   test('notion callback page redirects gracefully', async ({ page }) => {
-    await page.goto('/auth/notion/callback?code=mock-code&state=mock-state')
-    // Protected route — redirects to landing without real auth
+    await page.goto('/auth/notion/callback?code=mock-code&state=mock-state', { waitUntil: 'networkidle' })
     await expect(page.locator('body')).toBeVisible()
   })
 })

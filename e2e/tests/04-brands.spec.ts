@@ -63,22 +63,19 @@ test.describe('Brands page', () => {
   })
 
   test('brands page renders the Create Your Brand section', async ({ page }) => {
-    await page.goto('/brands')
-    // The page may redirect to / if auth is not mocked at module level.
-    // We check that EITHER the brands page OR the landing page rendered (no crash).
+    await page.goto('/brands', { waitUntil: 'networkidle' })
     await expect(page.locator('body')).toBeVisible()
-    // The hero heading on landing OR "Create Your Brand" heading should be present
     const heading = page.locator('h1, h2').first()
     await expect(heading).toBeVisible()
   })
 
   test('landing page has Get Started button', async ({ page }) => {
-    await page.goto('/')
+    await page.goto('/', { waitUntil: 'networkidle' })
     await expect(page.getByRole('button', { name: /Get Started/i }).first()).toBeVisible()
   })
 
   test('landing page shows platform names', async ({ page }) => {
-    await page.goto('/')
+    await page.goto('/', { waitUntil: 'networkidle' })
     await expect(page.getByText('Instagram').first()).toBeVisible()
     await expect(page.getByText('LinkedIn').first()).toBeVisible()
   })
