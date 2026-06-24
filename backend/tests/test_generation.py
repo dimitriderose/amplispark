@@ -703,3 +703,211 @@ class TestStreamGenerateImageEvent:
         assert response.status_code == 200
         update_call_args = fc.update_post.call_args[0][2]
         assert update_call_args.get("review") == {"approved": True, "score": 9}
+
+
+class TestStreamGenerateVideoFirst:
+    """Tests for video_first derivative_type path — Veo post-generation."""
+
+    def _plan_with_video_first_day(self, sample_plan):
+        plan = dict(sample_plan)
+        plan["days"] = [
+            {
+                **sample_plan["days"][0],
+                "derivative_type": "video_first",
+                "platform": "instagram",
+            }
+        ]
+        return plan
+
+    def test_video_first_with_low_review_score_emits_video_error_event(
+        self, client, auth_headers, sample_brand, sample_plan
+    ):
+        plan = self._plan_with_video_first_day(sample_plan)
+
+        async def _fake_generate_post(*args, **kwargs):
+            yield {
+                "event": "complete",
+                "data": {
+                    "caption": "Low quality caption",
+                    "hashtags": [],
+                    "image_url": None,
+                    "image_gcs_uri": None,
+                    "review": {"approved": False, "score": 5},
+                },
+            }
+
+        with (
+            patch(_GEN_FC) as fc,
+            patch(_MIDDLEWARE_FC) as mw_fc,
+            patch("backend.routers.generation.generate_post", side_effect=_fake_generate_post),
+        ):
+            fc.get_plan = AsyncMock(return_value=plan)
+            fc.get_brand = AsyncMock(return_value=sample_brand)
+            fc.list_posts = AsyncMock(return_value=[])
+            fc.save_post = AsyncMock(return_value="new-post-id")
+            fc.update_post = AsyncMock()
+            mw_fc.get_brand = AsyncMock(return_value=sample_brand)
+
+            response = client.get(
+                f"/api/generate/{plan['plan_id']}/0",
+                params={"brand_id": TEST_BRAND_ID},
+                headers=auth_headers,
+            )
+
+        assert response.status_code == 200
+        assert "video_error" in response.text
+
+    def test_video_first_with_no_review_score_emits_video_error_event(
+        self, client, auth_headers, sample_brand, sample_plan
+    ):
+        plan = self._plan_with_video_first_day(sample_plan)
+
+        async def _fake_generate_post(*args, **kwargs):
+            yield {
+                "event": "complete",
+                "data": {
+                    "caption": "Caption without review",
+                    "hashtags": [],
+                    "image_url": None,
+                    "image_gcs_uri": None,
+                },
+            }
+
+        with (
+            patch(_GEN_FC) as fc,
+            patch(_MIDDLEWARE_FC) as mw_fc,
+            patch("backend.routers.generation.generate_post", side_effect=_fake_generate_post),
+        ):
+            fc.get_plan = AsyncMock(return_value=plan)
+            fc.get_brand = AsyncMock(return_value=sample_brand)
+            fc.list_posts = AsyncMock(return_value=[])
+            fc.save_post = AsyncMock(return_value="new-post-id")
+            fc.update_post = AsyncMock()
+            mw_fc.get_brand = AsyncMock(return_value=sample_brand)
+
+            response = client.get(
+                f"/api/generate/{plan['plan_id']}/0",
+                params={"brand_id": TEST_BRAND_ID},
+                headers=auth_headers,
+            )
+
+        assert response.status_code == 200
+        assert "video_error" in response.text
+
+    def test_video_first_with_high_review_score_emits_video_complete_event(
+        self, client, auth_headers, sample_brand, sample_plan
+    ):
+        plan = self._plan_with_video_first_day(sample_plan)
+
+        async def _fake_generate_post(*args, **kwargs):
+            yield {
+                "event": "complete",
+                "data": {
+                    "caption": "Excellent caption",
+                    "hashtags": ["#test"],
+                    "image_url": None,
+                    "image_gcs_uri": None,
+                    "review": {"approved": True, "score": 9},
+                },
+            }
+
+        video_result = {
+            "video_url": "https://example.com/video.mp4",
+            "video_gcs_uri": "gs://bucket/video.mp4",
+            "model": "veo-3.1",
+        }
+
+        with (
+            patch(_GEN_FC) as fc,
+            patch(_MIDDLEWARE_FC) as mw_fc,
+            patch("backend.routers.generation.generate_post", side_effect=_fake_generate_post),
+            patch(
+                "backend.agents.video_creator.generate_video_clip",
+                new=AsyncMock(return_value=video_result),
+            ),
+        ):
+            fc.get_plan = AsyncMock(return_value=plan)
+            fc.get_brand = AsyncMock(return_value=sample_brand)
+            fc.list_posts = AsyncMock(return_value=[])
+            fc.save_post = AsyncMock(return_value="new-post-id")
+            fc.update_post = AsyncMock()
+            mw_fc.get_brand = AsyncMock(return_value=sample_brand)
+
+            response = client.get(
+                f"/api/generate/{plan['plan_id']}/0",
+                params={"brand_id": TEST_BRAND_ID},
+                headers=auth_headers,
+            )
+
+        assert response.status_code == 200
+        assert "video_complete" in response.text
+
+    def test_video_first_veo_failure_emits_video_error_event(
+        self, client, auth_headers, sample_brand, sample_plan
+    ):
+        plan = self._plan_with_video_first_day(sample_plan)
+
+        async def _fake_generate_post(*args, **kwargs):
+            yield {
+                "event": "complete",
+                "data": {
+                    "caption": "Good caption",
+                    "hashtags": [],
+                    "image_url": None,
+                    "image_gcs_uri": None,
+                    "review": {"approved": True, "score": 8},
+                },
+            }
+
+        with (
+            patch(_GEN_FC) as fc,
+            patch(_MIDDLEWARE_FC) as mw_fc,
+            patch("backend.routers.generation.generate_post", side_effect=_fake_generate_post),
+            patch(
+                "backend.agents.video_creator.generate_video_clip",
+                new=AsyncMock(side_effect=RuntimeError("Veo unavailable")),
+            ),
+        ):
+            fc.get_plan = AsyncMock(return_value=plan)
+            fc.get_brand = AsyncMock(return_value=sample_brand)
+            fc.list_posts = AsyncMock(return_value=[])
+            fc.save_post = AsyncMock(return_value="new-post-id")
+            fc.update_post = AsyncMock()
+            mw_fc.get_brand = AsyncMock(return_value=sample_brand)
+
+            response = client.get(
+                f"/api/generate/{plan['plan_id']}/0",
+                params={"brand_id": TEST_BRAND_ID},
+                headers=auth_headers,
+            )
+
+        assert response.status_code == 200
+        assert "video_error" in response.text
+
+    def test_generation_exception_emits_error_event_and_marks_post_failed(
+        self, client, auth_headers, sample_brand, sample_plan
+    ):
+        async def _fake_generate_post(*args, **kwargs):
+            raise RuntimeError("Unexpected crash")
+            yield  # make it an async generator
+
+        with (
+            patch(_GEN_FC) as fc,
+            patch(_MIDDLEWARE_FC) as mw_fc,
+            patch("backend.routers.generation.generate_post", side_effect=_fake_generate_post),
+        ):
+            fc.get_plan = AsyncMock(return_value=sample_plan)
+            fc.get_brand = AsyncMock(return_value=sample_brand)
+            fc.list_posts = AsyncMock(return_value=[])
+            fc.save_post = AsyncMock(return_value="new-post-id")
+            fc.update_post = AsyncMock()
+            mw_fc.get_brand = AsyncMock(return_value=sample_brand)
+
+            response = client.get(
+                f"/api/generate/{sample_plan['plan_id']}/0",
+                params={"brand_id": TEST_BRAND_ID},
+                headers=auth_headers,
+            )
+
+        assert response.status_code == 200
+        assert "event: error" in response.text

@@ -213,11 +213,10 @@ describe('BrandsPage', () => {
 
     renderPage()
 
-    // Should still render the page with empty brands (no crash)
     await waitFor(() => {
       expect(screen.getByText('Create Your Brand')).toBeInTheDocument()
     })
-    expect(screen.getByText('No brands yet')).toBeInTheDocument()
+    expect(screen.getByText('Could not load your brands. Please try again.')).toBeInTheDocument()
   })
 
   it('brand card hover events do not throw', async () => {
@@ -323,4 +322,58 @@ describe('BrandsPage', () => {
       expect(screen.getByText('Pending')).toBeInTheDocument()
     })
   })
+
+  it('shows "?" avatar and "Untitled Brand" when brand has no business_name or description', async () => {
+    const brandNoInfo = [{
+      brand_id: 'b-no-info',
+      industry: 'Other',
+      analysis_status: 'complete',
+    }]
+    vi.mocked(api.listBrands).mockResolvedValue({ brands: brandNoInfo } as never)
+
+    renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByText('Untitled Brand')).toBeInTheDocument()
+    })
+    // The avatar should display '?' (uppercased from '?')
+    expect(screen.getByText('?')).toBeInTheDocument()
+  })
+
+  it('stale-fetch guard: unmounting during in-flight .then does not update state', async () => {
+    let resolveListBrands!: (value: unknown) => void
+    vi.mocked(api.listBrands).mockReturnValue(
+      new Promise((resolve) => { resolveListBrands = resolve }) as never
+    )
+
+    const { unmount } = renderPage()
+
+    // Unmount before the promise resolves so cancelled becomes true
+    unmount()
+
+    // Now resolve — the cancelled guard should swallow the result
+    resolveListBrands({ brands: [{ brand_id: 'b1', business_name: 'Ghost', industry: 'Tech', analysis_status: 'complete' }] })
+
+    // Allow microtasks to flush; no state-update errors should be thrown
+    await new Promise((r) => setTimeout(r, 0))
+  })
+
+  it('stale-fetch guard: unmounting during in-flight .catch does not update state', async () => {
+    let rejectListBrands!: (reason: unknown) => void
+    vi.mocked(api.listBrands).mockReturnValue(
+      new Promise((_, reject) => { rejectListBrands = reject }) as never
+    )
+
+    const { unmount } = renderPage()
+
+    // Unmount before the promise rejects so cancelled becomes true
+    unmount()
+
+    // Reject now — the cancelled guard should swallow the error
+    rejectListBrands(new Error('Stale network error'))
+
+    // Allow microtasks to flush; no state-update errors should be thrown
+    await new Promise((r) => setTimeout(r, 0))
+  })
+
 })

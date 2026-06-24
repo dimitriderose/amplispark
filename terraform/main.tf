@@ -52,6 +52,28 @@ resource "google_firestore_database" "default" {
   depends_on = [google_project_service.apis]
 }
 
+resource "google_firestore_index" "brands_by_owner_created_at" {
+  project     = var.project_id
+  database    = google_firestore_database.default.name
+  collection  = "brands"
+  query_scope = "COLLECTION"
+
+  fields {
+    field_path = "owner_uid"
+    order      = "ASCENDING"
+  }
+  fields {
+    field_path = "created_at"
+    order      = "DESCENDING"
+  }
+  fields {
+    field_path = "__name__"
+    order      = "DESCENDING"
+  }
+
+  depends_on = [google_firestore_database.default]
+}
+
 # ── Cloud Storage bucket (generated images + video) ─────────────────────────
 
 resource "google_storage_bucket" "assets" {

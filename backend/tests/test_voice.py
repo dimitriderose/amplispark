@@ -316,3 +316,284 @@ class TestVoiceCoachingWebSocket:
                 ) as ws:
                     msg = ws.receive_json()
                     assert msg["type"] == "connected"
+
+    def test_session_ended_message_sent_when_gemini_finishes_first(self, sample_brand):
+        """recv_from_gemini task completes immediately; session_ended should be sent."""
+        mock_session = MagicMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=None)
+
+        async def _recv_nothing():
+            return
+            yield
+
+        mock_session.receive = _recv_nothing
+        mock_session.send = AsyncMock()
+
+        mock_live = MagicMock()
+        mock_live.connect = MagicMock(return_value=mock_session)
+
+        mock_client = MagicMock()
+        mock_client.aio = MagicMock()
+        mock_client.aio.live = mock_live
+
+        with (
+            patch(_VOICE_FC) as vc_fc,
+            patch(_MIDDLEWARE_FC) as mw_fc,
+            patch("backend.middleware.firebase_auth") as mock_auth,
+            patch("backend.routers.voice.get_genai_client", return_value=mock_client),
+            patch(
+                "backend.agents.voice_coach.build_coaching_prompt", return_value="System prompt."
+            ),
+        ):
+            vc_fc.get_plan = AsyncMock(return_value=None)
+            vc_fc.list_plans = AsyncMock(return_value=[])
+            vc_fc.list_posts = AsyncMock(return_value=[])
+            mw_fc.get_brand = AsyncMock(return_value=sample_brand)
+            mock_auth.verify_id_token.return_value = {"uid": TEST_UID}
+            mock_auth.ExpiredIdTokenError = type("ExpiredIdTokenError", (Exception,), {})
+            mock_auth.InvalidIdTokenError = type("InvalidIdTokenError", (Exception,), {})
+
+            with TestClient(app) as tc:
+                with tc.websocket_connect(
+                    f"/api/brands/{TEST_BRAND_ID}/voice-coaching",
+                    headers=_ws_headers(),
+                ) as ws:
+                    msg = ws.receive_json()
+                    assert msg["type"] == "connected"
+
+    def test_gemini_session_sends_audio_bytes_to_frontend(self, sample_brand):
+        """recv_from_gemini: audio inline_data is forwarded as bytes to the client."""
+        mock_session = MagicMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=None)
+        mock_session.send = AsyncMock()
+
+        audio_bytes = b"\x00\x01\x02\x03"
+
+        async def _recv_with_audio():
+            part = MagicMock()
+            part.inline_data = MagicMock()
+            part.inline_data.data = audio_bytes
+            part.text = None
+
+            model_turn = MagicMock()
+            model_turn.parts = [part]
+
+            sc = MagicMock()
+            sc.turn_complete = False
+            sc.model_turn = model_turn
+
+            response = MagicMock()
+            response.server_content = sc
+
+            yield response
+
+        mock_session.receive = _recv_with_audio
+
+        mock_live = MagicMock()
+        mock_live.connect = MagicMock(return_value=mock_session)
+
+        mock_client = MagicMock()
+        mock_client.aio = MagicMock()
+        mock_client.aio.live = mock_live
+
+        with (
+            patch(_VOICE_FC) as vc_fc,
+            patch(_MIDDLEWARE_FC) as mw_fc,
+            patch("backend.middleware.firebase_auth") as mock_auth,
+            patch("backend.routers.voice.get_genai_client", return_value=mock_client),
+            patch(
+                "backend.agents.voice_coach.build_coaching_prompt", return_value="System prompt."
+            ),
+        ):
+            vc_fc.get_plan = AsyncMock(return_value=None)
+            vc_fc.list_plans = AsyncMock(return_value=[])
+            vc_fc.list_posts = AsyncMock(return_value=[])
+            mw_fc.get_brand = AsyncMock(return_value=sample_brand)
+            mock_auth.verify_id_token.return_value = {"uid": TEST_UID}
+            mock_auth.ExpiredIdTokenError = type("ExpiredIdTokenError", (Exception,), {})
+            mock_auth.InvalidIdTokenError = type("InvalidIdTokenError", (Exception,), {})
+
+            with TestClient(app) as tc:
+                with tc.websocket_connect(
+                    f"/api/brands/{TEST_BRAND_ID}/voice-coaching",
+                    headers=_ws_headers(),
+                ) as ws:
+                    ws.receive_json()  # "connected"
+                    raw = ws.receive_bytes()
+                    assert raw == audio_bytes
+
+    def test_gemini_session_sends_transcript_text_to_frontend(self, sample_brand):
+        """recv_from_gemini: text parts are forwarded as transcript JSON messages."""
+        mock_session = MagicMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=None)
+        mock_session.send = AsyncMock()
+
+        async def _recv_with_text():
+            part = MagicMock()
+            part.inline_data = None
+            part.text = "Hello from Gemini!"
+
+            model_turn = MagicMock()
+            model_turn.parts = [part]
+
+            sc = MagicMock()
+            sc.turn_complete = False
+            sc.model_turn = model_turn
+
+            response = MagicMock()
+            response.server_content = sc
+
+            yield response
+
+        mock_session.receive = _recv_with_text
+
+        mock_live = MagicMock()
+        mock_live.connect = MagicMock(return_value=mock_session)
+
+        mock_client = MagicMock()
+        mock_client.aio = MagicMock()
+        mock_client.aio.live = mock_live
+
+        with (
+            patch(_VOICE_FC) as vc_fc,
+            patch(_MIDDLEWARE_FC) as mw_fc,
+            patch("backend.middleware.firebase_auth") as mock_auth,
+            patch("backend.routers.voice.get_genai_client", return_value=mock_client),
+            patch(
+                "backend.agents.voice_coach.build_coaching_prompt", return_value="System prompt."
+            ),
+        ):
+            vc_fc.get_plan = AsyncMock(return_value=None)
+            vc_fc.list_plans = AsyncMock(return_value=[])
+            vc_fc.list_posts = AsyncMock(return_value=[])
+            mw_fc.get_brand = AsyncMock(return_value=sample_brand)
+            mock_auth.verify_id_token.return_value = {"uid": TEST_UID}
+            mock_auth.ExpiredIdTokenError = type("ExpiredIdTokenError", (Exception,), {})
+            mock_auth.InvalidIdTokenError = type("InvalidIdTokenError", (Exception,), {})
+
+            with TestClient(app) as tc:
+                with tc.websocket_connect(
+                    f"/api/brands/{TEST_BRAND_ID}/voice-coaching",
+                    headers=_ws_headers(),
+                ) as ws:
+                    ws.receive_json()  # "connected"
+                    msg = ws.receive_json()
+                    assert msg["type"] == "transcript"
+                    assert msg["text"] == "Hello from Gemini!"
+
+    def test_end_session_signal_sends_session_complete_and_closes(self, sample_brand):
+        """recv_from_gemini: [END_SESSION] in text triggers session_complete message."""
+        mock_session = MagicMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=None)
+        mock_session.send = AsyncMock()
+
+        async def _recv_with_end_session():
+            part = MagicMock()
+            part.inline_data = None
+            part.text = "Goodbye! [END_SESSION]"
+
+            model_turn = MagicMock()
+            model_turn.parts = [part]
+
+            sc = MagicMock()
+            sc.turn_complete = False
+            sc.model_turn = model_turn
+
+            response = MagicMock()
+            response.server_content = sc
+
+            yield response
+
+        mock_session.receive = _recv_with_end_session
+
+        mock_live = MagicMock()
+        mock_live.connect = MagicMock(return_value=mock_session)
+
+        mock_client = MagicMock()
+        mock_client.aio = MagicMock()
+        mock_client.aio.live = mock_live
+
+        with (
+            patch(_VOICE_FC) as vc_fc,
+            patch(_MIDDLEWARE_FC) as mw_fc,
+            patch("backend.middleware.firebase_auth") as mock_auth,
+            patch("backend.routers.voice.get_genai_client", return_value=mock_client),
+            patch(
+                "backend.agents.voice_coach.build_coaching_prompt", return_value="System prompt."
+            ),
+        ):
+            vc_fc.get_plan = AsyncMock(return_value=None)
+            vc_fc.list_plans = AsyncMock(return_value=[])
+            vc_fc.list_posts = AsyncMock(return_value=[])
+            mw_fc.get_brand = AsyncMock(return_value=sample_brand)
+            mock_auth.verify_id_token.return_value = {"uid": TEST_UID}
+            mock_auth.ExpiredIdTokenError = type("ExpiredIdTokenError", (Exception,), {})
+            mock_auth.InvalidIdTokenError = type("InvalidIdTokenError", (Exception,), {})
+
+            with TestClient(app) as tc:
+                with tc.websocket_connect(
+                    f"/api/brands/{TEST_BRAND_ID}/voice-coaching",
+                    headers=_ws_headers(),
+                ) as ws:
+                    ws.receive_json()  # "connected"
+                    transcript_msg = ws.receive_json()
+                    assert transcript_msg["type"] == "transcript"
+                    assert "Goodbye" in transcript_msg["text"]
+                    complete_msg = ws.receive_json()
+                    assert complete_msg["type"] == "session_complete"
+
+    def test_turn_complete_message_is_sent_to_frontend(self, sample_brand):
+        """recv_from_gemini: turn_complete flag triggers turn_complete JSON message."""
+        mock_session = MagicMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=None)
+        mock_session.send = AsyncMock()
+
+        async def _recv_turn_complete():
+            sc = MagicMock()
+            sc.turn_complete = True
+            sc.model_turn = None
+
+            response = MagicMock()
+            response.server_content = sc
+
+            yield response
+
+        mock_session.receive = _recv_turn_complete
+
+        mock_live = MagicMock()
+        mock_live.connect = MagicMock(return_value=mock_session)
+
+        mock_client = MagicMock()
+        mock_client.aio = MagicMock()
+        mock_client.aio.live = mock_live
+
+        with (
+            patch(_VOICE_FC) as vc_fc,
+            patch(_MIDDLEWARE_FC) as mw_fc,
+            patch("backend.middleware.firebase_auth") as mock_auth,
+            patch("backend.routers.voice.get_genai_client", return_value=mock_client),
+            patch(
+                "backend.agents.voice_coach.build_coaching_prompt", return_value="System prompt."
+            ),
+        ):
+            vc_fc.get_plan = AsyncMock(return_value=None)
+            vc_fc.list_plans = AsyncMock(return_value=[])
+            vc_fc.list_posts = AsyncMock(return_value=[])
+            mw_fc.get_brand = AsyncMock(return_value=sample_brand)
+            mock_auth.verify_id_token.return_value = {"uid": TEST_UID}
+            mock_auth.ExpiredIdTokenError = type("ExpiredIdTokenError", (Exception,), {})
+            mock_auth.InvalidIdTokenError = type("InvalidIdTokenError", (Exception,), {})
+
+            with TestClient(app) as tc:
+                with tc.websocket_connect(
+                    f"/api/brands/{TEST_BRAND_ID}/voice-coaching",
+                    headers=_ws_headers(),
+                ) as ws:
+                    ws.receive_json()  # "connected"
+                    msg = ws.receive_json()
+                    assert msg["type"] == "turn_complete"
