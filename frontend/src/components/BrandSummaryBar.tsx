@@ -2,7 +2,6 @@ import { A } from '../theme'
 import { useIsMobile } from '../hooks/useIsMobile'
 import type { BrandProfile } from '../hooks/useBrandProfile'
 
-/** Convert a gs:// URI to a proxy-servable URL. */
 function gcsToUrl(gcsUri: string): string {
   const prefix = 'gs://'
   if (!gcsUri.startsWith(prefix)) return gcsUri
@@ -17,9 +16,10 @@ interface Props {
   onNavigateEdit: () => void
   onNavigateNew: () => void
   onTakeTour?: () => void
+  onQuickPost?: () => void
 }
 
-export default function BrandSummaryBar({ brand, onNavigateEdit, onNavigateNew, onTakeTour }: Props) {
+export default function BrandSummaryBar({ brand, onNavigateEdit, onNavigateNew, onTakeTour, onQuickPost }: Props) {
   const isMobile = useIsMobile()
   const connectedPlatforms = brand.connected_platforms ?? []
   const notionConnected = !!brand.integrations?.notion?.access_token
@@ -34,14 +34,12 @@ export default function BrandSummaryBar({ brand, onNavigateEdit, onNavigateNew, 
       border: `1px solid ${A.border}`,
       marginBottom: 20,
     }}>
-      {/* Row 1: Logo + Name + Industry + Colors + Buttons */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
         gap: isMobile ? 8 : 14,
         flexWrap: 'wrap',
       }}>
-        {/* Logo / letter fallback */}
         {brand.logo_url ? (
           <img
             src={gcsToUrl(brand.logo_url)}
@@ -62,7 +60,6 @@ export default function BrandSummaryBar({ brand, onNavigateEdit, onNavigateNew, 
           </div>
         )}
 
-        {/* Name + Industry */}
         <div style={{ flex: '0 0 auto' }}>
           <h1 style={{ fontSize: 20, fontWeight: 700, color: A.text, margin: 0, lineHeight: 1.2 }}>
             {brand.business_name || 'Your Brand'}
@@ -75,7 +72,6 @@ export default function BrandSummaryBar({ brand, onNavigateEdit, onNavigateNew, 
           </span>
         </div>
 
-        {/* Color swatches */}
         {(brand.colors?.length ?? 0) > 0 && (
           <div style={{ display: 'flex', gap: 4, marginLeft: 4 }}>
             {brand.colors.slice(0, 5).map((color, i) => (
@@ -87,11 +83,21 @@ export default function BrandSummaryBar({ brand, onNavigateEdit, onNavigateNew, 
           </div>
         )}
 
-        {/* Spacer */}
         <div style={{ flex: 1 }} />
 
-        {/* Action buttons */}
         <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+          {onQuickPost && (
+            <button
+              onClick={onQuickPost}
+              style={{
+                padding: '7px 14px', borderRadius: 8, border: 'none',
+                background: `linear-gradient(135deg, ${A.indigo}, ${A.violet})`,
+                color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              + Quick Post
+            </button>
+          )}
           <button
             data-tour-id="brand-edit-btn"
             onClick={onNavigateEdit}
@@ -130,7 +136,6 @@ export default function BrandSummaryBar({ brand, onNavigateEdit, onNavigateNew, 
         </div>
       </div>
 
-      {/* Row 2: Tone + Connected badges + Analyzing indicator */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
@@ -148,7 +153,6 @@ export default function BrandSummaryBar({ brand, onNavigateEdit, onNavigateNew, 
           <span style={{ color: A.border }}>|</span>
         )}
 
-        {/* Connected platform badges */}
         {connectedPlatforms.map(p => (
           <span key={p} style={{
             fontSize: 11, padding: '2px 8px', borderRadius: 20,

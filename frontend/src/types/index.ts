@@ -26,7 +26,6 @@ export interface BrandProfile {
   uploaded_assets?: { filename: string; url: string; type: string }[]
   analysis_status: string
   ui_preferences?: { show_competitors?: boolean }
-  // Social voice analysis fields (populated after connecting a social account)
   connected_platforms?: string[]
   selected_platforms?: string[]
   platform_mode?: 'ai' | 'manual'
@@ -34,7 +33,6 @@ export interface BrandProfile {
   social_voice_analysis?: SocialVoiceAnalysis
   social_voice_platform?: string
   default_image_style?: string
-  // Integrations (Notion, Buffer, etc.)
   integrations?: {
     notion?: {
       access_token?: string
@@ -53,8 +51,8 @@ export interface BrandProfile {
 
 export interface Post {
   post_id: string
-  plan_id: string
-  day_index: number
+  plan_id: string | null
+  day_index: number | null
   brief_index?: number
   status: 'draft' | 'generating' | 'complete' | 'failed' | 'approved'
   caption?: string
@@ -65,6 +63,7 @@ export interface Post {
   pillar?: string
   derivative_type?: string
   created_at?: string
+  is_quick_post?: boolean
 }
 
 export interface Plan {

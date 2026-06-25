@@ -103,6 +103,17 @@ Unlike Fireside which requires bidirectional real-time communication, Amplispark
 
 Rationale: Interleaved output uses the standard `generateContent` API (not Live API). SSE is the natural fit for a unidirectional server-to-client stream. It's simpler than WebSocket, doesn't require session affinity on Cloud Run, and works through CDNs and proxies.
 
+**Decision 1a: SSE Authentication via Query Parameter (Known Tradeoff)**
+The browser `EventSource` API does not support custom request headers (unlike `fetch`). The Firebase ID token is therefore passed as a `?token=<jwt>` query parameter on both SSE endpoints (`/api/generate/{planId}/{day}` and `/api/generate/adhoc/{brand_id}`).
+
+Known risks and mitigations:
+- **Server access logs**: Cloud Run logs include the full URL. The token is a short-lived Firebase JWT (1-hour TTL) — compromise window is narrow and tokens cannot be refreshed by the attacker.
+- **Browser history**: URL is set on an `EventSource` object; modern browsers do not persist `EventSource` URLs in history (unlike navigation).
+- **CDN/proxy logs**: Amplispark runs directly on Cloud Run without an intervening CDN, so no third-party log exposure.
+- **Referrer leakage**: `EventSource` is a same-origin request; the `Referer` header is not sent to cross-origin resources.
+
+Comparison: The Voice Coach WebSocket endpoint uses `Sec-WebSocket-Protocol` header injection (the only header WebSocket supports during the handshake). SSE does not have an equivalent mechanism. Alternatives considered: (1) a short-lived "SSE ticket" (opaque token exchanged for a JWT via a pre-flight POST) — adds complexity and a Firestore read per generation; (2) cookie-based auth — requires `SameSite` and CORS changes, conflicts with Cloud Run default cookie handling. The `?token=` approach is the lowest-complexity option acceptable given the 1-hour JWT window and single-tenant Cloud Run deployment.
+
 **Decision 2: Per-Day Content Generation (Not Batch)**
 The Content Creator Agent is invoked once per calendar day, producing one post per API call. A 7-day calendar requires 7 sequential calls.
 

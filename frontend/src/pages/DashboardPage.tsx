@@ -1,5 +1,13 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
+import {
+  MdOutlineEdit,
+  MdGridView,
+  MdOutlineCalendarMonth,
+  MdOutlineElectricBolt,
+  MdOutlinePlayCircle,
+} from 'react-icons/md'
+import type { IconType } from 'react-icons'
 import { A } from '../theme'
 import { api } from '../api/client'
 import { useBrandProfile } from '../hooks/useBrandProfile'
@@ -8,8 +16,9 @@ import { usePostLibrary } from '../hooks/usePostLibrary'
 import BrandSummaryBar from '../components/BrandSummaryBar'
 import ContentCalendar from '../components/ContentCalendar'
 import PageContainer from '../components/ui/PageContainer'
-import PostLibrary from '../components/PostLibrary'
-import PostHistory from '../components/PostHistory'
+import CreateTab from '../components/CreateTab'
+import Library from '../components/Library'
+import QuickPostModal from '../components/QuickPostModal'
 import EventsInput from '../components/EventsInput'
 import VoiceCoach from '../components/VoiceCoach'
 import SocialConnect from '../components/SocialConnect'
@@ -22,15 +31,14 @@ import type { TrendSummary } from '../types'
 import { useTour } from '../hooks/useTour'
 import { useIsMobile } from '../hooks/useIsMobile'
 
-// Tour steps are defined inside the component to access setActiveTab
+type Tab = 'create' | 'library' | 'calendar' | 'connections' | 'video'
 
-type Tab = 'calendar' | 'posts' | 'connections' | 'video'
-
-const TABS: { key: Tab; label: string; icon: string }[] = [
-  { key: 'calendar', label: 'Calendar', icon: '📅' },
-  { key: 'posts', label: 'Posts', icon: '📝' },
-  { key: 'connections', label: 'Connections', icon: '🔗' },
-  { key: 'video', label: 'Video', icon: '🎬' },
+const TABS: { key: Tab; label: string; icon: IconType }[] = [
+  { key: 'create',      label: 'Create',      icon: MdOutlineEdit },
+  { key: 'library',     label: 'Library',     icon: MdGridView },
+  { key: 'calendar',    label: 'Calendar',    icon: MdOutlineCalendarMonth },
+  { key: 'connections', label: 'Connections', icon: MdOutlineElectricBolt },
+  { key: 'video',       label: 'Video',       icon: MdOutlinePlayCircle },
 ]
 
 export default function DashboardPage() {
@@ -41,11 +49,13 @@ export default function DashboardPage() {
   const { brand, loading: brandLoading, error: brandError, refetch: refetchBrand } = useBrandProfile(brandId)
   const { plan, loading: planLoading, generating, error: planError, generatePlan, setDayCustomPhoto, clearPlan } = useContentPlan(brandId ?? '')
   const { posts: calendarPosts } = usePostLibrary(brandId ?? '', plan?.plan_id)
-  const [activeTab, setActiveTab] = useState<Tab>('calendar')
-  const [postsSubTab, setPostsSubTab] = useState<'weekly' | 'history'>('weekly')
+  const [activeTab, setActiveTab] = useState<Tab>('create')
+  const [showQuickPostModal, setShowQuickPostModal] = useState(false)
+  const [quickPostInitialPlatform, setQuickPostInitialPlatform] = useState<string | undefined>(undefined)
+  const [quickPostInitialContentType, setQuickPostInitialContentType] = useState<string | undefined>(undefined)
   const [trendSummaryOverride, setTrendSummaryOverride] = useState<TrendSummary | null>(null)
 
-  // Tour steps — memoized to prevent effect cascade on every render
+  // memoized to prevent effect cascade on every render
   const tourSteps: TourStep[] = useMemo(() => [
     {
       targetSelector: 'brand-summary',
@@ -93,7 +103,7 @@ export default function DashboardPage() {
       targetSelector: 'posts-tab',
       title: 'Posts & Export',
       description: 'View all your generated posts. Export them — copy captions, download ZIPs, or sync to Notion.',
-      onBeforeShow: () => setActiveTab('posts'),
+      onBeforeShow: () => setActiveTab('library'),
     },
     {
       targetSelector: 'connections-tab',
@@ -115,7 +125,6 @@ export default function DashboardPage() {
     },
   ], [setActiveTab])
 
-  // Guided tour — auto-starts when plan exists and not previously completed
   const tourReady = !planLoading && !brandLoading && !!plan
   const tour = useTour(brandId, tourSteps.length, tourReady)
 
@@ -133,7 +142,6 @@ export default function DashboardPage() {
 
   const activeTrendSummary = trendSummaryOverride ?? plan?.trend_summary
 
-  // H-8: Store planId in sessionStorage so NavBar can include it in the Export link.
   useEffect(() => {
     if (plan?.plan_id && brandId) {
       sessionStorage.setItem(`amplifi_plan_${brandId}`, plan.plan_id)
@@ -146,6 +154,27 @@ export default function DashboardPage() {
   const approvedParam = searchParams.get('approved')
   const notionParam = searchParams.get('notion')
   const approvedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('quickpost') === '1') {
+      // Capture platform/content_type BEFORE stripping the params from the URL,
+      // otherwise they will be gone by the time QuickPostModal renders.
+      const platform = params.get('platform') ?? undefined
+      const contentType = params.get('content_type') ?? undefined
+      setQuickPostInitialPlatform(platform)
+      setQuickPostInitialContentType(contentType)
+      setShowQuickPostModal(true)
+      setSearchParams(prev => {
+        const next = new URLSearchParams(prev)
+        next.delete('quickpost')
+        next.delete('platform')
+        next.delete('content_type')
+        return next
+      }, { replace: true })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     if (approvedParam) {
@@ -163,7 +192,6 @@ export default function DashboardPage() {
     }
   }, [approvedParam, setSearchParams])
 
-  // Auto-dismiss Notion connected banner
   useEffect(() => {
     if (notionParam) {
       const timer = setTimeout(() => {
@@ -217,7 +245,6 @@ export default function DashboardPage() {
 
   return (
     <PageContainer maxWidth={1400}>
-      {/* Notion connected banner */}
       {notionParam === 'connected' && (
         <div style={{
           marginBottom: 20, padding: '10px 16px', borderRadius: 8,
@@ -228,7 +255,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Approved success banner */}
       {approvedParam && (
         <div style={{
           marginBottom: 20, padding: '10px 16px', borderRadius: 8,
@@ -253,15 +279,14 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Brand Summary Bar */}
       <BrandSummaryBar
         brand={brand}
         onNavigateEdit={() => navigate(`/edit/${brandId}`)}
         onNavigateNew={() => navigate('/onboard?new=true')}
         onTakeTour={!tour.isActive ? tour.start : undefined}
+        onQuickPost={() => setShowQuickPostModal(true)}
       />
 
-      {/* Tab bar */}
       <div data-tour-id="tab-bar" style={{
         display: 'flex', gap: 2,
         marginBottom: 20,
@@ -269,36 +294,58 @@ export default function DashboardPage() {
         borderRadius: 10,
         padding: 3,
       }}>
-        {TABS.map(tab => (
-          <button
-            key={tab.key}
-            {...(tab.key === 'posts' ? { 'data-tour-id': 'posts-tab' } : tab.key === 'connections' ? { 'data-tour-id': 'connections-tab' } : tab.key === 'video' ? { 'data-tour-id': 'video-tab' } : {})}
-            onClick={() => setActiveTab(tab.key)}
-            style={{
-              flex: 1,
-              padding: '9px 12px',
-              borderRadius: 8,
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: 13,
-              fontWeight: activeTab === tab.key ? 600 : 400,
-              background: activeTab === tab.key ? A.surface : 'transparent',
-              color: activeTab === tab.key ? A.text : A.textSoft,
-              boxShadow: activeTab === tab.key ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-              transition: 'all 0.15s',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 6,
-            }}
-          >
-            <span style={{ fontSize: 14 }}>{tab.icon}</span>
-            {tab.label}
-          </button>
-        ))}
+        {TABS.map(tab => {
+          const Icon = tab.icon
+          return (
+            <button
+              key={tab.key}
+              {...(tab.key === 'library' ? { 'data-tour-id': 'posts-tab' } : tab.key === 'connections' ? { 'data-tour-id': 'connections-tab' } : tab.key === 'video' ? { 'data-tour-id': 'video-tab' } : {})}
+              onClick={() => setActiveTab(tab.key)}
+              style={{
+                flex: 1,
+                padding: '9px 12px',
+                borderRadius: 8,
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: 13,
+                fontWeight: activeTab === tab.key ? 600 : 400,
+                background: activeTab === tab.key ? A.surface : 'transparent',
+                color: activeTab === tab.key ? A.text : A.textSoft,
+                boxShadow: activeTab === tab.key ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                transition: 'all 0.15s',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+              }}
+            >
+              <Icon size={15} />
+              {tab.label}
+            </button>
+          )
+        })}
       </div>
 
-      {/* ── Calendar Tab ─────────────────────────────────── */}
+      {activeTab === 'create' && (
+        <div style={{ padding: 24, borderRadius: 12, background: A.surface, border: `1px solid ${A.border}` }}>
+          <CreateTab
+            onCreatePost={() => setShowQuickPostModal(true)}
+            onPlanWeek={() => setActiveTab('calendar')}
+          />
+        </div>
+      )}
+
+      {activeTab === 'library' && (
+        <div style={{ padding: 24, borderRadius: 12, background: A.surface, border: `1px solid ${A.border}` }}>
+          {brandId ? (
+            <Library
+              brandId={brandId}
+              onQuickPost={() => setShowQuickPostModal(true)}
+            />
+          ) : null}
+        </div>
+      )}
+
       {activeTab === 'calendar' && planLoading && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40, gap: 10 }}>
           <Spinner size={18} />
@@ -364,46 +411,6 @@ export default function DashboardPage() {
         )
       )}
 
-      {/* ── Posts Tab ─────────────────────────────────────── */}
-      {activeTab === 'posts' && (
-        <div style={{ borderRadius: 12, background: A.surface, border: `1px solid ${A.border}`, overflow: 'hidden' }}>
-          {/* Sub-tabs: Weekly / History */}
-          <div style={{ display: 'flex', borderBottom: `1px solid ${A.border}` }}>
-            {(['weekly', 'history'] as const).map(sub => (
-              <button
-                key={sub}
-                onClick={() => setPostsSubTab(sub)}
-                style={{
-                  flex: 1, padding: '10px 0', border: 'none', cursor: 'pointer',
-                  fontSize: 13, fontWeight: postsSubTab === sub ? 600 : 400,
-                  color: postsSubTab === sub ? A.indigo : A.textSoft,
-                  background: postsSubTab === sub ? A.indigoLight : 'transparent',
-                  borderBottom: postsSubTab === sub ? `2px solid ${A.indigo}` : '2px solid transparent',
-                }}
-              >
-                {sub === 'weekly' ? 'Weekly Plan' : 'All History'}
-              </button>
-            ))}
-          </div>
-          <div style={{ padding: 24 }}>
-            {postsSubTab === 'weekly' ? (
-              plan && brandId ? (
-                <PostLibrary brandId={brandId} planId={plan.plan_id} notionReady={!!brand.integrations?.notion?.database_id} />
-              ) : (
-                <div style={{ padding: 40, textAlign: 'center', color: A.textMuted, fontSize: 13 }}>
-                  Generate a content plan first to see your posts here.
-                </div>
-              )
-            ) : (
-              brandId ? (
-                <PostHistory brandId={brandId} />
-              ) : null
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ── Connections Tab ────────────────────────────────── */}
       {activeTab === 'connections' && (
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 20, alignItems: 'start' }}>
           <div style={{ padding: 20, borderRadius: 12, background: A.surface, border: `1px solid ${A.border}` }}>
@@ -425,7 +432,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ── Video Tab ──────────────────────────────────────── */}
       {activeTab === 'video' && (
         <div style={{
           padding: 24, borderRadius: 12, background: A.surface, border: `1px solid ${A.border}`,
@@ -435,12 +441,24 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Voice Brand Coach — floating button, fixed position */}
+      {showQuickPostModal && brandId && (
+        <QuickPostModal
+          brandId={brandId}
+          brand={brand}
+          onClose={() => {
+            setShowQuickPostModal(false)
+            setQuickPostInitialPlatform(undefined)
+            setQuickPostInitialContentType(undefined)
+          }}
+          initialPlatform={quickPostInitialPlatform}
+          initialContentType={quickPostInitialContentType}
+        />
+      )}
+
       {brandId && (
         <VoiceCoach brandId={brandId} brandName={brand.business_name} planId={plan?.plan_id} />
       )}
 
-      {/* Guided Tour Overlay */}
       <GuidedTour
         steps={tourSteps}
         isActive={tour.isActive}

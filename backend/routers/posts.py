@@ -20,9 +20,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-# ── Helpers ──────────────────────────────────────────────────
-
-
 async def _refresh_signed_urls(post: dict) -> dict:
     """Re-sign expired GCS URLs so images always load."""
     gcs_uri = post.get("image_gcs_uri")
@@ -69,15 +66,9 @@ async def _auto_fail_stale_generating(post: dict, brand_id: str) -> None:
                 logger.warning("Failed to auto-fail stale post %s: %s", post_id, e)
 
 
-# ── Pydantic models ──────────────────────────────────────────
-
-
 class PatchPostBody(_PydanticBaseModel):
     caption: str | None = None
     hashtags: list[str] | None = None
-
-
-# ── Endpoints ────────────────────────────────────────────────
 
 
 @router.get("/posts")
@@ -147,7 +138,6 @@ async def export_post(
     day_index = post.get("day_index", 0)
     base_name = f"{platform}_day{day_index + 1}"
 
-    # Helper to download a blob from GCS by gs:// URI
     async def _dl(uri: str | None) -> bytes | None:
         if not uri:
             return None
@@ -163,13 +153,11 @@ async def export_post(
             logger.warning("Could not download %s for post %s: %s", uri, post_id, exc)
             return None
 
-    # Download image + video in parallel
     img_bytes, vid_bytes = await asyncio.gather(
         _dl(post.get("image_gcs_uri")),
         _dl((post.get("video") or {}).get("video_gcs_uri")),
     )
 
-    # Build ZIP
     zip_buffer = io.BytesIO()
     archive_root = f"amplifi_{base_name}"
     with zipfile.ZipFile(zip_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
@@ -198,12 +186,10 @@ async def export_plan_zip(
     brand_id: str = Query(..., description="Brand ID that owns the plan"),
 ):
     """Build and stream a ZIP archive containing all posts for a content plan."""
-    # Fetch plan to confirm it exists
     plan = await firestore_client.get_plan(plan_id, brand_id)
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")
 
-    # List all posts belonging to this plan
     posts: list[dict] = await firestore_client.list_posts(brand_id, plan_id)
     if not posts:
         raise HTTPException(status_code=404, detail="No posts found for this plan")
@@ -211,7 +197,6 @@ async def export_plan_zip(
     _IMAGE_SIZE_WARN = 50 * 1024 * 1024  # 50 MB
     _VIDEO_SIZE_LIMIT = 100 * 1024 * 1024  # 100 MB
 
-    # Download image bytes directly from GCS
     async def _download_post_image(post: dict) -> bytes | None:
         gcs_uri: str | None = post.get("image_gcs_uri")
         if not gcs_uri:
@@ -236,7 +221,6 @@ async def export_plan_zip(
             logger.warning("Could not download image for post %s: %s", post.get("post_id"), exc)
             return None
 
-    # Download video bytes directly from GCS
     async def _download_post_video(post: dict) -> bytes | None:
         video = post.get("video")
         if not video:
@@ -272,11 +256,9 @@ async def export_plan_zip(
         *[_download_post_video(p) for p in posts]
     )
 
-    # Build ZIP in memory
     zip_buffer = io.BytesIO()
     archive_root = f"amplifi_export_{plan_id}"
 
-    # Collect clean metadata for content_plan.json (strip internal GCS URIs)
     plan_metadata: list[dict] = []
 
     with zipfile.ZipFile(zip_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
@@ -288,16 +270,13 @@ async def export_plan_zip(
             hashtags: list[str] = post.get("hashtags", [])
             base_name = f"{platform}_{index}"
 
-            # Image file -- detect PNG vs JPEG by magic bytes
             if img_bytes:
                 ext = "png" if img_bytes[:4] == b"\x89PNG" else "jpg"
                 zf.writestr(f"{archive_root}/{base_name}.{ext}", img_bytes)
 
-            # Video file
             if vid_bytes:
                 zf.writestr(f"{archive_root}/{base_name}.mp4", vid_bytes)
 
-            # Caption + hashtags text file
             hashtag_block = "\n".join(f"#{tag.lstrip('#')}" for tag in hashtags)
             caption_text = caption
             if hashtag_block:
@@ -307,13 +286,11 @@ async def export_plan_zip(
                 caption_text.encode("utf-8"),
             )
 
-            # Collect metadata (safe copy -- omit internal GCS URIs)
             post_meta = {
                 k: v for k, v in post.items() if k not in ("image_gcs_uri", "image_gcs_uris")
             }
             plan_metadata.append(post_meta)
 
-        # content_plan.json
         zf.writestr(
             f"{archive_root}/content_plan.json",
             json.dumps(plan_metadata, indent=2, default=str).encode("utf-8"),
@@ -363,7 +340,6 @@ async def review_post_endpoint(brand_id: str, post_id: str, force: bool = Query(
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
 
-    # Return cached review if one exists (unless force=true for re-review)
     if not force and post.get("review"):
         return {"review": post["review"], "post_id": post_id}
 
@@ -373,14 +349,11 @@ async def review_post_endpoint(brand_id: str, post_id: str, force: bool = Query(
 
     result = await _run_review(post, brand)
 
-    # Save review to Firestore
     await firestore_client.save_review(brand_id, post_id, result)
 
-    # If approved, update post status
     if result.get("approved"):
         await firestore_client.update_post(brand_id, post_id, {"status": "approved"})
 
-    # Store revision notes (specific edit instructions, not full rewrites)
     if result.get("revision_notes"):
         await firestore_client.update_post(
             brand_id,
@@ -390,7 +363,6 @@ async def review_post_endpoint(brand_id: str, post_id: str, force: bool = Query(
             },
         )
 
-    # If revised hashtags provided, sanitize before saving
     if result.get("revised_hashtags"):
         from backend.agents.hashtag_engine import _sanitize_hashtags
 
@@ -426,15 +398,27 @@ async def regenerate_post(brand_id: str, post_id: str):
     status = post.get("status", "")
     if status not in ("failed", "generating"):
         raise HTTPException(status_code=409, detail="Only failed or stuck posts can be regenerated")
+
+    if post.get("is_quick_post"):
+        await firestore_client.delete_post(brand_id, post_id)
+        platform = post.get("platform", "instagram")
+        derivative_type = post.get("derivative_type", "original")
+        content_theme = post.get("content_theme", "")
+        generate_url = (
+            f"/generate/quickpost/{brand_id}?platform={platform}&content_type={derivative_type}"
+        )
+        if content_theme:
+            from urllib.parse import quote
+
+            generate_url += f"&brief={quote(content_theme)}"
+        return {"generate_url": generate_url}
+
     plan_id = post.get("plan_id")
     day_index = post.get("day_index")
     if plan_id is None or day_index is None:
         raise HTTPException(status_code=422, detail="Post is missing plan_id or day_index")
     await firestore_client.delete_post(brand_id, post_id)
     return {"generate_url": f"/generate/{plan_id}/{day_index}?brand_id={brand_id}"}
-
-
-# ── .ics Calendar helpers ────────────────────────────────────
 
 
 def _parse_posting_time(time_str: str) -> tuple[int, int]:
@@ -486,7 +470,6 @@ def _build_ics(plan: dict, posts: list[dict], brand_name: str) -> str:
     """Build an .ics (iCalendar) string from a content plan and its posts."""
     days = plan.get("days", [])
 
-    # Determine base date: plan created_at or today
     created = plan.get("created_at")
     if isinstance(created, datetime):
         base_date = created.date()
@@ -499,7 +482,6 @@ def _build_ics(plan: dict, posts: list[dict], brand_name: str) -> str:
     else:
         base_date = datetime.now(UTC).date()
 
-    # Build lookup: day_index -> day brief
     day_lookup = {d.get("day_index", i): d for i, d in enumerate(days)}
 
     lines = [
@@ -519,25 +501,20 @@ def _build_ics(plan: dict, posts: list[dict], brand_name: str) -> str:
         hashtags = post.get("hashtags", [])
         posting_time = post.get("posting_time", "")
 
-        # Get theme from day brief
         day_brief = day_lookup.get(day_index, {})
         theme = day_brief.get("theme", day_brief.get("content_theme", ""))
 
-        # Parse posting time
         if not posting_time:
             posting_time = day_brief.get("posting_time", "9:00 AM")
         hour, minute = _parse_posting_time(posting_time)
 
-        # Event date
         event_date = base_date + timedelta(days=day_index)
         dt_start = datetime(event_date.year, event_date.month, event_date.day, hour, minute)
         dt_end = dt_start + timedelta(minutes=30)
 
-        # Summary
         platform_display = platform.capitalize()
         summary = f"{platform_display} - {theme}" if theme else platform_display
 
-        # Description
         desc_parts = [caption]
         if hashtags:
             tags = " ".join(f"#{h.lstrip('#')}" for h in hashtags)
