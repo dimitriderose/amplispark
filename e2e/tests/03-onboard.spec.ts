@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test'
 test.describe('Onboarding wizard', () => {
   test.beforeEach(async ({ page }) => {
     // Mock auth check so onboard page doesn't redirect
-    await page.route('**/api/**', async route => {
+    await page.route('http://localhost:*/api/**', async route => {
       await route.fulfill({ status: 200, json: {} })
     })
   })

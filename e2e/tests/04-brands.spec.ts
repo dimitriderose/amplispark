@@ -29,13 +29,14 @@ async function mockAuth(page: Parameters<typeof test>[1] extends (...args: infer
 
 test.describe('Brands page', () => {
   test.beforeEach(async ({ page }) => {
-    // Block all real Firebase network traffic
-    await page.route('**firebase**', route => route.abort())
-    await page.route('**firestore**', route => route.abort())
-    await page.route('**googleapis.com**', route => route.abort())
+    // Block all real Firebase network traffic (external domains only, not local chunks)
+    await page.route('https://**firebase**.com/**', route => route.abort())
+    await page.route('https://**firebaseapp.com/**', route => route.abort())
+    await page.route('https://**firestore.googleapis.com/**', route => route.abort())
+    await page.route('https://**googleapis.com/**', route => route.abort())
 
     // Mock the brands list API
-    await page.route('**/api/brands**', route => {
+    await page.route('http://localhost:*/api/brands**', route => {
       route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -59,32 +60,32 @@ test.describe('Brands page', () => {
     })
 
     // Catch-all for any remaining API calls
-    await page.route('**/api/**', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }))
+    await page.route('http://localhost:*/api/**', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }))
   })
 
   test('brands page renders the Create Your Brand section', async ({ page }) => {
     await page.goto('/brands')
-    await page.waitForSelector('h1, h2', { timeout: 15000 })
-    await expect(page.locator('h1, h2').first()).toBeVisible()
+    await page.waitForLoadState('networkidle')
+    const heading = page.locator('h1, h2').first()
+    await expect(heading).toBeVisible()
   })
 
   test('landing page has Get Started button', async ({ page }) => {
     await page.goto('/')
-    await page.waitForSelector('h1', { timeout: 15000 })
+    await page.waitForLoadState('networkidle')
     await expect(page.getByRole('button', { name: /Get Started/i }).first()).toBeVisible()
   })
 
   test('landing page shows platform names', async ({ page }) => {
     await page.goto('/')
-    await page.waitForSelector('h1', { timeout: 15000 })
+    await page.waitForLoadState('networkidle')
     await expect(page.getByText('Instagram').first()).toBeVisible()
     await expect(page.getByText('LinkedIn').first()).toBeVisible()
   })
 
   test('brands API returns brands with expected shape', async ({ page }) => {
-    // Navigate to landing first, then verify our mock intercept works
     let intercepted = false
-    await page.route('**/api/brands**', route => {
+    await page.route('http://localhost:*/api/brands**', route => {
       intercepted = true
       route.fulfill({
         status: 200,
@@ -98,6 +99,7 @@ test.describe('Brands page', () => {
     })
 
     await page.goto('/')
+    await page.waitForLoadState('networkidle')
     // Trigger the API to verify our mock intercept works
     const result = await page.evaluate(async () => {
       const res = await fetch('/api/brands?owner_uid=test')

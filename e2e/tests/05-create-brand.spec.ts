@@ -2,13 +2,14 @@ import { test, expect } from '@playwright/test'
 
 test.describe('Create brand / onboard wizard', () => {
   test.beforeEach(async ({ page }) => {
-    // Block Firebase network traffic
-    await page.route('**firebase**', route => route.abort())
-    await page.route('**firestore**', route => route.abort())
-    await page.route('**googleapis.com**', route => route.abort())
+    // Block Firebase network traffic (external domains only, not local chunks)
+    await page.route('https://**firebase**.com/**', route => route.abort())
+    await page.route('https://**firebaseapp.com/**', route => route.abort())
+    await page.route('https://**firestore.googleapis.com/**', route => route.abort())
+    await page.route('https://**googleapis.com/**', route => route.abort())
 
     // Mock brands list to return empty (so onboard page doesn't redirect away)
-    await page.route('**/api/brands**', route => {
+    await page.route('http://localhost:*/api/brands**', route => {
       const url = route.request().url()
       if (route.request().method() === 'POST') {
         route.fulfill({
@@ -28,33 +29,34 @@ test.describe('Create brand / onboard wizard', () => {
     })
 
     // Catch-all for any remaining API calls
-    await page.route('**/api/**', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }))
+    await page.route('http://localhost:*/api/**', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }))
   })
 
   test('landing page loads without crashing', async ({ page }) => {
     await page.goto('/')
-    await page.waitForSelector('h1', { timeout: 15000 })
+    await page.waitForLoadState('networkidle')
     await expect(page.locator('h1')).toBeVisible()
     await expect(page.locator('body')).not.toBeEmpty()
   })
 
   test('onboard page loads (redirects to / or shows wizard)', async ({ page }) => {
     await page.goto('/onboard?new=true')
-    await page.waitForSelector('h1, h2', { timeout: 15000 })
+    await page.waitForLoadState('networkidle')
     await expect(page.locator('h1, h2').first()).toBeVisible()
   })
 
   test('landing page Next button (See how it works) is visible', async ({ page }) => {
     await page.goto('/')
-    await page.waitForSelector('h1', { timeout: 15000 })
+    await page.waitForLoadState('networkidle')
     await expect(page.getByRole('button', { name: /See how it works/i })).toBeVisible()
   })
 
   test('onboard API mock: POST /api/brands returns brand_id', async ({ page }) => {
     await page.goto('/')
+    await page.waitForLoadState('networkidle')
 
     let captured: Record<string, unknown> | null = null
-    await page.route('**/api/brands', route => {
+    await page.route('http://localhost:*/api/brands', route => {
       if (route.request().method() === 'POST') {
         captured = { intercepted: true }
         route.fulfill({
@@ -82,7 +84,7 @@ test.describe('Create brand / onboard wizard', () => {
 
   test('wizard step indicator: landing page shows numbered steps', async ({ page }) => {
     await page.goto('/')
-    await page.waitForSelector('h1', { timeout: 15000 })
+    await page.waitForLoadState('networkidle')
     await expect(page.locator('div').filter({ hasText: /^01$/ }).first()).toBeVisible()
     await expect(page.locator('div').filter({ hasText: /^02$/ }).first()).toBeVisible()
     await expect(page.locator('div').filter({ hasText: /^03$/ }).first()).toBeVisible()
@@ -90,7 +92,7 @@ test.describe('Create brand / onboard wizard', () => {
 
   test('landing page has a "Describe your brand" step', async ({ page }) => {
     await page.goto('/')
-    await page.waitForSelector('h1', { timeout: 15000 })
+    await page.waitForLoadState('networkidle')
     await expect(page.getByText(/Describe your brand/i)).toBeVisible()
   })
 })

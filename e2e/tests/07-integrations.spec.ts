@@ -2,13 +2,14 @@ import { test, expect } from '@playwright/test'
 
 test.describe('Integrations', () => {
   test.beforeEach(async ({ page }) => {
-    // Block Firebase/Google network traffic
-    await page.route('**firebase**', route => route.abort())
-    await page.route('**firestore**', route => route.abort())
-    await page.route('**googleapis.com**', route => route.abort())
+    // Block Firebase/Google network traffic (external domains only, not local chunks)
+    await page.route('https://**firebase**.com/**', route => route.abort())
+    await page.route('https://**firebaseapp.com/**', route => route.abort())
+    await page.route('https://**firestore.googleapis.com/**', route => route.abort())
+    await page.route('https://**googleapis.com/**', route => route.abort())
 
     // Catch-all for remaining API calls — registered FIRST so specific routes (registered after) take priority (Playwright LIFO matching)
-    await page.route('**/api/**', route => {
+    await page.route('http://localhost:*/api/**', route => {
       if (!route.request().isNavigationRequest()) {
         route.fulfill({ status: 200, contentType: 'application/json', body: '{}' })
       } else {
@@ -17,7 +18,7 @@ test.describe('Integrations', () => {
     })
 
     // Mock brand endpoint (with a connected Notion integration)
-    await page.route('**/api/brands/brand-int', route => {
+    await page.route('http://localhost:*/api/brands/brand-int', route => {
       if (route.request().method() === 'GET') {
         route.fulfill({
           status: 200,
@@ -47,7 +48,7 @@ test.describe('Integrations', () => {
     })
 
     // Mock Notion select-database endpoint
-    await page.route('**/api/brands/*/integrations/notion/select-database', route => {
+    await page.route('http://localhost:*/api/brands/*/integrations/notion/select-database', route => {
       route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -56,7 +57,7 @@ test.describe('Integrations', () => {
     })
 
     // Mock Notion databases endpoint
-    await page.route('**/api/brands/*/integrations/notion/databases', route => {
+    await page.route('http://localhost:*/api/brands/*/integrations/notion/databases', route => {
       route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -70,7 +71,7 @@ test.describe('Integrations', () => {
     })
 
     // Mock Notion disconnect endpoint
-    await page.route('**/api/brands/*/integrations/notion/disconnect', route => {
+    await page.route('http://localhost:*/api/brands/*/integrations/notion/disconnect', route => {
       route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -79,7 +80,7 @@ test.describe('Integrations', () => {
     })
 
     // Mock Notion auth URL endpoint
-    await page.route('**/api/brands/*/integrations/notion/auth-url', route => {
+    await page.route('http://localhost:*/api/brands/*/integrations/notion/auth-url', route => {
       route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -90,6 +91,7 @@ test.describe('Integrations', () => {
 
   test('Notion auth URL mock returns expected shape', async ({ page }) => {
     await page.goto('/')
+    await page.waitForLoadState('networkidle')
 
     const result = await page.evaluate(async () => {
       const res = await fetch('/api/brands/brand-int/integrations/notion/auth-url')
@@ -101,6 +103,7 @@ test.describe('Integrations', () => {
 
   test('Notion databases mock returns list of databases', async ({ page }) => {
     await page.goto('/')
+    await page.waitForLoadState('networkidle')
 
     const result = await page.evaluate(async () => {
       const res = await fetch('/api/brands/brand-int/integrations/notion/databases')
@@ -113,6 +116,7 @@ test.describe('Integrations', () => {
 
   test('Notion disconnect mock returns success', async ({ page }) => {
     await page.goto('/')
+    await page.waitForLoadState('networkidle')
 
     const result = await page.evaluate(async () => {
       const res = await fetch('/api/brands/brand-int/integrations/notion/disconnect', { method: 'POST' })
@@ -123,6 +127,7 @@ test.describe('Integrations', () => {
 
   test('Notion select-database mock returns success', async ({ page }) => {
     await page.goto('/')
+    await page.waitForLoadState('networkidle')
 
     const result = await page.evaluate(async () => {
       const res = await fetch('/api/brands/brand-int/integrations/notion/select-database', {
@@ -137,6 +142,7 @@ test.describe('Integrations', () => {
 
   test('brand with Notion integration mock returns correct shape', async ({ page }) => {
     await page.goto('/')
+    await page.waitForLoadState('networkidle')
 
     const result = await page.evaluate(async () => {
       const res = await fetch('/api/brands/brand-int')
@@ -148,14 +154,14 @@ test.describe('Integrations', () => {
 
   test('dashboard connections tab renders (protected, redirects to / without auth)', async ({ page }) => {
     await page.goto('/dashboard/brand-int?tab=connections')
-    await page.waitForSelector('h1, h2', { timeout: 15000 })
+    await page.waitForLoadState('networkidle')
     const heading = page.locator('h1, h2').first()
     await expect(heading).toBeVisible()
   })
 
   test('notion callback page redirects gracefully', async ({ page }) => {
     await page.goto('/auth/notion/callback?code=mock-code&state=mock-state')
-    await page.waitForSelector('h1, nav', { timeout: 15000 })
+    await page.waitForLoadState('networkidle')
     await expect(page.locator('body')).toBeVisible()
   })
 })

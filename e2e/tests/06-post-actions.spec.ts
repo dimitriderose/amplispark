@@ -40,13 +40,14 @@ const MOCK_PLAN = {
 
 test.describe('Post actions', () => {
   test.beforeEach(async ({ page }) => {
-    // Block Firebase/Google network traffic
-    await page.route('**firebase**', route => route.abort())
-    await page.route('**firestore**', route => route.abort())
-    await page.route('**googleapis.com**', route => route.abort())
+    // Block Firebase/Google network traffic (external domains only, not local chunks)
+    await page.route('https://**firebase**.com/**', route => route.abort())
+    await page.route('https://**firebaseapp.com/**', route => route.abort())
+    await page.route('https://**firestore.googleapis.com/**', route => route.abort())
+    await page.route('https://**googleapis.com/**', route => route.abort())
 
     // Catch-all for remaining API calls — registered FIRST so specific routes (registered after) take priority (Playwright LIFO matching)
-    await page.route('**/api/**', route => {
+    await page.route('http://localhost:*/api/**', route => {
       if (!route.request().isNavigationRequest()) {
         route.fulfill({ status: 200, contentType: 'application/json', body: '{}' })
       } else {
@@ -55,7 +56,7 @@ test.describe('Post actions', () => {
     })
 
     // Mock brand endpoint
-    await page.route('**/api/brands/brand-abc', route => {
+    await page.route('http://localhost:*/api/brands/brand-abc', route => {
       if (route.request().method() === 'GET') {
         route.fulfill({
           status: 200,
@@ -76,7 +77,7 @@ test.describe('Post actions', () => {
     })
 
     // Mock plans endpoint
-    await page.route('**/api/brands/*/plans/**', route => {
+    await page.route('http://localhost:*/api/brands/*/plans/**', route => {
       const url = route.request().url()
       if (url.match(/\/plans\/[^/]+$/)) {
         route.fulfill({
@@ -96,7 +97,7 @@ test.describe('Post actions', () => {
     })
 
     // Mock individual post endpoints (approve, review)
-    await page.route('**/api/brands/*/posts/*/approve', route => {
+    await page.route('http://localhost:*/api/brands/*/posts/*/approve', route => {
       route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -104,7 +105,7 @@ test.describe('Post actions', () => {
       })
     })
 
-    await page.route('**/api/brands/*/posts/*/review', route => {
+    await page.route('http://localhost:*/api/brands/*/posts/*/review', route => {
       route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -113,7 +114,7 @@ test.describe('Post actions', () => {
     })
 
     // Mock posts endpoint
-    await page.route('**/api/posts**', route => {
+    await page.route('http://localhost:*/api/posts**', route => {
       route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -124,6 +125,7 @@ test.describe('Post actions', () => {
 
   test('posts API mock returns post list with expected shape', async ({ page }) => {
     await page.goto('/')
+    await page.waitForLoadState('networkidle')
 
     const result = await page.evaluate(async () => {
       const res = await fetch('/api/posts?brand_id=brand-abc')
@@ -137,6 +139,7 @@ test.describe('Post actions', () => {
 
   test('posts API mock: post has caption and platform fields', async ({ page }) => {
     await page.goto('/')
+    await page.waitForLoadState('networkidle')
 
     const result = await page.evaluate(async () => {
       const res = await fetch('/api/posts?brand_id=brand-abc&plan_id=plan-xyz')
@@ -150,6 +153,7 @@ test.describe('Post actions', () => {
 
   test('approve endpoint mock returns approved status', async ({ page }) => {
     await page.goto('/')
+    await page.waitForLoadState('networkidle')
 
     const result = await page.evaluate(async () => {
       const res = await fetch('/api/brands/brand-abc/posts/post-1/approve', { method: 'POST' })
@@ -160,6 +164,7 @@ test.describe('Post actions', () => {
 
   test('review endpoint mock returns score', async ({ page }) => {
     await page.goto('/')
+    await page.waitForLoadState('networkidle')
 
     const result = await page.evaluate(async () => {
       const res = await fetch('/api/brands/brand-abc/posts/post-1/review', { method: 'POST' })
@@ -171,14 +176,14 @@ test.describe('Post actions', () => {
 
   test('export page renders without crashing (protected, redirects to /)', async ({ page }) => {
     await page.goto('/export/brand-abc?plan_id=plan-xyz')
-    await page.waitForSelector('h1, h2', { timeout: 15000 })
+    await page.waitForLoadState('networkidle')
     const heading = page.locator('h1, h2').first()
     await expect(heading).toBeVisible()
   })
 
   test('landing page hero heading is present', async ({ page }) => {
     await page.goto('/')
-    await page.waitForSelector('h1', { timeout: 15000 })
+    await page.waitForLoadState('networkidle')
     await expect(page.locator('h1')).toBeVisible()
   })
 })
