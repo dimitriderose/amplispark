@@ -38,24 +38,18 @@ export function getUid(): string | null {
   return auth.currentUser?.uid ?? null
 }
 
-export async function getIdToken(): Promise<string | null> {
+export async function getIdToken(): Promise<string> {
+  await auth.authStateReady()
   const user = auth.currentUser
-  if (!user) return null
-  try {
-    return await user.getIdToken()
-  } catch {
-    return null
-  }
+  if (!user) throw new Error('Not signed in')
+  return user.getIdToken()
 }
 
-export async function getFreshIdToken(): Promise<string | null> {
+export async function getFreshIdToken(): Promise<string> {
+  await auth.authStateReady()
   const user = auth.currentUser
-  if (!user) return null
-  try {
-    return await user.getIdToken(/* forceRefresh */ true)
-  } catch {
-    return null
-  }
+  if (!user) throw new Error('Not signed in')
+  return user.getIdToken(/* forceRefresh */ true)
 }
 
 export function getCurrentUser(): {

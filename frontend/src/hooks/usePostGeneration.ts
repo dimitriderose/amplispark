@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from 'react'
+import { getIdToken } from '../api/firebase'
 
 export type GenerationStatus = 'idle' | 'generating' | 'complete' | 'error'
 
@@ -36,15 +37,15 @@ export function usePostGeneration() {
   })
 
   const eventSourceRef = useRef<EventSource | null>(null)
-  // M20: Prevent duplicate submissions
   const isSubmittingRef = useRef(false)
+  // Set to true when cleanup/reset fires before the async token fetch resolves,
+  // so the EventSource is never opened after cancellation.
+  const connectCancelledRef = useRef(false)
 
   const generate = useCallback((planId: string, dayIndex: number, brandId: string, instructions?: string, imageStyle?: string) => {
-    // M20: Guard against rapid duplicate calls
     if (isSubmittingRef.current) return () => {}
     isSubmittingRef.current = true
 
-    // Close any existing connection
     if (eventSourceRef.current) {
       eventSourceRef.current.close()
       eventSourceRef.current = null
@@ -66,13 +67,24 @@ export function usePostGeneration() {
       review: null,
     })
 
-    // M21: Wrap EventSource initialization in try/catch
-    try {
-      const instructionsParam = instructions ? `&instructions=${encodeURIComponent(instructions)}` : ''
-      const imageStyleParam = imageStyle ? `&image_style=${encodeURIComponent(imageStyle)}` : ''
-      const url = `/api/generate/${planId}/${dayIndex}?brand_id=${encodeURIComponent(brandId)}${instructionsParam}${imageStyleParam}`
-      const es = new EventSource(url)
-      eventSourceRef.current = es
+    connectCancelledRef.current = false
+
+    const connectWithToken = async () => {
+      try {
+        const token = await getIdToken()
+        if (!token) {
+          isSubmittingRef.current = false
+          setState(prev => ({ ...prev, status: 'error', error: 'Authentication required. Please sign in.' }))
+          return
+        }
+        // If the component unmounted (cleanup ran) before token resolved, bail out.
+        if (connectCancelledRef.current) return
+        const tokenParam = token ? `&token=${encodeURIComponent(token)}` : ''
+        const instructionsParam = instructions ? `&instructions=${encodeURIComponent(instructions)}` : ''
+        const imageStyleParam = imageStyle ? `&image_style=${encodeURIComponent(imageStyle)}` : ''
+        const url = `/api/generate/${planId}/${dayIndex}?brand_id=${encodeURIComponent(brandId)}${tokenParam}${instructionsParam}${imageStyleParam}`
+        const es = new EventSource(url)
+        eventSourceRef.current = es
 
       es.addEventListener('status', (e: MessageEvent) => {
         const data = JSON.parse(e.data)
@@ -157,27 +169,189 @@ export function usePostGeneration() {
         }
       })
 
-      // Browser-level connection error (backend down, network drop, proxy timeout)
       es.onerror = () => {
         isSubmittingRef.current = false
         setState(prev => {
           if (prev.status === 'complete') {
-            // Connection dropped after completion — clear video flag so manual button shows
             return prev.videoGenerating ? { ...prev, videoGenerating: false } : prev
           }
-          return { ...prev, status: 'error', error: 'Connection lost — the server may have restarted. Click "Regenerate" to try again.' }
+          const neverConnected = es.readyState === EventSource.CLOSED && prev.statusMessage === 'Starting generation...'
+          const error = neverConnected
+            ? 'Could not connect to the server. Check that the backend is running.'
+            : 'Connection lost — the server may have restarted. Click "Regenerate" to try again.'
+          return { ...prev, status: 'error', error }
         })
         es.close()
       }
-    } catch (err: unknown) {
-      // M21: Handle failure before EventSource connects (e.g. invalid URL, network down)
+      } catch (err: unknown) {
+        isSubmittingRef.current = false
+        const message = err instanceof Error ? err.message : 'Failed to start generation'
+        setState(prev => ({ ...prev, status: 'error', error: message }))
+      }
+    }
+    void connectWithToken()
+
+    return () => {
+      connectCancelledRef.current = true
       isSubmittingRef.current = false
-      const message = err instanceof Error ? err.message : 'Failed to start generation'
-      setState(prev => ({ ...prev, status: 'error', error: message }))
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close()
+        eventSourceRef.current = null
+      }
+    }
+  }, [])
+
+  const generateAdhoc = useCallback((brandId: string, platform: string, contentType?: string, brief?: string, imageStyle?: string) => {
+    if (isSubmittingRef.current) return () => {}
+    isSubmittingRef.current = true
+
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close()
+      eventSourceRef.current = null
     }
 
-    // M19: Return cleanup function that closes EventSource on unmount
+    setState({
+      status: 'generating',
+      statusMessage: 'Starting generation...',
+      captionChunks: [],
+      caption: '',
+      hashtags: [],
+      imageUrl: null,
+      imageUrls: [],
+      videoUrl: null,
+      videoGenerating: false,
+      audioNote: null,
+      postId: null,
+      error: null,
+      review: null,
+    })
+
+    connectCancelledRef.current = false
+
+    const connectWithToken = async () => {
+      try {
+        const token = await getIdToken()
+        if (!token) {
+          isSubmittingRef.current = false
+          setState(prev => ({ ...prev, status: 'error', error: 'Authentication required. Please sign in.' }))
+          return
+        }
+        // If the component unmounted (cleanup ran) before token resolved, bail out.
+        if (connectCancelledRef.current) return
+        const params = new URLSearchParams({ platform })
+        if (contentType) params.set('content_type', contentType)
+        if (brief) params.set('brief', brief)
+        if (imageStyle) params.set('image_style', imageStyle)
+        params.set('token', token)
+        const url = `/api/generate/quickpost/${encodeURIComponent(brandId)}?${params.toString()}`
+        const es = new EventSource(url)
+        eventSourceRef.current = es
+
+        es.addEventListener('status', (e: MessageEvent) => {
+          const data = JSON.parse(e.data)
+          setState(prev => ({ ...prev, statusMessage: data.message }))
+        })
+
+        es.addEventListener('caption', (e: MessageEvent) => {
+          const data = JSON.parse(e.data)
+          if (data.chunk) {
+            setState(prev => ({
+              ...prev,
+              captionChunks: [...prev.captionChunks, data.text],
+            }))
+          } else {
+            setState(prev => ({
+              ...prev,
+              caption: data.text,
+              hashtags: data.hashtags || [],
+              captionChunks: [],
+            }))
+          }
+        })
+
+        es.addEventListener('image', (e: MessageEvent) => {
+          const data = JSON.parse(e.data)
+          setState(prev => ({
+            ...prev,
+            imageUrl: prev.imageUrl || data.url,
+            imageUrls: [...prev.imageUrls, data.url],
+          }))
+        })
+
+        es.addEventListener('complete', (e: MessageEvent) => {
+          const data = JSON.parse(e.data)
+          isSubmittingRef.current = false
+          setState(prev => ({
+            ...prev,
+            status: 'complete',
+            postId: data.post_id,
+            caption: data.caption || prev.caption,
+            hashtags: data.hashtags || prev.hashtags,
+            imageUrl: data.image_url || prev.imageUrl,
+            imageUrls: data.image_urls?.length ? data.image_urls : prev.imageUrls,
+            review: data.review || null,
+            videoGenerating: data.awaiting_video || false,
+          }))
+          // Keep open only when video events are expected; otherwise close immediately.
+          if (!data.awaiting_video) es.close()
+        })
+
+        es.addEventListener('video_complete', (e: MessageEvent) => {
+          const data = JSON.parse(e.data)
+          setState(prev => ({
+            ...prev,
+            videoUrl: data.video_url,
+            audioNote: data.audio_note || null,
+            statusMessage: '',
+            videoGenerating: false,
+          }))
+          es.close()
+        })
+
+        es.addEventListener('video_error', (e: MessageEvent) => {
+          const data = JSON.parse(e.data)
+          setState(prev => ({
+            ...prev,
+            statusMessage: '',
+            audioNote: `Video generation failed: ${data.message}. Use the "Generate Video" button to retry.`,
+            videoGenerating: false,
+          }))
+          es.close()
+        })
+
+        es.addEventListener('error', (e: MessageEvent) => {
+          if (e.data) {
+            const data = JSON.parse(e.data)
+            isSubmittingRef.current = false
+            setState(prev => ({ ...prev, status: 'error', error: data.message }))
+            es.close()
+          }
+        })
+
+        es.onerror = () => {
+          isSubmittingRef.current = false
+          setState(prev => {
+            if (prev.status === 'complete') {
+              return prev.videoGenerating ? { ...prev, videoGenerating: false } : prev
+            }
+            const neverConnected = es.readyState === EventSource.CLOSED && prev.statusMessage === 'Starting generation...'
+            const error = neverConnected
+              ? 'Could not connect to the server. Check that the backend is running.'
+              : 'Connection lost — the server may have restarted. Click "Regenerate" to try again.'
+            return { ...prev, status: 'error', error }
+          })
+          es.close()
+        }
+      } catch (err: unknown) {
+        isSubmittingRef.current = false
+        const message = err instanceof Error ? err.message : 'Failed to start generation'
+        setState(prev => ({ ...prev, status: 'error', error: message }))
+      }
+    }
+    void connectWithToken()
+
     return () => {
+      connectCancelledRef.current = true
       isSubmittingRef.current = false
       if (eventSourceRef.current) {
         eventSourceRef.current.close()
@@ -187,6 +361,7 @@ export function usePostGeneration() {
   }, [])
 
   const reset = useCallback(() => {
+    connectCancelledRef.current = true
     isSubmittingRef.current = false
     if (eventSourceRef.current) {
       eventSourceRef.current.close()
@@ -209,7 +384,6 @@ export function usePostGeneration() {
     })
   }, [])
 
-  /** Load an already-generated post into the state (view mode). */
   const loadExisting = useCallback((post: {
     postId: string
     caption: string
@@ -235,5 +409,5 @@ export function usePostGeneration() {
     })
   }, [])
 
-  return { state, generate, reset, loadExisting }
+  return { state, generate, generateAdhoc, reset, loadExisting }
 }

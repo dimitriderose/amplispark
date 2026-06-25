@@ -32,16 +32,16 @@ except ValueError:
 
 
 async def get_authenticated_uid(request: Request) -> str | None:
-    """Extract and verify the Firebase ID token from the Authorization header.
-
-    Returns the verified UID, or None if no token is provided.
-    Raises 401 if the token is present but invalid/expired.
-    """
     auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
-        return None
-
-    token = auth_header[len("Bearer ") :]
+    if auth_header.startswith("Bearer "):
+        token: str = auth_header[len("Bearer ") :]
+        if not token:
+            token = ""
+    else:
+        raw = request.query_params.get("token", "")
+        token = raw if isinstance(raw, str) else ""
+        if not token:
+            return None
     try:
         loop = asyncio.get_running_loop()
         decoded = await loop.run_in_executor(

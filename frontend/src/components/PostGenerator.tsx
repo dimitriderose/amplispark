@@ -26,7 +26,6 @@ interface Props {
   overrideImageUrl?: string | null
 }
 
-// RegenerateButton with optional instructions input
 function RegenerateButton({ onRegenerate }: { onRegenerate: (instructions?: string) => void }) {
   const [showInput, setShowInput] = useState(false)
   const [instructions, setInstructions] = useState('')
@@ -100,7 +99,7 @@ function RegenerateButton({ onRegenerate }: { onRegenerate: (instructions?: stri
   )
 }
 
-/** BYOP risk warning with caption-only mode toggle. M-3: toggle actually hides the image via callback. */
+/** BYOP risk warning with caption-only mode toggle — toggle hides the image via callback. */
 function CaptionOnlyBanner({ recommendation, onToggle }: { recommendation: string; onToggle: (captionOnly: boolean) => void }) {
   const [captionOnly, setCaptionOnly] = useState(false)
 
@@ -153,7 +152,7 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
   const [localCaption, setLocalCaption] = useState<string | null>(null)
   const [captionSaving, setCaptionSaving] = useState(false)
   const [captionSaveError, setCaptionSaveError] = useState<string | null>(null)
-  // M-3: Caption-only mode state lifted up to actually hide the image panel
+  // Caption-only mode state lifted up here to control hiding the image panel
   const [captionOnly, setCaptionOnly] = useState(false)
   // Video section collapsed by default on text-first platforms (LinkedIn, X, etc.)
   const [videoExpanded, setVideoExpanded] = useState(false)
@@ -168,7 +167,6 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
   const [carouselIndex, setCarouselIndex] = useState(0)
   const isCarousel = imageUrls.length > 1
 
-  // Reset editing state when postId changes (new generation or day switch)
   useEffect(() => {
     setLocalCaption(null)
     setEditingCaption(false)
@@ -181,7 +179,6 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
     cancelledRef.current = false
   }, [postId])
 
-  // Focus textarea when entering edit mode
   useEffect(() => {
     if (editingCaption) {
       textareaRef.current?.focus()
@@ -245,7 +242,6 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
     setDraftCaption('')
     setCaptionSaveError(null)
     setCaptionSaving(false)
-    // Return focus to caption box
     setTimeout(() => captionRef.current?.focus(), 0)
   }
 
@@ -282,7 +278,6 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-      {/* Status bar */}
       {(status === 'generating' || statusMessage) && (
         <div style={{
           display: 'flex', alignItems: 'center', gap: 10,
@@ -304,7 +299,6 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
         </div>
       )}
 
-      {/* Error state */}
       {error && (
         <div style={{
           padding: '12px 16px', borderRadius: 8,
@@ -315,12 +309,9 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
         </div>
       )}
 
-      {/* M-3: When captionOnly, collapse to 1-column so caption fills the width */}
       <div style={{ display: 'grid', gridTemplateColumns: (isMobile || captionOnly) ? '1fr' : '1fr 1fr', gap: 20 }}>
 
-        {/* Left: Caption */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {/* Platform + theme header */}
           {dayBrief && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <PlatformIcon size={20} color={platformSpec.color} />
@@ -343,7 +334,6 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
             </div>
           )}
 
-          {/* Caption text box — editable when post is complete */}
           {editingCaption ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <textarea
@@ -417,7 +407,6 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
                     {status === 'idle' ? 'Caption will appear here...' : 'Writing caption...'}
                   </span>
                 )}
-                {/* Blinking cursor during streaming */}
                 {status === 'generating' && captionChunks.length > 0 && (
                   <span style={{
                     display: 'inline-block', width: 2, height: 16,
@@ -426,7 +415,6 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
                   }} />
                 )}
                 <style>{`@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }`}</style>
-                {/* Copy button — visible when caption is ready */}
                 {status === 'complete' && savedCaption && (
                   <button
                     type="button"
@@ -455,12 +443,10 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
             </div>
           )}
 
-          {/* BYOP recommendation — shown when brand is high-risk for AI image generation */}
           {byopRecommendation && status === 'complete' && imageUrl && (
             <CaptionOnlyBanner recommendation={byopRecommendation} onToggle={setCaptionOnly} />
           )}
 
-          {/* L-4: Label the platform preview section */}
           {status === 'complete' && savedCaption && dayBrief?.platform && !editingCaption && (
             <div>
               <p style={{ fontSize: 11, fontWeight: 600, color: A.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
@@ -478,7 +464,6 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
             </div>
           )}
 
-          {/* Hashtags */}
           {hashtags.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {hashtags.map((tag, i) => (
@@ -493,7 +478,7 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
             </div>
           )}
 
-          {/* H-2: Removed "Approve Post" button — approval is now handled exclusively by ReviewPanel */}
+          {/* Approval is handled exclusively by ReviewPanel — no button here */}
           {status === 'complete' && postId && onRegenerate && (
             <div style={{ marginTop: 4 }}>
               <RegenerateButton onRegenerate={(instructions) => {
@@ -605,7 +590,6 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
           )}
         </div>
 
-        {/* Right: Image / Carousel / Video — M-3: hidden when captionOnly is active */}
         {!captionOnly && (
           <div>
             <div style={{
@@ -616,7 +600,6 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
               position: 'relative',
             }}>
               {isVideoFirst ? (
-                /* video_first: video player in right panel */
                 videoUrl ? (
                   <video
                     src={videoUrl}
@@ -670,14 +653,12 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
                   </div>
                 )
               ) : imageUrl ? (
-                /* Image / Carousel */
                 <>
                   <img
                     src={isCarousel ? imageUrls[carouselIndex] : imageUrl}
                     alt={isCarousel ? `Slide ${carouselIndex + 1}` : 'Generated post image'}
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   />
-                  {/* Carousel nav arrows */}
                   {isCarousel && (
                     <>
                       {carouselIndex > 0 && (
@@ -702,7 +683,6 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
                           }}
                         >›</button>
                       )}
-                      {/* Dot indicators */}
                       <div style={{
                         position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)',
                         display: 'flex', gap: 6,
@@ -719,7 +699,6 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
                           />
                         ))}
                       </div>
-                      {/* Slide counter badge */}
                       <span style={{
                         position: 'absolute', top: 10, right: 10,
                         padding: '2px 8px', borderRadius: 12, fontSize: 11, fontWeight: 600,
@@ -761,7 +740,6 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
                 🔊 {state.audioNote}
               </div>
             )}
-            {/* Edit media slot — rendered directly below the media */}
             {editMediaSlot && (
               <div style={{ marginTop: 12 }}>{editMediaSlot}</div>
             )}

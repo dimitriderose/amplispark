@@ -11,9 +11,7 @@ interface Props {
   post: Post
   brandId: string
   onApproved?: () => void
-  /** DK-5: Called when user dismisses a stuck 'generating' or 'failed' post from the UI */
   onDismiss?: () => void
-  /** Navigate to view this post's full content */
   onView?: () => void
 }
 
@@ -30,7 +28,6 @@ export default function PostCard({ post, brandId, onApproved, onDismiss, onView 
 
   const isFinal = post.status === 'complete' || post.status === 'approved'
 
-  // Auto-dismiss errors after 5 seconds
   useEffect(() => {
     if (!exportError) return
     const t = setTimeout(() => setExportError(null), 5000)
@@ -41,7 +38,6 @@ export default function PostCard({ post, brandId, onApproved, onDismiss, onView 
     const t = setTimeout(() => setApproveError(null), 5000)
     return () => clearTimeout(t)
   }, [approveError])
-  // Clean up copy timer on unmount
   useEffect(() => () => { if (copyTimerRef.current) clearTimeout(copyTimerRef.current) }, [])
 
   const handleCopy = () => {
@@ -81,7 +77,6 @@ export default function PostCard({ post, brandId, onApproved, onDismiss, onView 
       borderRadius: 10, background: A.surface, border: `1px solid ${A.border}`,
       overflow: 'hidden', display: 'flex', flexDirection: 'column',
     }}>
-      {/* Image or placeholder — aspect ratio matches platform + derivative type */}
       <div
         onClick={isFinal && onView ? onView : undefined}
         style={{
@@ -112,7 +107,6 @@ export default function PostCard({ post, brandId, onApproved, onDismiss, onView 
         ) : (
           <span style={{ fontSize: 32, opacity: 0.3 }}>🖼️</span>
         )}
-        {/* Status badge overlay */}
         <span style={{
           position: 'absolute', top: 8, right: 8,
           fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 12,
@@ -120,7 +114,6 @@ export default function PostCard({ post, brandId, onApproved, onDismiss, onView 
         }}>
           {label}
         </span>
-        {/* DK-5: Dismiss button for stuck generating/failed posts */}
         {(post.status === 'generating' || post.status === 'failed') && onDismiss && (
           <button
             onClick={onDismiss}
@@ -136,11 +129,16 @@ export default function PostCard({ post, brandId, onApproved, onDismiss, onView 
             ×
           </button>
         )}
+        {post.is_quick_post && (
+          <span style={{
+            position: 'absolute', bottom: 8, left: 8,
+            fontSize: 14, color: A.textMuted, lineHeight: 1,
+            pointerEvents: 'none',
+          }}>⚡</span>
+        )}
       </div>
 
-      {/* Content */}
       <div style={{ padding: '12px 14px', flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {/* Platform + Day */}
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           {post.platform && (
             <span style={{
@@ -150,12 +148,13 @@ export default function PostCard({ post, brandId, onApproved, onDismiss, onView 
               {post.platform}
             </span>
           )}
-          <span style={{ fontSize: 11, color: A.textMuted }}>
-            Day {(post.day_index ?? 0) + 1}
-          </span>
+          {!post.is_quick_post && (
+            <span style={{ fontSize: 11, color: A.textMuted }}>
+              Day {(post.day_index ?? 0) + 1}
+            </span>
+          )}
         </div>
 
-        {/* Caption preview */}
         <p style={{
           fontSize: 12, color: A.textSoft, margin: 0, lineHeight: 1.5,
           display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical',
@@ -164,7 +163,6 @@ export default function PostCard({ post, brandId, onApproved, onDismiss, onView 
           {post.caption || 'No caption yet'}
         </p>
 
-        {/* Hashtags */}
         {post.hashtags && post.hashtags.length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
             {post.hashtags.slice(0, 3).map((tag, i) => (
@@ -178,7 +176,6 @@ export default function PostCard({ post, brandId, onApproved, onDismiss, onView 
           </div>
         )}
 
-        {/* L-5: Inline errors instead of alert() */}
         {exportError && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
             <p style={{ fontSize: 11, color: A.coral, margin: 0, flex: 1 }}>{exportError}</p>
@@ -192,31 +189,47 @@ export default function PostCard({ post, brandId, onApproved, onDismiss, onView 
           </div>
         )}
 
-        {/* Retry button for failed posts */}
-        {post.status === 'failed' && post.plan_id != null && post.day_index != null && (
-          <button
-            onClick={async () => {
-              try {
-                const res = await api.regeneratePost(brandId, post.post_id)
-                navigate(res.generate_url)
-              } catch {
-                navigate(`/generate/${post.plan_id}/${post.brief_index ?? post.day_index}?brand_id=${brandId}`)
-              }
-            }}
-            style={{
-              width: '100%', padding: btnPad, borderRadius: 6,
-              border: `1px solid ${A.coral}`, background: 'transparent',
-              color: A.coral, fontSize: 11, fontWeight: 600, cursor: 'pointer',
-              marginBottom: 4,
-            }}
-          >
-            ↺ Retry
-          </button>
+        {post.status === 'failed' && (
+          post.is_quick_post ? (
+            <button
+              onClick={() => {
+                const params = new URLSearchParams({ quickpost: '1' })
+                if (post.platform) params.set('platform', post.platform)
+                if (post.derivative_type) params.set('content_type', post.derivative_type)
+                navigate(`/dashboard/${brandId}?${params.toString()}`)
+              }}
+              style={{
+                width: '100%', padding: btnPad, borderRadius: 6,
+                border: `1px solid ${A.coral}`, background: 'transparent',
+                color: A.coral, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                marginBottom: 4,
+              }}
+            >
+              ↺ Retry
+            </button>
+          ) : post.plan_id != null && post.day_index != null ? (
+            <button
+              onClick={async () => {
+                try {
+                  const res = await api.regeneratePost(brandId, post.post_id)
+                  navigate(res.generate_url)
+                } catch {
+                  navigate(`/generate/${post.plan_id}/${post.brief_index ?? post.day_index}?brand_id=${brandId}`)
+                }
+              }}
+              style={{
+                width: '100%', padding: btnPad, borderRadius: 6,
+                border: `1px solid ${A.coral}`, background: 'transparent',
+                color: A.coral, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                marginBottom: 4,
+              }}
+            >
+              ↺ Retry
+            </button>
+          ) : null
         )}
 
-        {/* Action buttons */}
         <div style={{ marginTop: 'auto', display: 'flex', gap: 6, paddingTop: 4, flexWrap: 'wrap' }}>
-          {/* Copy caption — only when post is complete/approved with a caption */}
           {isFinal && post.caption && (
             <button
               type="button"

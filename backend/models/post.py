@@ -18,9 +18,10 @@ class ReviewResult(BaseModel):
 
 class Post(BaseModel):
     post_id: str
-    plan_id: str
+    plan_id: str | None = None
     brand_id: str
-    day_index: int
+    day_index: int | None = None
+    is_quick_post: bool = False
     platform: str
     caption: str = ""
     image_urls: list[str] = []
