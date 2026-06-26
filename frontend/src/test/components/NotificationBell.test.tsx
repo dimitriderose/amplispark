@@ -29,7 +29,18 @@ const makeNotif = (overrides: Partial<AppNotification> = {}): AppNotification =>
   ...overrides,
 })
 
-const defaultProps = {
+interface BellProps {
+  unreadCount: number
+  notifications: AppNotification[]
+  listLoading: boolean
+  panelOpen: boolean
+  onOpen: () => void
+  onClose: () => void
+  onMarkRead: (id: string) => Promise<void>
+  onMarkAllRead: () => Promise<void>
+}
+
+const defaultProps: BellProps = {
   unreadCount: 0,
   notifications: [],
   listLoading: false,
@@ -40,7 +51,7 @@ const defaultProps = {
   onMarkAllRead: vi.fn().mockResolvedValue(undefined),
 }
 
-function renderBell(props: Partial<typeof defaultProps> = {}) {
+function renderBell(props: Partial<BellProps> = {}) {
   return render(
     <MemoryRouter>
       <NotificationBell {...defaultProps} {...props} />
