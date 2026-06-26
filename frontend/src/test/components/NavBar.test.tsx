@@ -12,6 +12,19 @@ vi.mock('../../hooks/useIsMobile', () => ({
   useIsMobile: vi.fn().mockReturnValue(false),
 }))
 
+vi.mock('../../hooks/useNotifications', () => ({
+  useNotifications: vi.fn().mockReturnValue({
+    unreadCount: 0,
+    notifications: [],
+    listLoading: false,
+    panelOpen: false,
+    openPanel: vi.fn(),
+    closePanel: vi.fn(),
+    markRead: vi.fn(),
+    markAllRead: vi.fn(),
+  }),
+}))
+
 import NavBar from '../../components/NavBar'
 import { useAuth } from '../../hooks/useAuth'
 import { useIsMobile } from '../../hooks/useIsMobile'
