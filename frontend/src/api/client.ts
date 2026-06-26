@@ -1,5 +1,6 @@
 import { getIdToken, getUid } from './firebase'
 import { downloadBlob } from '../utils/downloads'
+import type { AppNotification } from '../types'
 import type {
   BrandResponse,
   CreateBrandResponse,
@@ -47,8 +48,9 @@ async function handleResponse<T>(res: Response): Promise<T> {
 
 async function handleBlobResponse(res: Response): Promise<Blob> {
   if (!res.ok) {
+    const clone = res.clone()
     const err = await res.json().catch(async () => {
-      const text = await res.text().catch(() => '')
+      const text = await clone.text().catch(() => '')
       return { error: text.slice(0, 200) || res.statusText }
     })
     throw new Error(err.detail || err.error || `HTTP ${res.status}`)
@@ -248,4 +250,16 @@ export const api = {
       headers: { ...authH },
     }).then(r => handleResponse<RefreshResearchResponse>(r))
   },
+
+  getUnreadCount: () =>
+    request<{ unread_count: number }>('/api/notifications/unread-count'),
+
+  listNotifications: (limit = 10) =>
+    request<{ notifications: AppNotification[]; unread_count: number }>(`/api/notifications?limit=${limit}`),
+
+  markNotificationRead: (notificationId: string) =>
+    request<{ status: string; notification_id: string }>(`/api/notifications/${notificationId}/read`, { method: 'PATCH' }),
+
+  markAllNotificationsRead: () =>
+    request<{ status: string; updated: number }>('/api/notifications/read-all', { method: 'POST' }),
 }

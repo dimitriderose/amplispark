@@ -148,12 +148,56 @@ async def _run_generation_task(
                             "brand_id": brand_id,
                         },
                     )
+                    try:
+                        owner_uid = brand.get("owner_uid")
+                        if owner_uid:
+                            platform = day_brief.get("platform", "post")
+                            await firestore_client.create_notification(
+                                owner_uid,
+                                {
+                                    "type": "complete",
+                                    "title": "Post ready",
+                                    "body": f"Your {platform.capitalize()} post is ready to review.",
+                                    "brand_id": brand_id,
+                                    "post_id": post_id,
+                                    "plan_id": day_brief.get("_plan_id", "adhoc"),
+                                    "day_index": day_brief.get("day_index"),
+                                },
+                            )
+                    except Exception as notif_err:
+                        logger.warning(
+                            "Failed to create complete notification for post %s: %s",
+                            post_id,
+                            notif_err,
+                        )
                 elif event_name == "error":
                     try:
                         await firestore_client.update_post(brand_id, post_id, {"status": "failed"})
                     except Exception as fs_err:
                         logger.error(
                             "Firestore error-update failed for post %s: %s", post_id, fs_err
+                        )
+                    try:
+                        owner_uid = brand.get("owner_uid")
+                        if owner_uid:
+                            platform = day_brief.get("platform", "post")
+                            await firestore_client.create_notification(
+                                owner_uid,
+                                {
+                                    "type": "failed",
+                                    "title": "Post generation failed",
+                                    "body": f"Your {platform.capitalize()} post could not be generated. Try again.",
+                                    "brand_id": brand_id,
+                                    "post_id": post_id,
+                                    "plan_id": day_brief.get("_plan_id", "adhoc"),
+                                    "day_index": day_brief.get("day_index"),
+                                },
+                            )
+                    except Exception as notif_err:
+                        logger.warning(
+                            "Failed to create failed notification for post %s: %s",
+                            post_id,
+                            notif_err,
                         )
 
                 try:

@@ -97,3 +97,19 @@ export interface DayBrief {
   custom_photo_url?: string | null
   suggested_time?: string
 }
+
+export type NotificationType = 'processing' | 'complete' | 'failed'
+
+export interface AppNotification {
+  notification_id: string
+  uid: string
+  type: NotificationType
+  title: string
+  body: string
+  brand_id: string
+  post_id: string
+  plan_id: string
+  day_index: number | null
+  read: boolean
+  created_at?: string
+}

@@ -74,6 +74,39 @@ resource "google_firestore_index" "brands_by_owner_created_at" {
   depends_on = [google_firestore_database.default]
 }
 
+resource "google_firestore_index" "notifications_read_created_at" {
+  project     = var.project_id
+  database    = google_firestore_database.default.name
+  collection  = "notifications"
+  query_scope = "COLLECTION_GROUP"
+
+  fields {
+    field_path = "read"
+    order      = "ASCENDING"
+  }
+  fields {
+    field_path = "created_at"
+    order      = "DESCENDING"
+  }
+  fields {
+    field_path = "__name__"
+    order      = "DESCENDING"
+  }
+
+  depends_on = [google_firestore_database.default]
+}
+
+resource "google_firestore_field" "notifications_ttl" {
+  project    = var.project_id
+  database   = google_firestore_database.default.name
+  collection = "notifications"
+  field      = "created_at"
+
+  ttl_config {}
+
+  depends_on = [google_firestore_database.default]
+}
+
 # ── Cloud Storage bucket (generated images + video) ─────────────────────────
 
 resource "google_storage_bucket" "assets" {

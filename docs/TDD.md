@@ -1655,6 +1655,33 @@ amplifi-db/
 
 **Soft deletes (v1.9):** `delete_post` sets `status="deleted"` and `deleted_at` timestamp on the post document rather than performing a hard delete. `list_posts` filters out posts where `status == "deleted"`. No hard deletes are performed — this enables future recovery/undo functionality.
 
+**User documents:**
+
+```
+amplifi-db/
+├── users/
+│   └── {uid}/                              # Firebase Auth UID of the recipient
+│       └── notifications/                  # Subcollection — one doc per in-app notification
+│           └── {notificationId}/
+│               ├── notification_id: string # UUID — matches document ID
+│               ├── uid: string             # Firebase UID of recipient (denormalised for queries)
+│               ├── type: string            # "processing" | "complete" | "failed" — mirrors post status
+│               ├── title: string           # e.g. "Post ready"
+│               ├── body: string            # e.g. "Your Instagram post is ready to review."
+│               ├── brand_id: string        # Source brand
+│               ├── post_id: string         # Source post
+│               ├── plan_id: string         # Source plan, or "adhoc" for quick posts
+│               ├── day_index: number | null # Day index for navigation — null for non-navigable types
+│               ├── read: boolean           # false on creation; set true when user opens notification
+│               └── created_at: timestamp   # UTC — Firestore TTL policy expires docs after 30 days
+```
+
+**Notification notes:**
+
+- **TTL:** A 30-day Firestore TTL policy is configured on the `created_at` field of the `notifications` subcollection. Documents are automatically deleted 30 days after creation.
+- **Navigation:** `complete` notifications deep-link to `/generate/{plan_id}/{day_index}?brand_id={brand_id}&post_id={post_id}`. `failed` notifications are informational only and are not clickable in the UI.
+- **Composite index:** The subcollection `notifications` requires a composite index on `read ASC + created_at DESC` to support the unread-first, newest-first query used by the notification bell.
+
 ## 7.2 Cloud Storage Structure
 
 ```

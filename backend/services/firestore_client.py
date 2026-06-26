@@ -536,3 +536,88 @@ async def save_posting_frequency(
             }
         )
     )
+
+
+# ── Notification operations ───────────────────────────────────
+
+
+async def create_notification(uid: str, data: dict) -> str:
+    db = get_client()
+    notification_id = str(uuid.uuid4())
+    now = datetime.now(UTC)
+    doc = {
+        **data,
+        "notification_id": notification_id,
+        "uid": uid,
+        "read": False,
+        "created_at": now,
+    }
+    await (
+        db.collection("users")
+        .document(uid)
+        .collection("notifications")
+        .document(notification_id)
+        .set(doc)
+    )
+    return notification_id
+
+
+async def list_notifications(uid: str, limit: int = 10) -> list[dict]:
+    db = get_client()
+    docs = await (
+        db.collection("users")
+        .document(uid)
+        .collection("notifications")
+        .order_by("created_at", direction=firestore.Query.DESCENDING)
+        .limit(limit)
+        .get()
+    )
+    return [d for d in (doc.to_dict() for doc in docs) if d is not None]
+
+
+async def get_unread_count(uid: str) -> int:
+    db = get_client()
+    query = (
+        db.collection("users")
+        .document(uid)
+        .collection("notifications")
+        .where(filter=FieldFilter("read", "==", False))
+    )
+    try:
+        result = await query.count().get()
+        return result[0][0].value
+    except Exception:
+        docs = await query.select([]).get()
+        return len(docs)
+
+
+async def mark_notification_read(uid: str, notification_id: str) -> None:
+    db = get_client()
+    await (
+        db.collection("users")
+        .document(uid)
+        .collection("notifications")
+        .document(notification_id)
+        .update({"read": True})
+    )
+
+
+async def mark_all_notifications_read(uid: str) -> int:
+    db = get_client()
+    docs = await (
+        db.collection("users")
+        .document(uid)
+        .collection("notifications")
+        .where(filter=FieldFilter("read", "==", False))
+        .select([])
+        .get()
+    )
+    if not docs:
+        return 0
+    _BATCH_LIMIT = 500
+    for i in range(0, len(docs), _BATCH_LIMIT):
+        batch = db.batch()
+        for doc in docs[i : i + _BATCH_LIMIT]:
+            batch.update(doc.reference, {"read": True})
+        await batch.commit()
+    return len(docs)

@@ -3,6 +3,8 @@ import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { A } from '../theme'
 import { useAuth } from '../hooks/useAuth'
 import { useIsMobile } from '../hooks/useIsMobile'
+import { useNotifications } from '../hooks/useNotifications'
+import NotificationBell from './NotificationBell'
 
 export default function NavBar() {
   const isMobile = useIsMobile()
@@ -12,6 +14,10 @@ export default function NavBar() {
   const { user, isSignedIn, signIn, signOut } = useAuth()
   const [accountOpen, setAccountOpen] = useState(false)
   const accountRef = useRef<HTMLDivElement>(null)
+  const {
+    unreadCount, notifications, listLoading, panelOpen,
+    openPanel, closePanel, markRead, markAllRead,
+  } = useNotifications(isSignedIn)
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -78,74 +84,88 @@ export default function NavBar() {
         )}
       </div>
 
-      {/* Account */}
-      {isSignedIn && user ? (
-        <div ref={accountRef} style={{ position: 'relative' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {isSignedIn && (
+          <NotificationBell
+            unreadCount={unreadCount}
+            notifications={notifications}
+            listLoading={listLoading}
+            panelOpen={panelOpen}
+            onOpen={openPanel}
+            onClose={closePanel}
+            onMarkRead={markRead}
+            onMarkAllRead={markAllRead}
+          />
+        )}
+        {/* Account */}
+        {isSignedIn && user ? (
+          <div ref={accountRef} style={{ position: 'relative' }}>
+            <button
+              onClick={() => setAccountOpen(!accountOpen)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '4px 10px', borderRadius: 8,
+                border: `1px solid ${A.border}`, background: 'transparent',
+                cursor: 'pointer', fontSize: 12, fontWeight: 500, color: A.text,
+              }}
+            >
+              {user.photoURL ? (
+                <img src={user.photoURL} alt="" style={{ width: 22, height: 22, borderRadius: '50%' }} />
+              ) : (
+                <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                  <circle cx="11" cy="11" r="11" fill={`url(#acctGrad)`} />
+                  <defs><linearGradient id="acctGrad" x1="0" y1="0" x2="22" y2="22">
+                    <stop stopColor={A.indigo} /><stop offset="1" stopColor={A.violet} />
+                  </linearGradient></defs>
+                  <circle cx="11" cy="8.5" r="3.5" fill="white" />
+                  <path d="M4.5 19a6.5 6.5 0 0 1 13 0" fill="white" />
+                </svg>
+              )}
+              Account
+            </button>
+            {accountOpen && (
+              <div style={{
+                position: 'absolute', right: 0, top: '100%', marginTop: 6,
+                background: A.surface, border: `1px solid ${A.border}`,
+                borderRadius: 10, padding: 10, minWidth: 180,
+                boxShadow: '0 8px 32px rgba(0,0,0,0.12)', zIndex: 100,
+              }}>
+                <div style={{ padding: '4px 8px', marginBottom: 6 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: A.text }}>
+                    {user.displayName || 'User'}
+                  </div>
+                  {user.email && (
+                    <div style={{ fontSize: 11, color: A.textMuted, marginTop: 2 }}>{user.email}</div>
+                  )}
+                </div>
+                <button
+                  onClick={() => { setAccountOpen(false); signOut(); navigate('/') }}
+                  style={{
+                    width: '100%', padding: '6px 8px', borderRadius: 6,
+                    border: 'none', background: 'transparent', cursor: 'pointer',
+                    fontSize: 12, fontWeight: 500, color: A.text, textAlign: 'left',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = A.surfaceAlt)}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                >
+                  Sign Out
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
           <button
-            onClick={() => setAccountOpen(!accountOpen)}
+            onClick={signIn}
             style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              padding: '4px 10px', borderRadius: 8,
+              padding: '5px 14px', borderRadius: 8,
               border: `1px solid ${A.border}`, background: 'transparent',
-              cursor: 'pointer', fontSize: 12, fontWeight: 500, color: A.text,
+              cursor: 'pointer', fontSize: 13, fontWeight: 500, color: A.text,
             }}
           >
-            {user.photoURL ? (
-              <img src={user.photoURL} alt="" style={{ width: 22, height: 22, borderRadius: '50%' }} />
-            ) : (
-              <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-                <circle cx="11" cy="11" r="11" fill={`url(#acctGrad)`} />
-                <defs><linearGradient id="acctGrad" x1="0" y1="0" x2="22" y2="22">
-                  <stop stopColor={A.indigo} /><stop offset="1" stopColor={A.violet} />
-                </linearGradient></defs>
-                <circle cx="11" cy="8.5" r="3.5" fill="white" />
-                <path d="M4.5 19a6.5 6.5 0 0 1 13 0" fill="white" />
-              </svg>
-            )}
-            Account
+            Sign in
           </button>
-          {accountOpen && (
-            <div style={{
-              position: 'absolute', right: 0, top: '100%', marginTop: 6,
-              background: A.surface, border: `1px solid ${A.border}`,
-              borderRadius: 10, padding: 10, minWidth: 180,
-              boxShadow: '0 8px 32px rgba(0,0,0,0.12)', zIndex: 100,
-            }}>
-              <div style={{ padding: '4px 8px', marginBottom: 6 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: A.text }}>
-                  {user.displayName || 'User'}
-                </div>
-                {user.email && (
-                  <div style={{ fontSize: 11, color: A.textMuted, marginTop: 2 }}>{user.email}</div>
-                )}
-              </div>
-              <button
-                onClick={() => { setAccountOpen(false); signOut(); navigate('/') }}
-                style={{
-                  width: '100%', padding: '6px 8px', borderRadius: 6,
-                  border: 'none', background: 'transparent', cursor: 'pointer',
-                  fontSize: 12, fontWeight: 500, color: A.text, textAlign: 'left',
-                }}
-                onMouseEnter={e => (e.currentTarget.style.background = A.surfaceAlt)}
-                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-              >
-                Sign Out
-              </button>
-            </div>
-          )}
-        </div>
-      ) : (
-        <button
-          onClick={signIn}
-          style={{
-            padding: '5px 14px', borderRadius: 8,
-            border: `1px solid ${A.border}`, background: 'transparent',
-            cursor: 'pointer', fontSize: 13, fontWeight: 500, color: A.text,
-          }}
-        >
-          Sign in
-        </button>
-      )}
+        )}
+      </div>
     </nav>
   )
 }
