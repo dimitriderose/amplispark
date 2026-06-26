@@ -7,6 +7,7 @@ import PostGenerator from '../components/PostGenerator'
 import ReviewPanel, { type ReviewResult } from '../components/ReviewPanel'
 import EditMediaSection from '../components/EditMediaSection'
 import PageContainer from '../components/ui/PageContainer'
+import GenerationToast from '../components/ui/GenerationToast'
 
 export default function GeneratePage() {
   const { planId, dayIndex } = useParams<{ planId: string; dayIndex: string }>()
@@ -17,6 +18,11 @@ export default function GeneratePage() {
   const imageStyle = searchParams.get('image_style') || ''
 
   const { state, generate, reset, loadExisting } = usePostGeneration()
+
+  const [toastVisible, setToastVisible] = useState(false)
+  const toastShownRef = useRef(false)
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const mountedRef = useRef(true)
 
   const [dayBrief, setDayBrief] = useState<{ platform: string; pillar: string; content_theme: string; day_index?: number; derivative_type?: string } | undefined>(undefined)
   const [planDayCount, setPlanDayCount] = useState<number>(0)
@@ -120,6 +126,32 @@ export default function GeneratePage() {
     }
   }
 
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (state.status === 'generating' && !toastShownRef.current) {
+      toastShownRef.current = true
+      toastTimerRef.current = setTimeout(() => {
+        if (!mountedRef.current) return
+        setToastVisible(true)
+        toastTimerRef.current = setTimeout(() => {
+          if (mountedRef.current) setToastVisible(false)
+        }, 5000)
+      }, 0)
+    }
+  }, [state.status])
+
+  const dismissToast = () => {
+    setToastVisible(false)
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+  }
+
   const isViewMode = !!viewPostId
 
   // H-3: Subtitle uses platform + content_theme from dayBrief instead of raw UUID
@@ -130,6 +162,7 @@ export default function GeneratePage() {
 
   return (
     <PageContainer maxWidth={960} minHeight="calc(100vh - 53px)">
+      {toastVisible && <GenerationToast onDismiss={dismissToast} />}
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 28 }}>
         {/* H-1: Navigate to dashboard instead of navigate(-1) which can exit the app */}

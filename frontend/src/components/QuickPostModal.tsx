@@ -6,6 +6,7 @@ import { IMAGE_STYLE_GROUPS, styleLabel } from '../imageStyleOptions'
 import { usePostGeneration } from '../hooks/usePostGeneration'
 import PostGenerator from './PostGenerator'
 import ReviewPanel from './ReviewPanel'
+import GenerationToast from './ui/GenerationToast'
 import { api } from '../api/client'
 
 interface Props {
@@ -54,6 +55,45 @@ export default function QuickPostModal({ brandId, brand, onClose, initialPlatfor
   const { state, generateAdhoc, reset } = usePostGeneration()
   const generationStatus = state.status
 
+  const [toastVisible, setToastVisible] = useState(false)
+  const toastShownRef = useRef(false)
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (state.status === 'idle') {
+      toastShownRef.current = false
+      setToastVisible(false)
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current)
+        toastTimerRef.current = null
+      }
+    }
+    if (state.status === 'generating' && !toastShownRef.current) {
+      toastShownRef.current = true
+      toastTimerRef.current = setTimeout(() => {
+        if (!mountedRef.current) return
+        setToastVisible(true)
+        toastTimerRef.current = setTimeout(() => {
+          if (mountedRef.current) setToastVisible(false)
+        }, 5000)
+      }, 0)
+    }
+  }, [state.status])
+
+  const dismissToast = () => {
+    setToastVisible(false)
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+  }
+
   const handleGenerate = () => {
     generateAdhoc(brandId, selectedPlatform, selectedFormat, brief || undefined, imageStyle || undefined)
   }
@@ -91,6 +131,7 @@ export default function QuickPostModal({ brandId, brand, onClose, initialPlatfor
       }}
       onClick={e => { if (e.target === e.currentTarget) handleClose() }}
     >
+      {toastVisible && <GenerationToast onDismiss={dismissToast} />}
       <div style={{
         background: A.bg,
         borderRadius: 12,

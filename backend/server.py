@@ -11,7 +11,16 @@ from starlette.responses import JSONResponse
 from backend.config import CORS_ORIGINS
 from backend.middleware import verify_brand_owner  # noqa: F401 — exported for route-level Depends()
 from backend.middleware_logging import RequestContextMiddleware
-from backend.routers import brands, generation, integrations, media, plans, posts, voice
+from backend.routers import (
+    brands,
+    generation,
+    integrations,
+    media,
+    notifications,
+    plans,
+    posts,
+    voice,
+)
 
 _handler = logging.StreamHandler()
 _handler.setFormatter(
@@ -90,6 +99,7 @@ app.include_router(integrations.router, prefix="/api", dependencies=[Depends(ver
 # Voice router uses WebSocket — auth injected at endpoint level (not router-level)
 # because WebSocket Depends() requires a WebSocket object, not an HTTP Request
 app.include_router(voice.router, prefix="/api")
+app.include_router(notifications.router, prefix="/api")
 
 # ── Static frontend (production) ──────────────────────────────
 frontend_dist = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")

@@ -13,6 +13,19 @@ vi.mock('../../hooks/useIsMobile', () => ({
   useIsTablet: vi.fn().mockReturnValue(false),
 }))
 
+vi.mock('../../hooks/useNotifications', () => ({
+  useNotifications: vi.fn().mockReturnValue({
+    unreadCount: 0,
+    notifications: [],
+    listLoading: false,
+    panelOpen: false,
+    openPanel: vi.fn(),
+    closePanel: vi.fn(),
+    markRead: vi.fn(),
+    markAllRead: vi.fn(),
+  }),
+}))
+
 function ThrowingChild({ error }: { error: unknown }): ReactNode {
   throw error
 }

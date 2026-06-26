@@ -97,6 +97,11 @@ def mock_firestore(sample_brand):
         mock_fc.save_post = AsyncMock(return_value="new-post-id")
         mock_fc.update_post = AsyncMock()
         mock_fc.delete_post = AsyncMock()
+        mock_fc.create_notification = AsyncMock(return_value="mock-notif-id")
+        mock_fc.list_notifications = AsyncMock(return_value=[])
+        mock_fc.get_unread_count = AsyncMock(return_value=0)
+        mock_fc.mark_notification_read = AsyncMock()
+        mock_fc.mark_all_notifications_read = AsyncMock(return_value=0)
         yield mock_fc
 
 
