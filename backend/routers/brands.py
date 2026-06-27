@@ -1,8 +1,9 @@
 import logging
 
-from fastapi import APIRouter, Body, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile
 
 from backend.agents.brand_analyst import run_brand_analysis
+from backend.middleware import check_beta_brand_limit
 from backend.models.brand import BrandProfileCreate, BrandProfileUpdate
 from backend.services import firestore_client
 from backend.services.storage_client import upload_brand_asset
@@ -24,7 +25,7 @@ async def list_brands(
 
 
 @router.post("/brands")
-async def create_brand(data: BrandProfileCreate):
+async def create_brand(data: BrandProfileCreate, _: str | None = Depends(check_beta_brand_limit)):
     """Create a new brand profile record (without analysis)."""
     brand_data: dict = {
         "website_url": data.website_url,
@@ -50,11 +51,9 @@ async def claim_brand_endpoint(brand_id: str, owner_uid: str = Body(..., embed=T
 @router.post("/brands/{brand_id}/analyze")
 async def analyze_brand(brand_id: str, data: BrandProfileCreate):
     """Trigger Brand Analyst agent to build the brand profile."""
-    # Mark as analyzing
     await firestore_client.update_brand(brand_id, {"analysis_status": "analyzing"})
 
     try:
-        # Pass any existing social voice so re-analysis preserves connected voice data
         existing_brand = await firestore_client.get_brand(brand_id)
         existing_voice = existing_brand.get("social_voice_analysis") if existing_brand else None
 
@@ -65,7 +64,6 @@ async def analyze_brand(brand_id: str, data: BrandProfileCreate):
             social_voice_analysis=existing_voice,
         )
 
-        # Only copy known-safe fields from LLM output — never spread arbitrary keys into Firestore
         _ALLOWED_PROFILE_KEYS = {
             "business_name",
             "business_type",
@@ -117,7 +115,6 @@ async def update_brand(brand_id: str, data: BrandProfileUpdate):
     brand = await firestore_client.get_brand(brand_id)
     if not brand:
         raise HTTPException(status_code=404, detail="Brand not found")
-    # exclude_unset=True so only explicitly provided fields are written
     await firestore_client.update_brand(brand_id, data.model_dump(exclude_unset=True))
     updated = await firestore_client.get_brand(brand_id)
     return {"brand_profile": updated, "status": "updated"}
@@ -150,7 +147,6 @@ async def upload_brand_asset_endpoint(
             }
         )
 
-    # Update brand assets list in Firestore
     existing = brand.get("uploaded_assets", [])
     await firestore_client.update_brand(brand_id, {"uploaded_assets": existing + uploaded})
 

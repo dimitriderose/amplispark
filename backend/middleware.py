@@ -12,11 +12,17 @@ Usage::
 
 import asyncio
 import logging
+from datetime import UTC, datetime
 
 import firebase_admin
 from fastapi import Depends, HTTPException, Request, WebSocket, WebSocketException, status
 from firebase_admin import auth as firebase_auth
 
+from backend.config import (
+    BETA_MAX_BRANDS,
+    BETA_MAX_CALENDARS_PER_MONTH,
+    BETA_MAX_QUICK_POSTS_PER_MONTH,
+)
 from backend.middleware_logging import user_uid_var
 from backend.services import firestore_client
 
@@ -98,7 +104,6 @@ async def verify_brand_owner(
     """
     brand_id = request.path_params.get("brand_id")
     if not brand_id:
-        # Route doesn't have a brand_id param — skip check
         return user_uid
 
     brand = await firestore_client.get_brand(brand_id)
@@ -230,6 +235,79 @@ async def verify_ws_brand_owner(
     if owner and user_uid != owner:
         raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason="Access denied")
 
-    # Attach UID to brand dict so handler has both
     brand["_authenticated_uid"] = user_uid
     return brand
+
+
+async def verify_beta_not_expired(uid: str | None = Depends(get_authenticated_uid)) -> str | None:
+    if not uid:
+        return uid
+    user = await firestore_client.get_user(uid)
+    if not user or user.get("role") != "beta":
+        return uid
+    beta_expires_at = user.get("beta_expires_at")
+    if isinstance(beta_expires_at, datetime) and beta_expires_at.tzinfo is None:
+        beta_expires_at = beta_expires_at.replace(tzinfo=UTC)
+    if beta_expires_at and beta_expires_at < datetime.now(UTC):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "beta_expired",
+                "message": "Your beta period has ended. Please upgrade.",
+            },
+        )
+    return uid
+
+
+async def check_beta_brand_limit(uid: str | None = Depends(get_authenticated_uid)) -> str | None:
+    if not uid:
+        return uid
+    user = await firestore_client.get_user(uid)
+    if not user or user.get("role") != "beta":
+        return uid
+    brands = await firestore_client.list_brands_by_owner(uid)
+    if len(brands) >= BETA_MAX_BRANDS:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "beta_limit_brands",
+                "message": f"Beta users are limited to {BETA_MAX_BRANDS} brand.",
+            },
+        )
+    return uid
+
+
+async def check_beta_quick_post_limit(
+    uid: str | None = Depends(get_authenticated_uid),
+) -> str | None:
+    if not uid:
+        return uid
+    user = await firestore_client.get_user(uid)
+    if not user or user.get("role") != "beta":
+        return uid
+    if user.get("quick_posts_this_month", 0) >= BETA_MAX_QUICK_POSTS_PER_MONTH:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "beta_limit_quick_posts",
+                "message": f"Beta users are limited to {BETA_MAX_QUICK_POSTS_PER_MONTH} Quick Posts per month.",
+            },
+        )
+    return uid
+
+
+async def check_beta_calendar_limit(uid: str | None = Depends(get_authenticated_uid)) -> str | None:
+    if not uid:
+        return uid
+    user = await firestore_client.get_user(uid)
+    if not user or user.get("role") != "beta":
+        return uid
+    if user.get("calendars_this_month", 0) >= BETA_MAX_CALENDARS_PER_MONTH:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "beta_limit_calendars",
+                "message": f"Beta users are limited to {BETA_MAX_CALENDARS_PER_MONTH} calendars per month.",
+            },
+        )
+    return uid

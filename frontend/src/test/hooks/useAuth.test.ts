@@ -1,7 +1,6 @@
 import { renderHook, waitFor, act } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 
-// Capture the onAuthStateChanged callback so tests can invoke it
 let capturedCallback: ((user: unknown) => void) | null = null
 const mockUnsubscribe = vi.fn()
 
@@ -15,14 +14,30 @@ vi.mock('../../api/firebase', () => ({
   }),
 }))
 
+const { mockGetUser } = vi.hoisted(() => ({ mockGetUser: vi.fn() }))
+vi.mock('../../api/client', () => ({
+  api: { getUser: mockGetUser },
+}))
+
 import { useAuth } from '../../hooks/useAuth'
 import { signInWithGoogle, signOutUser } from '../../api/firebase'
+
+const baseUserData = {
+  role: 'user' as const,
+  beta_expires_at: null,
+  quick_posts_this_month: 0,
+  calendars_this_month: 0,
+  days_remaining: null,
+  quick_posts_limit: null,
+  calendars_limit: null,
+}
 
 describe('useAuth', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     capturedCallback = null
     mockUnsubscribe.mockReset()
+    mockGetUser.mockResolvedValue(baseUserData)
   })
 
   it('starts with loading=true', () => {
@@ -100,10 +115,8 @@ describe('useAuth', () => {
   it('ignores auth state callback after component unmounts (isMounted guard)', async () => {
     const { result, unmount } = renderHook(() => useAuth())
 
-    // Unmount before the callback fires
     unmount()
 
-    // Fire the callback after unmount — should be ignored (isMounted = false)
     act(() => {
       capturedCallback!({
         uid: 'user-after-unmount',
@@ -113,7 +126,121 @@ describe('useAuth', () => {
       })
     })
 
-    // After unmount, result.current should still be the initial state
     expect(result.current.uid).toBeNull()
+  })
+
+  it('sets role from getUser response', async () => {
+    mockGetUser.mockResolvedValue({ ...baseUserData, role: 'beta' })
+    const { result } = renderHook(() => useAuth())
+
+    act(() => {
+      capturedCallback!({ uid: 'user-123', displayName: 'Alice', email: 'a@b.com', photoURL: null })
+    })
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.role).toBe('beta')
+  })
+
+  it('sets usageCounters from getUser response', async () => {
+    mockGetUser.mockResolvedValue({
+      ...baseUserData,
+      role: 'beta',
+      quick_posts_this_month: 2,
+      calendars_this_month: 1,
+      days_remaining: 20,
+      quick_posts_limit: 8,
+      calendars_limit: 4,
+    })
+    const { result } = renderHook(() => useAuth())
+
+    act(() => {
+      capturedCallback!({ uid: 'user-123', displayName: 'Alice', email: 'a@b.com', photoURL: null })
+    })
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.usageCounters).toEqual({
+      quickPostsThisMonth: 2,
+      calendarsThisMonth: 1,
+      daysRemaining: 20,
+      quickPostsLimit: 8,
+      calendarsLimit: 4,
+    })
+  })
+
+  it('sets betaExpired when beta_expires_at is in the past', async () => {
+    mockGetUser.mockResolvedValue({
+      ...baseUserData,
+      role: 'beta',
+      beta_expires_at: new Date(Date.now() - 1000).toISOString(),
+    })
+    const { result } = renderHook(() => useAuth())
+
+    act(() => {
+      capturedCallback!({ uid: 'user-123', displayName: 'Alice', email: 'a@b.com', photoURL: null })
+    })
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.betaExpired).toBe(true)
+  })
+
+  it('sets betaExpired false when beta_expires_at is in the future', async () => {
+    mockGetUser.mockResolvedValue({
+      ...baseUserData,
+      role: 'beta',
+      beta_expires_at: new Date(Date.now() + 86400000).toISOString(),
+    })
+    const { result } = renderHook(() => useAuth())
+
+    act(() => {
+      capturedCallback!({ uid: 'user-123', displayName: 'Alice', email: 'a@b.com', photoURL: null })
+    })
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.betaExpired).toBe(false)
+  })
+
+  it('sets role null when getUser returns 404', async () => {
+    mockGetUser.mockRejectedValue(new Error('404 Not Found'))
+    const { result } = renderHook(() => useAuth())
+
+    act(() => {
+      capturedCallback!({ uid: 'user-123', displayName: 'Alice', email: 'a@b.com', photoURL: null })
+    })
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.role).toBeNull()
+    expect(result.current.userFetchError).toBe(false)
+  })
+
+  it('sets userFetchError true on non-404 getUser failure', async () => {
+    mockGetUser.mockRejectedValue(new Error('Network error'))
+    const { result } = renderHook(() => useAuth())
+
+    act(() => {
+      capturedCallback!({ uid: 'user-123', displayName: 'Alice', email: 'a@b.com', photoURL: null })
+    })
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.userFetchError).toBe(true)
+  })
+
+  it('signOut clears role and usageCounters', async () => {
+    mockGetUser.mockResolvedValue({ ...baseUserData, role: 'user' })
+    const { result } = renderHook(() => useAuth())
+
+    act(() => {
+      capturedCallback!({ uid: 'user-123', displayName: 'Alice', email: 'a@b.com', photoURL: null })
+    })
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    await act(async () => {
+      await result.current.signOut()
+    })
+
+    expect(signOutUser).toHaveBeenCalledOnce()
+    expect(result.current.uid).toBeNull()
+    expect(result.current.role).toBeNull()
+    expect(result.current.usageCounters).toBeNull()
   })
 })

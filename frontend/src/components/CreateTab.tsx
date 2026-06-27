@@ -1,4 +1,4 @@
-import { MdOutlineBolt, MdOutlineCalendarMonth } from 'react-icons/md'
+import { MdOutlinePostAdd, MdOutlineCalendarMonth } from 'react-icons/md'
 import { A } from '../theme'
 
 interface Props {
@@ -24,7 +24,7 @@ export default function CreateTab({ onCreatePost, onPlanWeek }: Props) {
           flexDirection: 'column',
           gap: 12,
         }}>
-          <MdOutlineBolt size={32} color={A.indigo} />
+          <MdOutlinePostAdd size={32} color={A.indigo} />
           <div>
             <h3 style={{ fontSize: 16, fontWeight: 700, color: A.text, margin: '0 0 6px' }}>
               Quick Post

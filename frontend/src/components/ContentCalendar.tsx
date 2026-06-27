@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { MdOutlineInsights, MdOutlineAddPhotoAlternate } from 'react-icons/md'
 import { A } from '../theme'
 import { getPlatform } from '../platformRegistry'
 import { api } from '../api/client'
@@ -148,7 +149,7 @@ export default function ContentCalendar({ plan, brandId, posts, defaultImageStyl
       {trendSummary && (
         <div style={{ marginBottom: 12, padding: '10px 14px', borderRadius: 8, background: '#f8f9ff', border: '1px solid #e0e4f0' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-            <span>📊</span>
+            <MdOutlineInsights size={18} color={A.indigo} />
             <span style={{ fontWeight: 600, fontSize: 13 }}>Trend Research</span>
             <span style={{ fontSize: 11, color: '#888', marginLeft: 4 }}>
               {new Date(trendSummary.researched_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
@@ -694,7 +695,7 @@ function DayCard({ day, dayName, brandId, planId, arrayIndex, seriesColor, post,
               onMouseEnter={e => { if (!uploading) { e.currentTarget.style.borderColor = A.indigo; e.currentTarget.style.color = A.indigo } }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = A.border; e.currentTarget.style.color = A.textSoft }}
             >
-              <span style={{ fontSize: 13 }}>📷</span>
+              <MdOutlineAddPhotoAlternate size={15} />
               {uploading ? 'Uploading...' : 'Add your photo'}
             </button>
           </>

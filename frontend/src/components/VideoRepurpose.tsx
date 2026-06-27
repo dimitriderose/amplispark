@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { MdOutlineCloudUpload } from 'react-icons/md'
 import { A } from '../theme'
 import { api } from '../api/client'
 import { getPlatform } from '../platformRegistry'
@@ -191,7 +192,7 @@ export default function VideoRepurpose({ brandId }: Props) {
             </>
           ) : (
             <>
-              <span style={{ fontSize: 28, display: 'block', marginBottom: 6 }}>🎬</span>
+              <MdOutlineCloudUpload size={32} color={A.indigo} style={{ display: 'block', margin: '0 auto 6px' }} />
               <p style={{ fontSize: 13, fontWeight: 600, color: A.text, margin: '0 0 4px' }}>
                 Drop a video here or click to browse
               </p>

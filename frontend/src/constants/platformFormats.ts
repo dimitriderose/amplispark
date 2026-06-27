@@ -2,8 +2,8 @@ import {
   MdOutlineImage,
   MdOutlineViewCarousel,
   MdOutlinePlayCircle,
-  MdOutlineTimer,
-  MdOutlineFormatListNumbered,
+  MdOutlineCropPortrait,
+  MdOutlineChat,
   MdOutlineArticle,
   MdOutlinePushPin,
 } from 'react-icons/md'
@@ -26,8 +26,8 @@ export const FORMAT_LABELS: Record<string, { label: string; icon: IconType }> = 
   original:     { label: 'Photo',     icon: MdOutlineImage },
   carousel:     { label: 'Carousel',  icon: MdOutlineViewCarousel },
   video_first:  { label: 'Video',     icon: MdOutlinePlayCircle },
-  story:        { label: 'Story',     icon: MdOutlineTimer },
-  thread_hook:  { label: 'Thread',    icon: MdOutlineFormatListNumbered },
+  story:        { label: 'Story',     icon: MdOutlineCropPortrait },
+  thread_hook:  { label: 'Thread',    icon: MdOutlineChat },
   blog_snippet: { label: 'Blog Clip', icon: MdOutlineArticle },
   pin:          { label: 'Pin',       icon: MdOutlinePushPin },
 }

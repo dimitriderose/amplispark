@@ -3,12 +3,13 @@ import json
 import logging
 import time
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sse_starlette.sse import EventSourceResponse
 
 from backend.agents.content_creator import generate_post
 from backend.agents.video_creator import generate_video_clip
 from backend.constants import DERIVATIVE_TYPES
+from backend.middleware import check_beta_quick_post_limit
 from backend.platforms import keys as platform_keys
 from backend.services import firestore_client
 from backend.services.rate_limiter import veo_limit
@@ -16,21 +17,14 @@ from backend.services.storage_client import download_gcs_uri
 
 logger = logging.getLogger(__name__)
 
-# Valid platform keys — sourced from the Platform Registry so both paths stay in sync.
-# Used to validate the ?platform= query param on the adhoc endpoint before it reaches
-# Firestore or the AI prompt.
 _VALID_PLATFORMS: frozenset[str] = frozenset(platform_keys())
-
-# Valid derivative/content types — sourced from constants (single source of truth shared
-# with strategy_agent.py).  Used to validate ?content_type= on the adhoc endpoint.
 _VALID_CONTENT_TYPES: frozenset[str] = frozenset(DERIVATIVE_TYPES)
 
 # Strong references to background tasks to prevent GC before completion
 _background_tasks: set[asyncio.Task] = set()
 
-# In-memory cache for brand profiles during generation (30s TTL).
-# Each Cloud Run worker maintains its own cache — this is fine for correctness since the
-# cache is a performance optimisation only.  Stale brand data resolves within 30 seconds.
+# In-memory per-worker cache for brand profiles during generation (30s TTL).
+# Stale brand data resolves within 30 seconds.
 _brand_cache: dict[str, tuple[dict, float]] = {}
 
 router = APIRouter()
@@ -56,16 +50,11 @@ async def _run_generation_task(
     gate_review = None
     _gen_start = time.time()
 
-    # Extract plan_id from day_brief if present (for generate_post call).
-    # "_plan_id" is a private sentinel key injected by the two SSE endpoints before
-    # passing day_brief into this shared helper.  It is never stored in Firestore — it
+    # "_plan_id" is injected by the SSE endpoints and never written to Firestore — it
     # only tells generate_post() which plan the post belongs to ("adhoc" for quick posts).
-    # The underscore prefix signals "not a real Firestore field"; do not add this key to
-    # any Firestore document.
     plan_id = day_brief.get("_plan_id", "adhoc")
 
     try:
-        # Heartbeat: sends "Still working..." every 15s if no events flowed
         _loop = asyncio.get_running_loop()
         _last_event_time = _loop.time()
 
@@ -208,7 +197,6 @@ async def _run_generation_task(
             gen_hb.cancel()
 
         if day_brief.get("derivative_type") == "video_first" and final_caption:
-            # Gate Veo on review score -- skip if caption quality < 7
             _veo_gate_score = (gate_review or {}).get("score", 0) if gate_review else 0
             if _veo_gate_score < 7:
                 logger.warning(
@@ -235,7 +223,6 @@ async def _run_generation_task(
                 except asyncio.QueueFull:
                     logger.warning("SSE event queue full, dropping event")
 
-                # Heartbeat keeps SSE alive during long Veo generation (avg 2-5 min)
                 async def _heartbeat():
                     while True:
                         await asyncio.sleep(15)
@@ -250,7 +237,7 @@ async def _run_generation_task(
                 try:
                     async with veo_limit:
                         video_result = await generate_video_clip(
-                            hero_image_bytes=None,  # text-to-video
+                            hero_image_bytes=None,
                             caption=final_caption,
                             brand_profile=brand,
                             platform=day_brief.get("platform", "instagram"),
@@ -347,22 +334,16 @@ async def stream_generate_adhoc(
     brief: str | None = Query(None, max_length=2000),
     image_style: str | None = Query(None),
     instructions: str | None = Query(None, max_length=1000),
+    _: str | None = Depends(check_beta_quick_post_limit),
 ):
     """SSE endpoint: generate a quick (ad-hoc) post without a content plan."""
 
-    # --- Input validation ---
-    # Validate platform against the Platform Registry.  An unknown platform value stored
-    # in Firestore could cause frontend rendering bugs (missing icons, aspect ratios, etc.)
-    # and could inject unexpected strings into AI prompts.
     if platform not in _VALID_PLATFORMS:
         raise HTTPException(
             status_code=400,
             detail=f"Unknown platform '{platform}'. Valid platforms: {sorted(_VALID_PLATFORMS)}",
         )
 
-    # Validate content_type against the canonical DERIVATIVE_TYPES list.  An unknown value
-    # stored in Firestore as derivative_type could cause mismatches in scoring weights and
-    # platform-specific formatting logic.
     resolved_content_type = content_type or "original"
     if resolved_content_type not in _VALID_CONTENT_TYPES:
         logger.warning(
@@ -444,7 +425,6 @@ async def stream_generate_adhoc(
                     "data": json.dumps(event["data"], ensure_ascii=False),
                 }
         except asyncio.CancelledError:
-            # SSE closed (user navigated away) -- generation task keeps running
             pass
 
     return EventSourceResponse(event_stream())
@@ -490,9 +470,8 @@ async def stream_generate(
             custom_photo_mime = day_brief.get("custom_photo_mime", "image/jpeg")
         except Exception as e:
             logger.warning("Could not download custom photo for day %s: %s", day_index, e)
-            custom_photo_bytes = None  # fall back to normal generation
+            custom_photo_bytes = None
 
-    # Delete any existing post for this plan+day+platform (regeneration replaces, not duplicates)
     brief_platform = day_brief.get("platform", "instagram")
     existing_posts = await firestore_client.list_posts(brand_id, plan_id)
     existing_images: dict | None = None
@@ -520,7 +499,6 @@ async def stream_generate(
                         "Best-effort cleanup failed for post %s: %s", ep.get("post_id"), e
                     )
 
-    # Extract prior hooks from already-generated posts for deduplication
     prior_hooks = [
         p.get("caption", "").split("\n")[0][:100]
         for p in existing_posts
@@ -549,8 +527,6 @@ async def stream_generate(
         },
     )
 
-    # Run generation as a background task so it completes (and saves to
-    # Firestore) even if the user navigates away and the SSE stream closes.
     event_queue: asyncio.Queue = asyncio.Queue(maxsize=200)
 
     day_brief_with_plan = {**day_brief, "_plan_id": plan_id}
@@ -584,7 +560,6 @@ async def stream_generate(
                     "data": json.dumps(event["data"], ensure_ascii=False),
                 }
         except asyncio.CancelledError:
-            # SSE closed (user navigated away) -- generation task keeps running
             pass
 
     return EventSourceResponse(event_stream())

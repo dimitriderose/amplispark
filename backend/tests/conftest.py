@@ -102,7 +102,11 @@ def mock_firestore(sample_brand):
         mock_fc.get_unread_count = AsyncMock(return_value=0)
         mock_fc.mark_notification_read = AsyncMock()
         mock_fc.mark_all_notifications_read = AsyncMock(return_value=0)
-        yield mock_fc
+        mock_fc.get_user = AsyncMock(return_value=None)
+        # middleware.py holds a direct module reference bound at import time;
+        # patch its local name too so beta-limit dependencies get the same mock.
+        with patch("backend.middleware.firestore_client", mock_fc):
+            yield mock_fc
 
 
 @pytest.fixture

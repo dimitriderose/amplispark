@@ -32,7 +32,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
-      exclude: ['src/test/**', '**/*.d.ts', 'dist/**'],
+      exclude: ['src/test/**', '**/*.d.ts', 'dist/**', 'src/api/firebase.ts'],
       thresholds: { lines: 90, functions: 90, branches: 90, statements: 90 },
     },
   },

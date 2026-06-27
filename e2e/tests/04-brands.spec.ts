@@ -70,10 +70,10 @@ test.describe('Brands page', () => {
     await expect(heading).toBeVisible()
   })
 
-  test('landing page has Get Started button', async ({ page }) => {
+  test('landing page has Join Waitlist button', async ({ page }) => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
-    await expect(page.getByRole('button', { name: /Get Started/i }).first()).toBeVisible()
+    await expect(page.getByRole('button', { name: /Join Waitlist/i }).first()).toBeVisible()
   })
 
   test('landing page shows platform names', async ({ page }) => {

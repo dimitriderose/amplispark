@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import type React from 'react'
+import { MdOutlineVideocam } from 'react-icons/md'
 import { A } from '../theme'
 import type { GenerationState } from '../hooks/usePostGeneration'
 import { useVideoGeneration } from '../hooks/useVideoGeneration'
@@ -502,7 +503,7 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
               onMouseEnter={e => { e.currentTarget.style.background = A.bg }}
               onMouseLeave={e => { e.currentTarget.style.background = A.surfaceAlt }}
             >
-              <span style={{ fontSize: 12, color: A.textSoft }}>🎬 Generate Video Clip</span>
+              <span style={{ fontSize: 12, color: A.textSoft, display: 'flex', alignItems: 'center', gap: 4 }}><MdOutlineVideocam size={18} /> Generate Video Clip</span>
               <span style={{ fontSize: 12, color: A.textSoft }}>›</span>
             </button>
           )}
@@ -515,7 +516,7 @@ export default function PostGenerator({ state, dayBrief, brandId, onRegenerate, 
             }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                 <p style={{ fontSize: 12, fontWeight: 600, color: A.textSoft, margin: 0 }}>
-                  🎬 Video Clip (Veo 3.1)
+                  <MdOutlineVideocam size={18} style={{ verticalAlign: 'middle', marginRight: 4 }} />Video Clip (Veo 3.1)
                 </p>
                 <button
                   type="button"

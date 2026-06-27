@@ -17,6 +17,13 @@ import BrandsPage from '../../pages/BrandsPage'
 import { useAuth } from '../../hooks/useAuth'
 import { api } from '../../api/client'
 
+const baseAuth = {
+  role: 'beta' as const,
+  betaExpired: false,
+  usageCounters: null,
+  userFetchError: false,
+}
+
 const mockBrands = [
   { brand_id: 'b1', business_name: 'Acme Corp', industry: 'Tech', analysis_status: 'complete' },
   { brand_id: 'b2', business_name: 'Fresh Bakery', industry: 'Food', analysis_status: 'analyzing' },
@@ -33,8 +40,8 @@ function renderPage() {
 describe('BrandsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    // Default: signed-in user
     vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
       uid: 'user-123',
       user: { displayName: 'Alice', email: 'alice@example.com', photoURL: null },
       loading: false,
@@ -46,6 +53,7 @@ describe('BrandsPage', () => {
 
   it('shows loading state (returns null) while auth loading', () => {
     vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
       uid: null,
       user: null,
       loading: true,
@@ -56,7 +64,6 @@ describe('BrandsPage', () => {
     vi.mocked(api.listBrands).mockReturnValue(new Promise(() => {}) as never)
 
     const { container } = renderPage()
-    // When loading=true the page returns null
     expect(container.firstChild).toBeNull()
   })
 
@@ -104,6 +111,7 @@ describe('BrandsPage', () => {
 
   it('calls navigate to / when not signed in (redirect behavior)', async () => {
     vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
       uid: null,
       user: null,
       loading: false,
@@ -113,9 +121,6 @@ describe('BrandsPage', () => {
     })
     vi.mocked(api.listBrands).mockResolvedValue({ brands: [] } as never)
 
-    // The page renders in MemoryRouter and calls navigate('/') via useEffect
-    // We verify the page was rendered (the effect triggers the navigate call)
-    // Using Routes + Route setup to allow navigation away
     const { Routes, Route } = await import('react-router-dom')
     render(
       <MemoryRouter initialEntries={['/brands']}>
@@ -126,7 +131,6 @@ describe('BrandsPage', () => {
       </MemoryRouter>
     )
 
-    // After navigation to '/', the home page should render instead
     await waitFor(() => {
       expect(screen.getByText('Home Page')).toBeInTheDocument()
     })
@@ -231,7 +235,6 @@ describe('BrandsPage', () => {
     const brandButton = screen.getByText('Acme Corp').closest('button')!
     fireEvent.mouseEnter(brandButton)
     fireEvent.mouseLeave(brandButton)
-    // Should not throw — just verify element still exists
     expect(brandButton).toBeInTheDocument()
   })
 
@@ -298,11 +301,9 @@ describe('BrandsPage', () => {
       expect(screen.getByText('Page 1 of 2')).toBeInTheDocument()
     })
 
-    // Go to page 2
     fireEvent.click(screen.getByRole('button', { name: /next/i }))
     await waitFor(() => expect(screen.getByText('Page 2 of 2')).toBeInTheDocument())
 
-    // Go back to page 1
     fireEvent.click(screen.getByRole('button', { name: /previous/i }))
     await waitFor(() => expect(screen.getByText('Page 1 of 2')).toBeInTheDocument())
   })
@@ -336,7 +337,6 @@ describe('BrandsPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Untitled Brand')).toBeInTheDocument()
     })
-    // The avatar should display '?' (uppercased from '?')
     expect(screen.getByText('?')).toBeInTheDocument()
   })
 
@@ -348,13 +348,10 @@ describe('BrandsPage', () => {
 
     const { unmount } = renderPage()
 
-    // Unmount before the promise resolves so cancelled becomes true
     unmount()
 
-    // Now resolve — the cancelled guard should swallow the result
     resolveListBrands({ brands: [{ brand_id: 'b1', business_name: 'Ghost', industry: 'Tech', analysis_status: 'complete' }] })
 
-    // Allow microtasks to flush; no state-update errors should be thrown
     await new Promise((r) => setTimeout(r, 0))
   })
 
@@ -366,13 +363,10 @@ describe('BrandsPage', () => {
 
     const { unmount } = renderPage()
 
-    // Unmount before the promise rejects so cancelled becomes true
     unmount()
 
-    // Reject now — the cancelled guard should swallow the error
     rejectListBrands(new Error('Stale network error'))
 
-    // Allow microtasks to flush; no state-update errors should be thrown
     await new Promise((r) => setTimeout(r, 0))
   })
 

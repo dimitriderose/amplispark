@@ -2,12 +2,10 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 
-// Mock useAuth to control auth state
 vi.mock('../../hooks/useAuth', () => ({
   useAuth: vi.fn(),
 }))
 
-// useIsMobile is used inside NavBar
 vi.mock('../../hooks/useIsMobile', () => ({
   useIsMobile: vi.fn().mockReturnValue(false),
 }))
@@ -29,6 +27,14 @@ import NavBar from '../../components/NavBar'
 import { useAuth } from '../../hooks/useAuth'
 import { useIsMobile } from '../../hooks/useIsMobile'
 
+const baseAuth = {
+  role: null as null,
+  betaExpired: false,
+  usageCounters: null,
+  userFetchError: false,
+  signIn: vi.fn().mockResolvedValue(undefined),
+}
+
 function renderNavBar(initialPath = '/') {
   return render(
     <MemoryRouter initialEntries={[initialPath]}>
@@ -42,8 +48,9 @@ describe('NavBar', () => {
     vi.clearAllMocks()
   })
 
-  it('shows "Get Started" link when not signed in', () => {
+  it('shows "Home" link when not signed in', () => {
     vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
       uid: null,
       user: null,
       loading: false,
@@ -54,12 +61,13 @@ describe('NavBar', () => {
 
     renderNavBar()
 
-    expect(screen.getByText('Get Started')).toBeInTheDocument()
+    expect(screen.getByText('Home')).toBeInTheDocument()
     expect(screen.queryByText('My Brands')).not.toBeInTheDocument()
   })
 
   it('shows "My Brands" link when signed in', () => {
     vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
       uid: 'user-123',
       user: { displayName: 'Alice', email: 'alice@example.com', photoURL: null },
       loading: false,
@@ -71,11 +79,12 @@ describe('NavBar', () => {
     renderNavBar()
 
     expect(screen.getByText('My Brands')).toBeInTheDocument()
-    expect(screen.queryByText('Get Started')).not.toBeInTheDocument()
+    expect(screen.queryByText('Home')).not.toBeInTheDocument()
   })
 
   it('shows "Sign in" button when not signed in', () => {
     vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
       uid: null,
       user: null,
       loading: false,
@@ -91,6 +100,7 @@ describe('NavBar', () => {
 
   it('shows "Account" button when signed in', () => {
     vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
       uid: 'user-123',
       user: { displayName: 'Alice', email: 'alice@example.com', photoURL: null },
       loading: false,
@@ -106,6 +116,7 @@ describe('NavBar', () => {
 
   it('always shows "Home" nav link', () => {
     vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
       uid: null,
       user: null,
       loading: false,
@@ -121,6 +132,7 @@ describe('NavBar', () => {
 
   it('renders the Amplispark brand name', () => {
     vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
       uid: null,
       user: null,
       loading: false,
@@ -136,6 +148,7 @@ describe('NavBar', () => {
 
   it('shows user photo when photoURL is provided', () => {
     vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
       uid: 'user-123',
       user: { displayName: 'Alice', email: 'alice@example.com', photoURL: 'https://example.com/photo.jpg' },
       loading: false,
@@ -152,6 +165,7 @@ describe('NavBar', () => {
 
   it('shows avatar SVG when photoURL is null', () => {
     vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
       uid: 'user-123',
       user: { displayName: 'Alice', email: 'alice@example.com', photoURL: null },
       loading: false,
@@ -163,13 +177,13 @@ describe('NavBar', () => {
     renderNavBar()
 
     expect(screen.getByText('Account')).toBeInTheDocument()
-    // SVG avatar should be rendered (no img with photoURL)
     const imgs = document.querySelectorAll('img[alt=""]')
     expect(imgs.length).toBe(0)
   })
 
   it('opens account dropdown when Account button is clicked', () => {
     vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
       uid: 'user-123',
       user: { displayName: 'Alice', email: 'alice@example.com', photoURL: null },
       loading: false,
@@ -188,6 +202,7 @@ describe('NavBar', () => {
 
   it('shows user display name in dropdown without email when email is absent', () => {
     vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
       uid: 'user-123',
       user: { displayName: 'Bob', email: null, photoURL: null },
       loading: false,
@@ -205,6 +220,7 @@ describe('NavBar', () => {
 
   it('shows User as display name fallback when displayName is null', () => {
     vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
       uid: 'user-123',
       user: { displayName: null, email: 'test@example.com', photoURL: null },
       loading: false,
@@ -222,6 +238,7 @@ describe('NavBar', () => {
   it('sign out button calls signOut and closes dropdown', () => {
     const signOut = vi.fn()
     vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
       uid: 'user-123',
       user: { displayName: 'Alice', email: 'alice@example.com', photoURL: null },
       loading: false,
@@ -239,6 +256,7 @@ describe('NavBar', () => {
 
   it('sign out button responds to hover events', () => {
     vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
       uid: 'user-123',
       user: { displayName: 'Alice', email: 'alice@example.com', photoURL: null },
       loading: false,
@@ -257,6 +275,7 @@ describe('NavBar', () => {
 
   it('clicking outside closes dropdown (mousedown outside accountRef)', () => {
     vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
       uid: 'user-123',
       user: { displayName: 'Alice', email: 'alice@example.com', photoURL: null },
       loading: false,
@@ -270,7 +289,6 @@ describe('NavBar', () => {
     fireEvent.click(screen.getByText('Account'))
     expect(screen.getByText('Sign Out')).toBeInTheDocument()
 
-    // Simulate click outside
     fireEvent.mouseDown(document.body)
     expect(screen.queryByText('Sign Out')).not.toBeInTheDocument()
   })
@@ -279,6 +297,7 @@ describe('NavBar', () => {
     sessionStorage.setItem('amplifi_brandname_brand-abc', 'My Test Brand')
 
     vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
       uid: 'user-123',
       user: { displayName: 'Alice', email: null, photoURL: null },
       loading: false,
@@ -297,8 +316,9 @@ describe('NavBar', () => {
   })
 
   it('calls signIn when sign in button is clicked', () => {
-    const signIn = vi.fn()
+    const signIn = vi.fn().mockResolvedValue(undefined)
     vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
       uid: null,
       user: null,
       loading: false,
@@ -315,6 +335,7 @@ describe('NavBar', () => {
 
   it('clicking logo navigates to /', () => {
     vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
       uid: null,
       user: null,
       loading: false,
@@ -332,13 +353,13 @@ describe('NavBar', () => {
       </MemoryRouter>
     )
 
-    // Click the logo (the container div with the Amplispark text/image)
     fireEvent.click(screen.getByText('Amplispark').closest('div')!)
   })
 
   it('applies mobile padding when isMobile is true', () => {
     vi.mocked(useIsMobile).mockReturnValue(true)
     vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
       uid: null,
       user: null,
       loading: false,
@@ -355,6 +376,7 @@ describe('NavBar', () => {
 
   it('renders generate path with brand_id from searchParams', () => {
     vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
       uid: 'user-123',
       user: { displayName: 'Alice', email: null, photoURL: null },
       loading: false,
@@ -375,6 +397,7 @@ describe('NavBar', () => {
 
   it('renders generate path without brand name when no sessionStorage entry', () => {
     vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
       uid: 'user-123',
       user: { displayName: 'Alice', email: null, photoURL: null },
       loading: false,
@@ -382,7 +405,6 @@ describe('NavBar', () => {
       signIn: vi.fn(),
       signOut: vi.fn(),
     })
-    // No sessionStorage entry for this brand — brandName will be null
     sessionStorage.removeItem('amplifi_brandname_brand-xyz')
 
     render(
@@ -391,12 +413,12 @@ describe('NavBar', () => {
       </MemoryRouter>
     )
 
-    // Component renders — no breadcrumb shown since brandName is null
     expect(screen.getByText('Account')).toBeInTheDocument()
   })
 
   it('highlights active link on current path', () => {
     vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
       uid: null,
       user: null,
       loading: false,
@@ -411,9 +433,7 @@ describe('NavBar', () => {
       </MemoryRouter>
     )
 
-    // Home button should have active styling (indigo background)
     const homeBtn = screen.getByText('Home')
-    // isActive('/') returns true — button has indigoLight background
     expect(homeBtn).toBeInTheDocument()
   })
 })

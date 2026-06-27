@@ -1,10 +1,11 @@
 import asyncio
 import logging
 
-from fastapi import APIRouter, Body, File, HTTPException, UploadFile
+from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel as _PydanticBaseModel
 
 from backend.agents.strategy_agent import refresh_research, run_strategy
+from backend.middleware import check_beta_calendar_limit
 from backend.services import firestore_client
 from backend.services.storage_client import get_signed_url, upload_byop_photo
 
@@ -50,7 +51,11 @@ async def list_plans(brand_id: str):
 
 
 @router.post("/brands/{brand_id}/plans")
-async def create_plan(brand_id: str, body: CreatePlanBody = Body(CreatePlanBody())):  # noqa: B008
+async def create_plan(
+    brand_id: str,
+    body: CreatePlanBody = Body(CreatePlanBody()),  # noqa: B008
+    _: str | None = Depends(check_beta_calendar_limit),
+):
     """Generate a content calendar plan using the Strategy Agent."""
     brand = await firestore_client.get_brand(brand_id)
     if not brand:
@@ -117,7 +122,6 @@ async def refresh_plan_research(brand_id: str, plan_id: str):
     platforms = stored_platforms if stored_platforms else ["instagram", "linkedin"]
     primary_platform = platforms[0] if platforms else "instagram"
 
-    # Re-run all research via the strategy agent's public API
     trend_summary = await refresh_research(platforms, industry, primary_platform)
 
     await firestore_client.update_plan(brand_id, plan_id, {"trend_summary": trend_summary})
@@ -202,12 +206,10 @@ async def upload_day_photo(
     if mime not in _ALLOWED_IMAGE_TYPES:
         raise HTTPException(status_code=400, detail="Only JPEG, PNG, or WebP images are accepted")
 
-    # Check Content-Length / file.size before reading entire file into memory
     max_size = 20 * 1024 * 1024  # 20 MB cap
     if file.size is not None and file.size > max_size:
         raise HTTPException(status_code=400, detail="Image must be smaller than 20 MB")
 
-    # Stream-read up to max_size + 1 byte to detect oversized uploads
     chunks: list[bytes] = []
     total = 0
     while True:

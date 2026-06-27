@@ -4,7 +4,7 @@ import {
   MdOutlineEdit,
   MdGridView,
   MdOutlineCalendarMonth,
-  MdOutlineElectricBolt,
+  MdOutlineLink,
   MdOutlinePlayCircle,
 } from 'react-icons/md'
 import type { IconType } from 'react-icons'
@@ -37,7 +37,7 @@ const TABS: { key: Tab; label: string; icon: IconType }[] = [
   { key: 'create',      label: 'Create',      icon: MdOutlineEdit },
   { key: 'library',     label: 'Library',     icon: MdGridView },
   { key: 'calendar',    label: 'Calendar',    icon: MdOutlineCalendarMonth },
-  { key: 'connections', label: 'Connections', icon: MdOutlineElectricBolt },
+  { key: 'connections', label: 'Connections', icon: MdOutlineLink },
   { key: 'video',       label: 'Video',       icon: MdOutlinePlayCircle },
 ]
 

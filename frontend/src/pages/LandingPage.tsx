@@ -1,36 +1,51 @@
-import { useNavigate } from 'react-router-dom'
+import { useState } from 'react'
+import { Navigate } from 'react-router-dom'
+import {
+  MdOutlineBolt,
+  MdOutlineCalendarMonth,
+  MdOutlineAutoAwesome,
+  MdOutlinePalette,
+  MdOutlineVideocam,
+  MdOutlineVerified,
+} from 'react-icons/md'
 import { A } from '../theme'
 import { useAuth } from '../hooks/useAuth'
+import { api } from '../api/client'
 
 const FEATURES = [
   {
-    icon: '🔍',
+    Icon: MdOutlineBolt,
+    color: A.indigo,
     title: 'Brand Analysis',
-    // L-1: URL field is optional/collapsible — primary action is describing your business
     desc: 'Describe your business in a few sentences. Optionally add your website URL for even deeper analysis.',
   },
   {
-    icon: '📅',
+    Icon: MdOutlineCalendarMonth,
+    color: A.violet,
     title: 'Event-Aware Calendar',
     desc: "Tell us what's happening this week. Launches, markets, specials — they become content pillars.",
   },
   {
-    icon: '✨',
-    title: 'Interleaved Generation',
-    desc: "Captions and matching images stream together in real time using Gemini's unique multimodal output.",
+    Icon: MdOutlineAutoAwesome,
+    color: A.indigo,
+    title: 'Captions & Images Together',
+    desc: 'Every caption comes with a matching image, generated at the same time — no separate steps, no back and forth.',
   },
   {
-    icon: '🎨',
-    title: 'Visual Identity Seed',
-    desc: 'A 2–3 sentence style directive ensures every generated image shares the same visual DNA.',
+    Icon: MdOutlinePalette,
+    color: A.violet,
+    title: 'Consistent Visual Style',
+    desc: 'Define your look once. Every image we generate follows the same style, colors, and mood.',
   },
   {
-    icon: '🎬',
+    Icon: MdOutlineVideocam,
+    color: A.indigo,
     title: 'Video Generation',
     desc: '8-second Reels and TikTok clips via Veo 3, using your hero image as the first frame.',
   },
   {
-    icon: '✓',
+    Icon: MdOutlineVerified,
+    color: A.violet,
     title: 'AI Brand Review',
     desc: 'Every post gets scored for brand alignment before it reaches your feed. One-click approval.',
   },
@@ -40,13 +55,12 @@ const STEPS = [
   {
     n: '01',
     title: 'Describe your brand',
-    // L-1: URL is optional/collapsible — description is the primary action
-    desc: 'Describe your business in a few sentences. Optionally add your website URL for deeper analysis. The Brand Analyst builds your complete profile in 30 seconds.',
+    desc: 'Describe your business in a few sentences and optionally add your website. Amplispark builds your brand profile in seconds.',
   },
   {
     n: '02',
     title: 'Get your strategy',
-    desc: "Add this week's events. The Strategy Agent plans a 7-day content calendar with platform-specific pillars.",
+    desc: "Tell us what's happening this week — launches, promotions, anything relevant. We'll plan a 7-day content calendar around it.",
   },
   {
     n: '03',
@@ -79,49 +93,121 @@ const PREVIEW_DAYS = [
   },
 ]
 
-export default function LandingPage() {
-  const navigate = useNavigate()
-  const { isSignedIn, signIn } = useAuth()
+type FormState = 'idle' | 'submitting' | 'success' | 'error'
 
-  const handleAction = async () => {
-    if (!isSignedIn) {
-      try {
-        await signIn()
-      } catch {
-        return // user closed popup
-      }
+function WaitlistForm({ inputId }: { inputId: string }) {
+  const [email, setEmail] = useState('')
+  const [state, setState] = useState<FormState>('idle')
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setErrorMsg(null)
+    setState('submitting')
+    try {
+      await api.joinWaitlist(email)
+      setState('success')
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
+      setState('error')
     }
-    navigate('/brands')
   }
+
+  if (state === 'success') {
+    return (
+      <div style={{
+        padding: '14px 24px',
+        borderRadius: 10,
+        background: A.emeraldLight,
+        border: `1px solid ${A.emerald}30`,
+        color: A.emerald,
+        fontSize: 15,
+        fontWeight: 500,
+        textAlign: 'center',
+      }}>
+        You're on the list! We'll be in touch.
+      </div>
+    )
+  }
+
+  return (
+    <form onSubmit={handleSubmit} style={{ width: '100%' }}>
+      <div style={{
+        display: 'flex',
+        gap: 8,
+        flexWrap: 'wrap',
+        justifyContent: 'center',
+      }}>
+        <input
+          id={inputId}
+          type="email"
+          placeholder="you@example.com"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+          required
+          disabled={state === 'submitting'}
+          style={{
+            flex: '1 1 240px',
+            minWidth: 0,
+            padding: '13px 16px',
+            borderRadius: 10,
+            border: `1px solid ${A.border}`,
+            fontSize: 15,
+            color: A.text,
+            background: A.bg,
+            outline: 'none',
+          }}
+        />
+        <button
+          type="submit"
+          disabled={state === 'submitting'}
+          style={{
+            flex: '0 0 auto',
+            padding: '13px 28px',
+            borderRadius: 10,
+            border: 'none',
+            cursor: state === 'submitting' ? 'not-allowed' : 'pointer',
+            background: `linear-gradient(135deg, ${A.indigo}, ${A.violet})`,
+            color: 'white',
+            fontSize: 15,
+            fontWeight: 600,
+            opacity: state === 'submitting' ? 0.7 : 1,
+            boxShadow: `0 4px 16px ${A.indigo}40`,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {state === 'submitting' ? 'Joining...' : 'Join Waitlist →'}
+        </button>
+      </div>
+      {state === 'error' && errorMsg && (
+        <p style={{ fontSize: 13, color: A.coral, marginTop: 8, textAlign: 'center' }}>{errorMsg}</p>
+      )}
+    </form>
+  )
+}
+
+export default function LandingPage() {
+  const { loading, isSignedIn, role, betaExpired } = useAuth()
+
+  if (loading) return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
+      <p style={{ color: '#888', fontSize: 14 }}>Loading...</p>
+    </div>
+  )
+
+  if (isSignedIn && role !== null && !betaExpired) return <Navigate to="/brands" replace />
+  if (isSignedIn && betaExpired) return <Navigate to="/waitlist" replace />
+  if (isSignedIn && role === null) return <Navigate to="/waitlist" replace />
 
   return (
     <div style={{ minHeight: '100vh', background: A.bg }}>
 
-      {/* ── Hero ─────────────────────────────────────────────── */}
       <section style={{
         maxWidth: 860,
         margin: '0 auto',
         padding: '96px 24px 80px',
         textAlign: 'center',
       }}>
-        {/* Badge */}
-        <div style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 6,
-          padding: '4px 14px',
-          borderRadius: 20,
-          border: `1px solid ${A.indigo}40`,
-          background: A.indigoLight,
-          fontSize: 12,
-          fontWeight: 600,
-          color: A.indigo,
-          marginBottom: 28,
-          letterSpacing: 0.3,
-        }}>
-          ✨ Built for the Gemini Live Agent Challenge — Creative Storyteller
-        </div>
-
         <h1 style={{
           fontSize: 'clamp(36px, 6vw, 64px)',
           fontWeight: 800,
@@ -148,47 +234,31 @@ export default function LandingPage() {
           margin: '0 auto 40px',
           lineHeight: 1.65,
         }}>
-          Amplispark analyzes your brand, plans your strategy, and streams captions &amp; images
-          together in real time — powered by Gemini 3 Flash's interleaved multimodal output.
+          Amplispark learns your brand, builds your weekly content strategy, and generates captions and images together — ready to post in minutes.
         </p>
 
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-          <button
-            onClick={handleAction}
-            style={{
-              padding: '14px 32px',
-              borderRadius: 10,
-              border: 'none',
-              cursor: 'pointer',
-              background: `linear-gradient(135deg, ${A.indigo}, ${A.violet})`,
-              color: 'white',
-              fontSize: 16,
-              fontWeight: 600,
-              boxShadow: `0 8px 32px ${A.indigo}40`,
-            }}
-          >
-            Get Started Free →
-          </button>
-          <button
-            onClick={() => {
-              document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })
-            }}
-            style={{
-              padding: '14px 24px',
-              borderRadius: 10,
-              cursor: 'pointer',
-              border: `1px solid ${A.border}`,
-              background: 'transparent',
-              color: A.textSoft,
-              fontSize: 15,
-            }}
-          >
-            See how it works ↓
-          </button>
+        <div style={{ maxWidth: 520, margin: '0 auto 20px' }}>
+          <WaitlistForm inputId="hero-email" />
         </div>
+
+        <button
+          onClick={() => {
+            document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })
+          }}
+          style={{
+            padding: '14px 24px',
+            borderRadius: 10,
+            cursor: 'pointer',
+            border: `1px solid ${A.border}`,
+            background: 'transparent',
+            color: A.textSoft,
+            fontSize: 15,
+          }}
+        >
+          See how it works ↓
+        </button>
       </section>
 
-      {/* ── Platform strip ───────────────────────────────────── */}
       <section style={{
         borderTop: `1px solid ${A.border}`,
         borderBottom: `1px solid ${A.border}`,
@@ -233,7 +303,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── How it works ─────────────────────────────────────── */}
       <section id="how-it-works" style={{ maxWidth: 960, margin: '0 auto', padding: '80px 24px' }}>
         <h2 style={{
           fontSize: 28,
@@ -277,7 +346,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Live preview mockup ───────────────────────────────── */}
       <section style={{ maxWidth: 960, margin: '0 auto', padding: '0 24px 80px' }}>
         <div style={{
           borderRadius: 16,
@@ -285,7 +353,6 @@ export default function LandingPage() {
           overflow: 'hidden',
           background: A.surface,
         }}>
-          {/* Mock toolbar */}
           <div style={{
             padding: '12px 16px',
             borderBottom: `1px solid ${A.border}`,
@@ -297,18 +364,16 @@ export default function LandingPage() {
             <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#FFBD2E' }} />
             <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#28C840' }} />
             <span style={{ marginLeft: 12, fontSize: 12, color: A.textMuted }}>
-              amplifi.app — Content Calendar
+              amplispark.io — Content Calendar
             </span>
           </div>
-          {/* Mini calendar cards */}
           <div style={{ padding: 24, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
             {PREVIEW_DAYS.map((d, i) => (
-              <div key={i} style={{
+              <div key={d.platform} style={{
                 borderRadius: 10,
                 border: `1px solid ${A.border}`,
                 overflow: 'hidden',
               }}>
-                {/* Color bar */}
                 <div style={{ height: 4, background: d.color }} />
                 <div style={{ padding: 14 }}>
                   <div style={{
@@ -361,7 +426,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Feature grid ─────────────────────────────────────── */}
       <section style={{ maxWidth: 960, margin: '0 auto', padding: '0 24px 80px' }}>
         <h2 style={{
           fontSize: 28,
@@ -381,14 +445,14 @@ export default function LandingPage() {
           Six capabilities working together to make every post feel hand-crafted.
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 20 }}>
-          {FEATURES.map(({ icon, title, desc }) => (
+          {FEATURES.map(({ Icon, color, title, desc }) => (
             <div key={title} style={{
               padding: 24,
               borderRadius: 12,
               background: A.surface,
               border: `1px solid ${A.border}`,
             }}>
-              <div style={{ fontSize: 28, marginBottom: 12 }}>{icon}</div>
+              <Icon size={32} color={color} style={{ marginBottom: 12 }} />
               <h3 style={{ fontSize: 15, fontWeight: 700, color: A.text, marginBottom: 8 }}>{title}</h3>
               <p style={{ fontSize: 13, color: A.textSoft, lineHeight: 1.6 }}>{desc}</p>
             </div>
@@ -396,46 +460,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Final CTA ────────────────────────────────────────── */}
-      <section style={{
-        borderTop: `1px solid ${A.border}`,
-        padding: '80px 24px',
-        textAlign: 'center',
-      }}>
-        <h2 style={{ fontSize: 32, fontWeight: 700, color: A.text, marginBottom: 16 }}>
-          Ready to see your brand's content?
-        </h2>
-        <p style={{
-          fontSize: 16,
-          color: A.textSoft,
-          marginBottom: 32,
-          maxWidth: 400,
-          margin: '0 auto 32px',
-        }}>
-          Sign in with Google, describe your business, and watch the magic.
-        </p>
-        <button
-          onClick={handleAction}
-          style={{
-            padding: '16px 40px',
-            borderRadius: 10,
-            border: 'none',
-            cursor: 'pointer',
-            background: `linear-gradient(135deg, ${A.indigo}, ${A.violet})`,
-            color: 'white',
-            fontSize: 17,
-            fontWeight: 700,
-            boxShadow: `0 8px 40px ${A.indigo}50`,
-          }}
-        >
-          Get Started Free →
-        </button>
-        <p style={{ fontSize: 12, color: A.textMuted, marginTop: 16 }}>
-          Powered by Gemini 3 Flash · Google Cloud
-        </p>
-      </section>
-
-      {/* ── Footer ─────────────────────────────────────────── */}
       <footer style={{
         borderTop: `1px solid ${A.border}`,
         padding: '24px',

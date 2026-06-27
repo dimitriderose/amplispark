@@ -129,13 +129,6 @@ export default function PostCard({ post, brandId, onApproved, onDismiss, onView 
             ×
           </button>
         )}
-        {post.is_quick_post && (
-          <span style={{
-            position: 'absolute', bottom: 8, left: 8,
-            fontSize: 14, color: A.textMuted, lineHeight: 1,
-            pointerEvents: 'none',
-          }}>⚡</span>
-        )}
       </div>
 
       <div style={{ padding: '12px 14px', flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>

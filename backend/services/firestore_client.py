@@ -182,7 +182,6 @@ async def list_plans(brand_id: str) -> list:
 
 async def get_plan(plan_id: str, brand_id: str) -> dict | None:
     db = get_client()
-    # Try to find plan across all brands if brand_id not provided
     doc = await (
         db.collection("brands")
         .document(brand_id)
@@ -423,7 +422,6 @@ async def get_platform_trends(platform: str, industry: str) -> dict | None:
         return None
     expires_at = data.get("expires_at")
     if expires_at:
-        # Normalize to timezone-aware in case Firestore returns a naive datetime
         if isinstance(expires_at, datetime) and expires_at.tzinfo is None:
             expires_at = expires_at.replace(tzinfo=UTC)
         if datetime.now(UTC) > expires_at:
@@ -621,3 +619,100 @@ async def mark_all_notifications_read(uid: str) -> int:
             batch.update(doc.reference, {"read": True})
         await batch.commit()
     return len(docs)
+
+
+async def join_waitlist(email: str, source: str = "waitlist_page") -> bool:
+    """Idempotent upsert using email as doc ID. Returns True if newly added.
+
+    Transaction prevents duplicate writes when two concurrent requests race for the same email.
+    """
+    db = get_client()
+    email_normalized = email.strip().lower()
+    doc_ref = db.collection("waitlist").document(email_normalized)
+
+    @firestore.async_transactional
+    async def _join_in_txn(txn, ref):
+        snap = await ref.get(transaction=txn)
+        if snap.exists:
+            return False
+        txn.set(
+            ref,
+            {
+                "email": email_normalized,
+                "signed_up_at": datetime.now(UTC),
+                "source": source,
+            },
+        )
+        return True
+
+    txn = db.transaction()
+    return await _join_in_txn(txn, doc_ref)
+
+
+async def get_user(uid: str) -> dict | None:
+    db = get_client()
+    doc = await db.collection("users").document(uid).get()
+    return doc.to_dict() if doc.exists else None
+
+
+async def get_or_create_user(uid: str, email: str | None = None) -> dict:
+    db = get_client()
+    ref = db.collection("users").document(uid)
+    doc = await ref.get()
+    if doc.exists:
+        return doc.to_dict() or {}
+    now = datetime.now(UTC)
+    data = {
+        "role": "beta",
+        "email": email,
+        "created_at": now,
+        "updated_at": now,
+        "beta_expires_at": None,
+        "quick_posts_this_month": 0,
+        "calendars_this_month": 0,
+        "counters_reset_at": now,
+    }
+    await ref.set(data, merge=True)
+    return data
+
+
+async def increment_quick_posts(uid: str) -> dict:
+    return await _increment_usage_counter(uid, "quick_posts_this_month")
+
+
+async def increment_calendars(uid: str) -> dict:
+    return await _increment_usage_counter(uid, "calendars_this_month")
+
+
+async def _increment_usage_counter(uid: str, field: str) -> dict:
+    db = get_client()
+    ref = db.collection("users").document(uid)
+    now = datetime.now(UTC)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    @firestore.async_transactional
+    async def _txn(txn, ref):
+        snap = await ref.get(transaction=txn)
+        data = snap.to_dict() if snap.exists else {}
+        counters_reset_at = data.get("counters_reset_at")
+        if isinstance(counters_reset_at, datetime) and counters_reset_at.tzinfo is None:
+            counters_reset_at = counters_reset_at.replace(tzinfo=UTC)
+        needs_reset = not counters_reset_at or counters_reset_at < month_start
+        if needs_reset:
+            txn.set(
+                ref,
+                {
+                    "quick_posts_this_month": 1 if field == "quick_posts_this_month" else 0,
+                    "calendars_this_month": 1 if field == "calendars_this_month" else 0,
+                    "counters_reset_at": month_start,
+                    "updated_at": now,
+                },
+                merge=True,
+            )
+        else:
+            txn.update(ref, {field: firestore.Increment(1), "updated_at": now})
+
+    txn = db.transaction()
+    await _txn(txn, ref)
+    updated_snap = await ref.get()
+    return updated_snap.to_dict() or {}

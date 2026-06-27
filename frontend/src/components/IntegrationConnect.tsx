@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { SiNotion } from 'react-icons/si'
 import { A } from '../theme'
 import { api } from '../api/client'
 
@@ -125,7 +126,7 @@ export default function IntegrationConnect({ brandId, notion, onUpdate }: Props)
           padding: '12px 14px',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 18 }}>📓</span>
+            <SiNotion size={18} color="#000000" />
             <span style={{ fontSize: 13, fontWeight: 600, color: A.text }}>Notion</span>
             {isConnected && (
               <span style={{

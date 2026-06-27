@@ -2,6 +2,8 @@
 
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 TEST_BRAND_ID = "test-brand-id-456"
 TEST_PLAN_ID = "test-plan-id"
 TEST_UID = "test-user-uid-123"
@@ -87,9 +89,18 @@ class TestGetPlan:
 
 
 class TestCreatePlan:
+    @pytest.fixture(autouse=True)
+    def mock_get_user(self):
+        with patch(
+            "backend.middleware.firestore_client.get_user",
+            new=AsyncMock(return_value={"role": "user"}),
+        ):
+            yield
+
     def test_creates_plan_with_defaults(self, client, auth_headers, sample_brand, sample_plan):
         with patch(_PLANS_FC) as fc, patch(_MIDDLEWARE_FC) as mfc:
             mfc.get_brand = AsyncMock(return_value=sample_brand)
+            mfc.get_user = AsyncMock(return_value={"role": "user"})
             fc.get_brand = AsyncMock(return_value=sample_brand)
             fc.create_plan = AsyncMock(return_value="new-plan-id")
             with patch(
@@ -113,6 +124,7 @@ class TestCreatePlan:
     ):
         with patch(_PLANS_FC) as fc, patch(_MIDDLEWARE_FC) as mfc:
             mfc.get_brand = AsyncMock(return_value=sample_brand)
+            mfc.get_user = AsyncMock(return_value={"role": "user"})
             fc.get_brand = AsyncMock(return_value=sample_brand)
             fc.create_plan = AsyncMock(return_value="new-plan-id")
             with patch(
@@ -131,6 +143,7 @@ class TestCreatePlan:
     ):
         with patch(_PLANS_FC) as fc, patch(_MIDDLEWARE_FC) as mfc:
             mfc.get_brand = AsyncMock(return_value=sample_brand)
+            mfc.get_user = AsyncMock(return_value={"role": "user"})
             fc.get_brand = AsyncMock(return_value=sample_brand)
             fc.create_plan = AsyncMock(return_value="new-plan-id")
             with patch(
@@ -147,6 +160,7 @@ class TestCreatePlan:
     def test_clamps_num_days_to_minimum_of_1(self, client, auth_headers, sample_brand, sample_plan):
         with patch(_PLANS_FC) as fc, patch(_MIDDLEWARE_FC) as mfc:
             mfc.get_brand = AsyncMock(return_value=sample_brand)
+            mfc.get_user = AsyncMock(return_value={"role": "user"})
             fc.get_brand = AsyncMock(return_value=sample_brand)
             fc.create_plan = AsyncMock(return_value="new-plan-id")
             with patch(
@@ -163,6 +177,7 @@ class TestCreatePlan:
     def test_returns_404_when_brand_not_found_in_middleware(self, client, auth_headers):
         with patch(_MIDDLEWARE_FC) as mfc:
             mfc.get_brand = AsyncMock(return_value=None)
+            mfc.get_user = AsyncMock(return_value={"role": "user"})
             response = client.post(
                 "/api/brands/nonexistent-brand/plans",
                 headers=auth_headers,
@@ -173,6 +188,7 @@ class TestCreatePlan:
     def test_returns_404_when_brand_not_found_in_router(self, client, auth_headers, sample_brand):
         with patch(_PLANS_FC) as fc, patch(_MIDDLEWARE_FC) as mfc:
             mfc.get_brand = AsyncMock(return_value=sample_brand)
+            mfc.get_user = AsyncMock(return_value={"role": "user"})
             fc.get_brand = AsyncMock(return_value=None)
             response = client.post(
                 f"/api/brands/{TEST_BRAND_ID}/plans",
@@ -185,6 +201,7 @@ class TestCreatePlan:
     def test_returns_500_when_strategy_agent_raises(self, client, auth_headers, sample_brand):
         with patch(_PLANS_FC) as fc, patch(_MIDDLEWARE_FC) as mfc:
             mfc.get_brand = AsyncMock(return_value=sample_brand)
+            mfc.get_user = AsyncMock(return_value={"role": "user"})
             fc.get_brand = AsyncMock(return_value=sample_brand)
             with patch(
                 "backend.routers.plans.run_strategy",
@@ -203,6 +220,7 @@ class TestCreatePlan:
     ):
         with patch(_PLANS_FC) as fc, patch(_MIDDLEWARE_FC) as mfc:
             mfc.get_brand = AsyncMock(return_value=sample_brand)
+            mfc.get_user = AsyncMock(return_value={"role": "user"})
             fc.get_brand = AsyncMock(return_value=sample_brand)
             fc.create_plan = AsyncMock(side_effect=Exception("Firestore down"))
             with patch(
@@ -221,6 +239,7 @@ class TestCreatePlan:
     ):
         with patch(_PLANS_FC) as fc, patch(_MIDDLEWARE_FC) as mfc:
             mfc.get_brand = AsyncMock(return_value=sample_brand)
+            mfc.get_user = AsyncMock(return_value={"role": "user"})
             fc.get_brand = AsyncMock(return_value=sample_brand)
             fc.create_plan = AsyncMock(return_value="new-plan-id")
             with patch(
@@ -239,6 +258,7 @@ class TestCreatePlan:
     ):
         with patch(_PLANS_FC) as fc, patch(_MIDDLEWARE_FC) as mfc:
             mfc.get_brand = AsyncMock(return_value=sample_brand)
+            mfc.get_user = AsyncMock(return_value={"role": "user"})
             fc.get_brand = AsyncMock(return_value=sample_brand)
             fc.create_plan = AsyncMock(return_value="new-plan-id")
             with patch(
@@ -262,6 +282,7 @@ class TestCreatePlan:
         }
         with patch(_PLANS_FC) as fc, patch(_MIDDLEWARE_FC) as mfc:
             mfc.get_brand = AsyncMock(return_value=brand_with_platforms)
+            mfc.get_user = AsyncMock(return_value={"role": "user"})
             fc.get_brand = AsyncMock(return_value=brand_with_platforms)
             fc.create_plan = AsyncMock(return_value="new-plan-id")
             with patch(
@@ -285,6 +306,7 @@ class TestCreatePlan:
         }
         with patch(_PLANS_FC) as fc, patch(_MIDDLEWARE_FC) as mfc:
             mfc.get_brand = AsyncMock(return_value=brand_with_ai_mode)
+            mfc.get_user = AsyncMock(return_value={"role": "user"})
             fc.get_brand = AsyncMock(return_value=brand_with_ai_mode)
             fc.create_plan = AsyncMock(return_value="new-plan-id")
             with patch(

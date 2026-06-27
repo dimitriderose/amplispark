@@ -6,6 +6,8 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pythonjsonlogger.json import JsonFormatter
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from starlette.responses import JSONResponse
 
 from backend.config import CORS_ORIGINS
@@ -20,7 +22,9 @@ from backend.routers import (
     plans,
     posts,
     voice,
+    waitlist,
 )
+from backend.routers.waitlist import limiter
 
 _handler = logging.StreamHandler()
 _handler.setFormatter(
@@ -37,12 +41,6 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     yield
-    # No manual sleep here. Cloud Run sends SIGTERM then waits for the
-    # configured grace period (default 10 s). Sleeping unconditionally
-    # would delay exit without draining streams — and if the sleep exceeds
-    # the grace period, SIGKILL fires before the process exits cleanly.
-    # uvicorn's --timeout-graceful-shutdown handles in-flight request
-    # draining without any explicit sleep in the lifespan hook.
 
 
 app = FastAPI(
@@ -51,6 +49,9 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 
 app.add_middleware(RequestContextMiddleware)
 app.add_middleware(
@@ -64,7 +65,6 @@ app.add_middleware(
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
-    # HTTPException is already handled by FastAPI's default handler, so skip it
     if isinstance(exc, HTTPException):
         raise exc
     logger.error(
@@ -80,15 +80,10 @@ async def global_exception_handler(request, exc):
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
-# ── Health ────────────────────────────────────────────────────
-
-
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "service": "amplifi-backend", "version": "1.0.0"}
 
-
-# ── Routers ──────────────────────────────────────────────────
 
 app.include_router(brands.router, prefix="/api", dependencies=[Depends(verify_brand_owner)])
 app.include_router(plans.router, prefix="/api", dependencies=[Depends(verify_brand_owner)])
@@ -100,8 +95,8 @@ app.include_router(integrations.router, prefix="/api", dependencies=[Depends(ver
 # because WebSocket Depends() requires a WebSocket object, not an HTTP Request
 app.include_router(voice.router, prefix="/api")
 app.include_router(notifications.router, prefix="/api")
+app.include_router(waitlist.router, prefix="/api")
 
-# ── Static frontend (production) ──────────────────────────────
 frontend_dist = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
 if os.path.exists(frontend_dist):
     from pathlib import Path
@@ -110,16 +105,13 @@ if os.path.exists(frontend_dist):
 
     _index_html = os.path.join(frontend_dist, "index.html")
 
-    # Static assets first (proper caching headers + content-type detection)
     app.mount(
         "/assets", StaticFiles(directory=os.path.join(frontend_dist, "assets")), name="assets"
     )
 
-    # SPA catch-all: serve index.html for any non-API, non-file route
     @app.get("/{full_path:path}")
     async def _spa_fallback(full_path: str):
         file_path = os.path.join(frontend_dist, full_path)
-        # Prevent path traversal — only serve files within frontend_dist
         try:
             Path(file_path).resolve().relative_to(Path(frontend_dist).resolve())
             if os.path.isfile(file_path):
