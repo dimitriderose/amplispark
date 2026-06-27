@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { A } from '../theme'
 import { useAuth } from '../hooks/useAuth'
 import { useIsMobile } from '../hooks/useIsMobile'
@@ -10,7 +10,6 @@ export default function NavBar() {
   const isMobile = useIsMobile()
   const navigate = useNavigate()
   const location = useLocation()
-  const [searchParams] = useSearchParams()
   const { user, isSignedIn, signIn, signOut } = useAuth()
   const [accountOpen, setAccountOpen] = useState(false)
   const accountRef = useRef<HTMLDivElement>(null)
@@ -27,29 +26,10 @@ export default function NavBar() {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // Extract brandId from dashboard/edit/export path segments, or from ?brand_id= on generate routes
-  const dashboardMatch = location.pathname.match(/^\/dashboard\/([^/]+)/)
-  const editMatch = location.pathname.match(/^\/edit\/([^/]+)/)
-  const exportMatch = location.pathname.match(/^\/export\/([^/]+)/)
-  const historyMatch = location.pathname.match(/^\/brands\/([^/]+)\/history/)
-  const generateMatch = location.pathname.match(/^\/generate\//)
-  const activeBrandId =
-    (dashboardMatch && dashboardMatch[1]) ||
-    (editMatch && editMatch[1]) ||
-    (exportMatch && exportMatch[1]) ||
-    (historyMatch && historyMatch[1]) ||
-    (generateMatch && searchParams.get('brand_id')) ||
-    null
 
-  const brandName = activeBrandId ? sessionStorage.getItem(`amplifi_brandname_${activeBrandId}`) : null
-  const generateDayIndex = generateMatch ? location.pathname.split('/').pop() : null
-
-  const staticLinks = [
-    { path: '/', label: 'Home' },
-    isSignedIn
-      ? { path: '/brands', label: 'My Brands' }
-      : { path: '/onboard', label: 'Get Started' },
-  ]
+const staticLinks = isSignedIn
+    ? [{ path: '/brands', label: 'My Brands' }]
+    : [{ path: '/', label: 'Home' }]
 
   const isActive = (path: string) => location.pathname === path
 
@@ -76,12 +56,6 @@ export default function NavBar() {
             fontWeight: isActive(path) ? 600 : 400,
           }}>{label}</button>
         ))}
-        {/* Export accessible via dashboard PostLibrary tab */}
-        {generateMatch && brandName && (
-          <span style={{ fontSize: 13, color: A.textSoft, marginLeft: 8 }}>
-            {brandName} {generateDayIndex ? `› Day ${generateDayIndex}` : ''}
-          </span>
-        )}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -97,7 +71,6 @@ export default function NavBar() {
             onMarkAllRead={markAllRead}
           />
         )}
-        {/* Account */}
         {isSignedIn && user ? (
           <div ref={accountRef} style={{ position: 'relative' }}>
             <button
@@ -139,7 +112,19 @@ export default function NavBar() {
                   )}
                 </div>
                 <button
-                  onClick={() => { setAccountOpen(false); signOut(); navigate('/') }}
+                  onClick={() => { setAccountOpen(false); navigate('/settings') }}
+                  style={{
+                    width: '100%', padding: '6px 8px', borderRadius: 6,
+                    border: 'none', background: 'transparent', cursor: 'pointer',
+                    fontSize: 12, fontWeight: 500, color: A.text, textAlign: 'left',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = A.surfaceAlt)}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                >
+                  Settings
+                </button>
+                <button
+                  onClick={async () => { setAccountOpen(false); await signOut(); navigate('/') }}
                   style={{
                     width: '100%', padding: '6px 8px', borderRadius: 6,
                     border: 'none', background: 'transparent', cursor: 'pointer',
@@ -155,7 +140,7 @@ export default function NavBar() {
           </div>
         ) : (
           <button
-            onClick={signIn}
+            onClick={() => { signIn().catch(() => {}) }}
             style={{
               padding: '5px 14px', borderRadius: 8,
               border: `1px solid ${A.border}`, background: 'transparent',

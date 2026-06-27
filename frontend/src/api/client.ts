@@ -31,12 +31,10 @@ async function handleResponse<T>(res: Response): Promise<T> {
     })
     throw new Error(err.detail || err.error || `HTTP ${res.status}`)
   }
-  // Handle empty responses (204 No Content, empty body)
   if (res.status === 204 || res.headers.get('content-length') === '0') {
     return undefined as T
   }
   const data = await res.json()
-  // Runtime validation: ensure response is not null/undefined when an object is expected
   if (data === null || data === undefined) {
     throw new Error(`Unexpected empty response body from ${res.url || 'API'}`)
   }
@@ -61,7 +59,6 @@ async function handleBlobResponse(res: Response): Promise<Blob> {
 async function _authHeaders(): Promise<Record<string, string>> {
   const token = await getIdToken()
   if (token) return { 'Authorization': `Bearer ${token}` }
-  // Fallback to UID header during migration
   const uid = getUid()
   return uid ? { 'X-User-UID': uid } : {}
 }
@@ -203,7 +200,6 @@ export const api = {
       body: JSON.stringify({ email }),
     }),
 
-  // Notion integration
   getNotionAuthUrl: (brandId: string) =>
     request<{ auth_url: string }>(`/api/brands/${brandId}/integrations/notion/auth-url`),
   disconnectNotion: (brandId: string) =>
@@ -262,4 +258,22 @@ export const api = {
 
   markAllNotificationsRead: () =>
     request<{ status: string; updated: number }>('/api/notifications/read-all', { method: 'POST' }),
+
+  joinWaitlist: (email: string) =>
+    fetch('/api/waitlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    }).then(r => handleResponse<{ status: string }>(r)),
+
+  getUser: () =>
+    request<{
+      role: 'beta' | 'user' | 'admin'
+      beta_expires_at: string | null
+      quick_posts_this_month: number
+      calendars_this_month: number
+      days_remaining: number | null
+      quick_posts_limit: number | null
+      calendars_limit: number | null
+    }>('/api/users/me'),
 }

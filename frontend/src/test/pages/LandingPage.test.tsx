@@ -6,8 +6,20 @@ vi.mock('../../hooks/useAuth', () => ({
   useAuth: vi.fn(),
 }))
 
+const { mockJoinWaitlist } = vi.hoisted(() => ({ mockJoinWaitlist: vi.fn() }))
+vi.mock('../../api/client', () => ({
+  api: { joinWaitlist: mockJoinWaitlist },
+}))
+
 import LandingPage from '../../pages/LandingPage'
 import { useAuth } from '../../hooks/useAuth'
+
+const baseAuth = {
+  role: null as null,
+  betaExpired: false,
+  usageCounters: null,
+  userFetchError: false,
+}
 
 function renderLanding() {
   return render(
@@ -20,10 +32,12 @@ function renderLanding() {
 describe('LandingPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockJoinWaitlist.mockResolvedValue({ status: 'joined' })
   })
 
   it('renders main heading', () => {
     vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
       uid: null,
       user: null,
       loading: false,
@@ -37,8 +51,9 @@ describe('LandingPage', () => {
     expect(screen.getByText(/your entire week of content/i)).toBeInTheDocument()
   })
 
-  it('renders CTA button', () => {
+  it('renders waitlist email form', () => {
     vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
       uid: null,
       user: null,
       loading: false,
@@ -49,13 +64,13 @@ describe('LandingPage', () => {
 
     renderLanding()
 
-    // Two "Get Started Free" buttons (hero + final CTA section)
-    const ctaButtons = screen.getAllByText(/get started free/i)
-    expect(ctaButtons.length).toBeGreaterThan(0)
+    expect(screen.getAllByPlaceholderText(/you@example.com/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/join waitlist/i).length).toBeGreaterThan(0)
   })
 
-  it('shows Get Started Free when not signed in', () => {
+  it('shows waitlist form when not signed in', () => {
     vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
       uid: null,
       user: null,
       loading: false,
@@ -66,11 +81,12 @@ describe('LandingPage', () => {
 
     renderLanding()
 
-    expect(screen.getAllByText(/get started free/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/join waitlist/i).length).toBeGreaterThan(0)
   })
 
-  it('shows Get Started Free when signed in (same CTA navigates)', () => {
+  it('redirects to /waitlist when signed in but not approved', () => {
     vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
       uid: 'user-123',
       user: { displayName: 'Alice', email: 'alice@example.com', photoURL: null },
       loading: false,
@@ -79,14 +95,18 @@ describe('LandingPage', () => {
       signOut: vi.fn(),
     })
 
-    renderLanding()
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <LandingPage />
+      </MemoryRouter>
+    )
 
-    // Same CTA button — navigates directly when already signed in
-    expect(screen.getAllByText(/get started free/i).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/join waitlist/i)).not.toBeInTheDocument()
   })
 
   it('renders "How it works" section heading', () => {
     vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
       uid: null,
       user: null,
       loading: false,
@@ -97,73 +117,79 @@ describe('LandingPage', () => {
 
     renderLanding()
 
-    // Multiple elements contain "how it works" text — assert at least one exists
     expect(screen.getAllByText(/how it works/i).length).toBeGreaterThan(0)
   })
 
-  it('clicking CTA when signed out calls signIn then navigates', async () => {
-    const signIn = vi.fn().mockResolvedValue(undefined)
+  it('submitting waitlist form shows success state', async () => {
     vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
       uid: null,
       user: null,
       loading: false,
       isSignedIn: false,
-      signIn,
+      signIn: vi.fn(),
       signOut: vi.fn(),
     })
 
     renderLanding()
 
-    fireEvent.click(screen.getAllByText(/get started free/i)[0])
+    const emailInput = screen.getAllByPlaceholderText(/you@example.com/i)[0]
+    fireEvent.change(emailInput, { target: { value: 'test@example.com' } })
+    fireEvent.submit(emailInput.closest('form')!)
 
     await waitFor(() => {
-      expect(signIn).toHaveBeenCalled()
+      expect(screen.getAllByText(/you're on the list/i).length).toBeGreaterThan(0)
+    })
+    expect(mockJoinWaitlist).toHaveBeenCalledWith('test@example.com')
+  })
+
+  it('submitting waitlist form shows error state on failure', async () => {
+    mockJoinWaitlist.mockRejectedValue(new Error('Server error'))
+    vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
+      uid: null,
+      user: null,
+      loading: false,
+      isSignedIn: false,
+      signIn: vi.fn(),
+      signOut: vi.fn(),
+    })
+
+    renderLanding()
+
+    const emailInput = screen.getAllByPlaceholderText(/you@example.com/i)[0]
+    fireEvent.change(emailInput, { target: { value: 'bad@example.com' } })
+    fireEvent.submit(emailInput.closest('form')!)
+
+    await waitFor(() => {
+      expect(screen.getByText('Server error')).toBeInTheDocument()
     })
   })
 
-  it('clicking CTA when signed in navigates to /brands without calling signIn', async () => {
-    const signIn = vi.fn()
+  it('redirects to /brands when signed in and approved', () => {
     vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
+      role: 'beta' as unknown as null,
       uid: 'user-123',
       user: { displayName: 'Alice', email: 'alice@example.com', photoURL: null },
       loading: false,
       isSignedIn: true,
-      signIn,
+      signIn: vi.fn(),
       signOut: vi.fn(),
     })
 
-    renderLanding()
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <LandingPage />
+      </MemoryRouter>
+    )
 
-    fireEvent.click(screen.getAllByText(/get started free/i)[0])
-
-    // signIn should NOT be called when already signed in
-    expect(signIn).not.toHaveBeenCalled()
+    expect(screen.queryByText(/join waitlist/i)).not.toBeInTheDocument()
   })
 
-  it('does not navigate when signIn throws (user closes popup)', async () => {
-    const signIn = vi.fn().mockRejectedValue(new Error('popup closed'))
+  it('waitlist form renders in idle state initially', () => {
     vi.mocked(useAuth).mockReturnValue({
-      uid: null,
-      user: null,
-      loading: false,
-      isSignedIn: false,
-      signIn,
-      signOut: vi.fn(),
-    })
-
-    renderLanding()
-
-    fireEvent.click(screen.getAllByText(/get started free/i)[0])
-
-    await waitFor(() => {
-      expect(signIn).toHaveBeenCalled()
-    })
-    // Page should still be rendered (no navigation crash)
-    expect(screen.getAllByText(/get started free/i).length).toBeGreaterThan(0)
-  })
-
-  it('renders platform strip with Instagram, LinkedIn, Twitter/X, Facebook', () => {
-    vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
       uid: null,
       user: null,
       loading: false,
@@ -174,7 +200,22 @@ describe('LandingPage', () => {
 
     renderLanding()
 
-    // Multiple Instagram elements may exist (PREVIEW_DAYS + strip) — just check at least one
+    expect(screen.getAllByText(/join waitlist/i).length).toBeGreaterThan(0)
+  })
+
+  it('renders platform strip with Instagram, LinkedIn, Twitter/X, Facebook', () => {
+    vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
+      uid: null,
+      user: null,
+      loading: false,
+      isSignedIn: false,
+      signIn: vi.fn(),
+      signOut: vi.fn(),
+    })
+
+    renderLanding()
+
     expect(screen.getAllByText('Instagram').length).toBeGreaterThan(0)
     expect(screen.getAllByText('LinkedIn').length).toBeGreaterThan(0)
     expect(screen.getByText('Twitter / X')).toBeInTheDocument()
@@ -183,6 +224,7 @@ describe('LandingPage', () => {
 
   it('renders feature grid with Brand Analysis feature', () => {
     vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
       uid: null,
       user: null,
       loading: false,
@@ -198,6 +240,7 @@ describe('LandingPage', () => {
 
   it('renders footer copyright', () => {
     vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
       uid: null,
       user: null,
       loading: false,
@@ -208,12 +251,12 @@ describe('LandingPage', () => {
 
     renderLanding()
 
-    // Multiple elements with "Amplispark" exist — just check at least one
     expect(screen.getAllByText(/amplispark/i).length).toBeGreaterThan(0)
   })
 
   it('clicking "See how it works" button calls scrollIntoView', () => {
     vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
       uid: null,
       user: null,
       loading: false,
@@ -222,7 +265,6 @@ describe('LandingPage', () => {
       signOut: vi.fn(),
     })
 
-    // Mock scrollIntoView
     const scrollIntoViewMock = vi.fn()
     const getElementByIdSpy = vi.spyOn(document, 'getElementById').mockReturnValue({
       scrollIntoView: scrollIntoViewMock,
@@ -238,6 +280,7 @@ describe('LandingPage', () => {
 
   it('renders Terms of Service and Privacy Policy footer links', () => {
     vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
       uid: null,
       user: null,
       loading: false,
@@ -254,6 +297,7 @@ describe('LandingPage', () => {
 
   it('footer links respond to mouseEnter/mouseLeave', () => {
     vi.mocked(useAuth).mockReturnValue({
+      ...baseAuth,
       uid: null,
       user: null,
       loading: false,
@@ -265,7 +309,6 @@ describe('LandingPage', () => {
     renderLanding()
 
     const termsLink = screen.getByText('Terms of Service')
-    // Should not throw
     fireEvent.mouseEnter(termsLink)
     fireEvent.mouseLeave(termsLink)
 

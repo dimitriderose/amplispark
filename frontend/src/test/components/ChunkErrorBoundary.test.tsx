@@ -124,6 +124,10 @@ describe('ChunkErrorBoundary', () => {
     vi.mocked(useAuth).mockReturnValue({
       uid: null,
       user: null,
+      role: null,
+      betaExpired: false,
+      usageCounters: null,
+      userFetchError: false,
       loading: false,
       isSignedIn: false,
       signIn: vi.fn(),
